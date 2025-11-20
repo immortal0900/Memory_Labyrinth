@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -1702,8 +1702,11 @@ dependencies = [
     { name = "langchain-postgres" },
     { name = "langgraph" },
     { name = "pgvector" },
+    { name = "psycopg" },
+    { name = "psycopg-binary" },
     { name = "psycopg2-binary" },
     { name = "python-dotenv" },
+    { name = "sqlalchemy" },
 ]
 
 [package.metadata]
@@ -1715,8 +1718,11 @@ requires-dist = [
     { name = "langchain-postgres", specifier = ">=0.0.16" },
     { name = "langgraph", specifier = ">=1.0.3" },
     { name = "pgvector", specifier = ">=0.3.6" },
+    { name = "psycopg", specifier = ">=3.2.0" },
+    { name = "psycopg-binary", specifier = ">=3.2.0" },
     { name = "psycopg2-binary", specifier = ">=2.9.11" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
+    { name = "sqlalchemy", specifier = ">=2.0.0" },
 ]
 
 [[package]]
