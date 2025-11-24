@@ -21,9 +21,18 @@ class LLM(StrEnum):
     GEMINI_1_5_FLASH = "gemini-1.5-flash"
     GEMINI_PRO = "gemini-pro"
     GEMINI_ULTRA = "gemini-ultra"
-    
+    GEMINI_2_5_PRO            = "gemini-2.5-pro"
+    GEMINI_2_5_FLASH          = "gemini-2.5-flash"
+    GEMINI_2_5_FLASH_LITE     = "gemini-2.5-flash-lite"
+    GEMINI_3_PRO_PREVIEW = "gemini-3-pro-preview"
+
     # Grok (xAI)
-    GROK_2 = "grok-2"
-    GROK_BETA = "grok-beta"
-    GROK_VISION_BETA = "grok-vision-beta"
+    # Grok 3 계열
+    GROK_3_BETA                   = "grok-3-beta"
+    GROK_3_MINI_BETA              = "grok-3-mini-beta"
+
+    # Grok 4 계열 (현 시점 최고 성능 모델군)
+    GROK_4_1_FAST_REASONING       = "grok-4-1-fast-reasoning"
+    GROK_4_FAST_REASONING         = "grok-4-fast-reasoning"
+    GROK_4_FAST_NON_REASONING     = "grok-4-fast-non-reasoning"
     
