@@ -56,9 +56,17 @@ def find_files(base, patterns=("*",)):
         files.extend(base.rglob(p))
     return sorted(files)
 
-
+# 아래는 주피터 노트북에서 src 경로를 고정시키기위한 코드 
 # import os, sys
 # from pathlib import Path
 
-# src_path = Path(os.getcwd()).resolve().parents[1]  
+# def find_src_folder():
+#     current = Path(os.getcwd()).resolve()
+#     for p in [current] + list(current.parents):
+#         src = p / "src"
+#         if src.exists():
+#             return src
+#     raise RuntimeError("src 폴더를 찾을 수 없습니다.")
+
+# src_path = find_src_folder()
 # sys.path.append(str(src_path))
