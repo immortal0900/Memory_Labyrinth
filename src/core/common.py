@@ -55,3 +55,10 @@ def find_files(base, patterns=("*",)):
     for p in patterns:
         files.extend(base.rglob(p))
     return sorted(files)
+
+
+# import os, sys
+# from pathlib import Path
+
+# src_path = Path(os.getcwd()).resolve().parents[1]  
+# sys.path.append(str(src_path))
