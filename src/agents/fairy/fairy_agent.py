@@ -1,6 +1,7 @@
 from langchain.chat_models import init_chat_model
 from enums.LLM import LLM
 from agents.fairy.fairy_state import FairyIntentOutput, FairyState, FairyIntentType
+from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.types import Command, interrupt
 from agents.fairy.temp_string import reverse_questions
 from prompts.promptmanager import PromptManager
@@ -21,18 +22,22 @@ def get_event_info():
 def dungeon_navigator():
     return "\ndungeon_navi"
 
+
 def create_interaction():
     return "\n뿌뿌뿌"
 
 async def clarify_intent(query):
+    intent_prompt = PromptManager(FairyPromptType.FAIRY_INTENT).get_prompt(question=query)
     parser_intent_llm = intent_llm.with_structured_output(FairyIntentOutput)
-    intent_output: FairyIntentOutput = await parser_intent_llm.ainvoke(query)
+    intent_output: FairyIntentOutput = await parser_intent_llm.ainvoke(intent_prompt)
     return intent_output
+
 
 async def check_memory_question(query:str):
     prompt = PromptManager(FairyPromptType.QUESTION_HISTORY_CHECK).get_prompt(question=query)
     reponse = await intent_llm.ainvoke(prompt)
     return str_to_bool(reponse.content)
+
 
 async def analyze_intent(state: FairyState):
     last = state["messages"][-1]
@@ -65,6 +70,7 @@ def check_condition(state: FairyState):
 
     return "continue"
 
+
 def fairy_action(state: FairyState) -> Command:
     intent_types = state.get("intent_types")
     if intent_types is None:
@@ -83,7 +89,7 @@ def fairy_action(state: FairyState) -> Command:
 
         elif intent == FairyIntentType.INTERACTION_HANDLER:
             action_detail = create_interaction()
-            
+
         else:
             info = "SMALLTALK"
 
@@ -105,10 +111,12 @@ graph_builder = StateGraph(FairyState)
 
 graph_builder.add_node("analyze_intent", analyze_intent)
 graph_builder.add_node("fairy_action", fairy_action)
+
 graph_builder.add_edge(START, "analyze_intent")
+
 graph_builder.add_conditional_edges(
     "analyze_intent",      
-    check_condition,
+    check_condition,         
     {
         "retry": "analyze_intent",  
         "continue": "fairy_action"  
