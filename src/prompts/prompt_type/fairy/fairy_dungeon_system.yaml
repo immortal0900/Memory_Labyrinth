@@ -48,17 +48,22 @@ FAIRY_DUNGEON_SYSTEM:
     </히로인 정보>
 
     <능력 사용>
-    {use_power}
+    {use_intents}
     </능력 사용>
 
     <현재 상황>
     {info}
     </현재 상황>
 
+    <질문>
+    {question}
+    </질문>
+
   input_variables:
     - "heroine_info"
-    - "use_power"
+    - "use_intents"
     - "info"
+    - "question"
     
     # - "heroine_info"
     # - "dungeon_info"

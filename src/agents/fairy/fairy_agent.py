@@ -1,36 +1,55 @@
 from langchain.chat_models import init_chat_model
 from enums.LLM import LLM
-from agents.fairy.fairy_state import FairyRouteOutput, FairyState, FairyRouteType
+from agents.fairy.fairy_state import FairyIntentOutput, FairyState, FairyIntentType
 from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.types import Command, interrupt
 from agents.fairy.temp_string import reverse_questions
+from prompts.promptmanager import PromptManager
+from prompts.prompt_type.fairy.FairyPromptType import FairyPromptType
 import random
 
 llm = init_chat_model(model=LLM.GPT4_1_MINI,temperature=0.2)
-router_llm = init_chat_model(model=LLM.GPT4_1_MINI,temperature=0)
+intent_llm = init_chat_model(model=LLM.GPT4_1_MINI,temperature=0)
 
-def router_node(state: FairyState) -> Command:
+
+
+def memory_question(state:FairyState):
     last = state["messages"][-1]
-    if not isinstance(last, HumanMessage):
-        raise Exception("state.messages의 마지막 메시지가 휴먼 메시지가 아닙니다.")
     last_message = last.content
 
-    parser_route_llm = router_llm.with_structured_output(FairyRouteOutput)
-    route: FairyRouteOutput = parser_route_llm.invoke(last_message)
-    if len(route.routes) == 1 and route.routes[0] == FairyRouteType.UNKNOWN_INTENT:
+    """
+
+    """
+
+
+def analyze_intent(state: FairyState):
+    last = state["messages"][-1]
+    last_message = last.content
+
+    parser_intent_llm = intent_llm.with_structured_output(FairyIntentOutput)
+    intent_output: FairyIntentOutput = parser_intent_llm.invoke(last_message)
+
+    if len(intent_output.intents) == 1 and intent_output.intents[0] == FairyIntentType.UNKNOWN_INTENT:
         clarification = reverse_questions[random.randint(0, 49)]
         user_resp = interrupt(clarification)
-        return Command(
-            goto="router",
-            update={
-                "messages": [
-                    AIMessage(content=clarification),
-                    HumanMessage(content=user_resp),
-                ],
-                "route_types": route.routes,
-            },
-        )
-    return Command(goto="executor", update={"route_types": route.routes})
+        return {
+            "messages": [
+                AIMessage(content=clarification),
+                HumanMessage(content=user_resp), # 유저 답변 추가
+            ],
+            "intent_types": intent_output.intents, # 여전히 Unknown 상태
+        }
+
+    return {"intent_types": intent_output.intents}
+
+def check_clarity(state: FairyState):
+    intent_types = state.get("intent_types", [])
+
+    # Unknown이면 다시 analyze_intent로 돌아가서 재분석(Loop)
+    if len(intent_types) == 1 and intent_types[0] == FairyIntentType.UNKNOWN_INTENT:
+        return "retry"
+
+    return "continue"
 
 
 def monster_rag():
@@ -48,22 +67,23 @@ def create_interaction():
     return "\n뿌뿌뿌"
 
 
-def executor(state: FairyState) -> Command:
-    route_types = state.get("route_types")
-    if route_types is None:
-        raise Exception("executor 호출 전에 route_type이 설정되지 않았습니다.")
+def fairy_action(state: FairyState) -> Command:
+    intent_types = state.get("intent_types")
+    if intent_types is None:
+        raise Exception("fairy_action 호출 전에 intent_type이 설정되지 않았습니다.")
 
-    for route in route_types:
-        if route == FairyRouteType.MONSTER_GUIDE:
+    prompt_info = ""
+    for intent in intent_types:
+        if intent == FairyIntentType.MONSTER_GUIDE:
             prompt_info = f"""\n몬스터 공략:{monster_rag()}"""
 
-        elif route == FairyRouteType.EVENT_GUIDE:
+        elif intent == FairyIntentType.EVENT_GUIDE:
             prompt_info = f"""\n이벤트:{get_event_info()}"""
 
-        elif route == FairyRouteType.DUNGEON_NAVIGATOR:
+        elif intent == FairyIntentType.DUNGEON_NAVIGATOR:
             prompt_info = f"""\n길안내:{dungeon_navigator()}"""
 
-        elif route == FairyRouteType.INTERACTION_HANDLER:
+        elif intent == FairyIntentType.INTERACTION_HANDLER:
             action_detail = create_interaction()
 
         else:
@@ -71,29 +91,31 @@ def executor(state: FairyState) -> Command:
 
     prompt = PromptManager(FairyPromptType.FAIRY_DUNGEON_SYSTEM).get_prompt(
         heroine_info = "테스트",
-        use_power = [rt.value if hasattr(rt, "value") else rt for rt in route_types],
-        info = state['messages'][-1]
+        use_intents = [rt.value if hasattr(rt, "value") else rt for rt in intent_types],
+        info = prompt_info,
+        question = state['messages'][-1].content
     )
-    ai_answer = router_llm.invoke(prompt)
+    ai_answer = intent_llm.invoke(prompt)
     print(prompt)
     print("*"*100)
-    print("\n"+ai_answer.content)
+    print(f"\n{ai_answer}")
     return {"messages": [ai_answer]}
 
 
 from langgraph.graph import START, END, StateGraph
 graph_builder = StateGraph(FairyState)
-graph_builder.add_node("router", router_node)
-graph_builder.add_node("executor", executor)
 
-graph_builder.add_edge(START,"router")
+graph_builder.add_node("analyze_intent", analyze_intent)
+graph_builder.add_node("fairy_action", fairy_action)
+
+graph_builder.add_edge(START, "analyze_intent")
+
 graph_builder.add_conditional_edges(
-    "router",
-    router_node,
+    "analyze_intent",      
+    check_clarity,         
     {
-        "router": "router",
-        "executor": "executor",
+        "retry": "analyze_intent",  
+        "continue": "fairy_action"  
     }
 )
-graph_builder.add_edge("executor", END)
-graph = graph_builder.compile()
+graph_builder.add_edge("fairy_action", END)
