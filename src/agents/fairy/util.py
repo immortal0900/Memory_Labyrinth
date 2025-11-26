@@ -25,3 +25,11 @@ def str_to_bool(text):
         return True
     else:
         return False
+
+
+def xml_block(tag: str, content: str, indent: int = 0):
+    pad = " " * indent
+    inner_pad = " " * (indent + 4)
+    # content의 모든 줄을 자동으로 들여쓰기 맞추기
+    normalized = "\n".join(f"{inner_pad}{line}" for line in content.split("\n"))
+    return f"{pad}<{tag}>\n{normalized}\n{pad}</{tag}>"

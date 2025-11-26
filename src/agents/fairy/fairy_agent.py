@@ -7,24 +7,25 @@ from agents.fairy.temp_string import reverse_questions
 from prompts.promptmanager import PromptManager
 from prompts.prompt_type.fairy.FairyPromptType import FairyPromptType
 import random
-from agents.fairy.util import add_ai_message, add_human_message, str_to_bool
+from agents.fairy.util import add_ai_message, add_human_message, str_to_bool,xml_block
 import asyncio
+
 
 intent_llm = init_chat_model(model=LLM.GPT4_1_MINI,temperature=0)
 
 
-def monster_rag():
-    return "\nasd"
+async def monster_rag():
+    return "asd"
 
-def get_event_info():
-    return "\nasdasd"
+async def get_event_info():
+    return "asdasd"
 
-def dungeon_navigator():
-    return "\ndungeon_navi"
+async def dungeon_navigator():
+    return "dungeon_navi"
 
 
-def create_interaction():
-    return "\n뿌뿌뿌"
+async def create_interaction():
+    return "뿌뿌뿌"
 
 async def clarify_intent(query):
     intent_prompt = PromptManager(FairyPromptType.FAIRY_INTENT).get_prompt(question=query)
@@ -63,35 +64,49 @@ async def analyze_intent(state: FairyState):
 
 def check_condition(state: FairyState):
     intent_types = state.get("intent_types", [])
-
-    # Unknown이면 다시 analyze_intent로 돌아가서 재분석(Loop)
     if len(intent_types) == 1 and intent_types[0] == FairyIntentType.UNKNOWN_INTENT:
         return "retry"
 
     return "continue"
 
 
-def fairy_action(state: FairyState) -> Command:
+INTENT_HANDLERS = {
+    FairyIntentType.MONSTER_GUIDE:       monster_rag,
+    FairyIntentType.EVENT_GUIDE:         get_event_info,
+    FairyIntentType.DUNGEON_NAVIGATOR:   dungeon_navigator,
+    FairyIntentType.INTERACTION_HANDLER: create_interaction,
+}
+
+
+INTENT_LABELS = {
+    FairyIntentType.MONSTER_GUIDE: "몬스터 공략",
+    FairyIntentType.EVENT_GUIDE: "이벤트",
+    FairyIntentType.DUNGEON_NAVIGATOR: "길안내",
+    FairyIntentType.INTERACTION_HANDLER: "상호작용",
+}
+
+async def fairy_action(state: FairyState) -> Command:
     intent_types = state.get("intent_types")
     if intent_types is None:
         raise Exception("fairy_action 호출 전에 intent_type이 설정되지 않았습니다.")
 
+    handlers = [INTENT_HANDLERS[i]() for i in intent_types if i in INTENT_HANDLERS]
+    results = await asyncio.gather(*handlers)
+
     prompt_info = ""
-    for intent in intent_types:
-        if intent == FairyIntentType.MONSTER_GUIDE:
-            prompt_info += f"""\n몬스터 공략:{monster_rag()}"""
+    idx = 0
+    for i,index in enumerate(intent_types):
+        handler = INTENT_HANDLERS.get(index)
+        if not handler:
+            continue
 
-        elif intent == FairyIntentType.EVENT_GUIDE:
-            prompt_info += f"""\n이벤트:{get_event_info()}"""
-
-        elif intent == FairyIntentType.DUNGEON_NAVIGATOR:
-            prompt_info += f"""\n길안내:{dungeon_navigator()}"""
-
-        elif intent == FairyIntentType.INTERACTION_HANDLER:
-            action_detail = create_interaction()
-
+        value = results[idx]
+        label = INTENT_LABELS.get(index, "정보")
+        if i == 0:
+            prompt_info += f"    <{label}>\n{value}\n    </{label}>"
         else:
-            info = "SMALLTALK"
+            prompt_info += f"\n    <{label}>\n{value}\n    </{label}>"
+        idx+=1
 
     prompt = PromptManager(FairyPromptType.FAIRY_DUNGEON_SYSTEM).get_prompt(
         heroine_info = "테스트",
@@ -99,7 +114,7 @@ def fairy_action(state: FairyState) -> Command:
         info = prompt_info,
         question = state['messages'][-1].content
     )
-    ai_answer = intent_llm.invoke(prompt)
+    ai_answer = await intent_llm.ainvoke(prompt)
     print(prompt)
     print("*"*100)
     print(f"\n{ai_answer}")
