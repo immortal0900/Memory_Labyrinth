@@ -13,55 +13,14 @@ def build_dungeon_graph():
     
     # 노드 추가
     workflow.add_node("monster_balancing", monster_balancing_node)
-    # workflow.add_node("event_planning", event_planning_node)
-    # workflow.add_node("item_planning", item_planning_node)
-    
+
     # 엣지 추가
     workflow.set_entry_point("monster_balancing")
     workflow.add_edge("monster_balancing", END)
-    # workflow.add_edge("monster_balancing", "event_planning")
-    # workflow.add_edge("event_planning", "item_planning")
-    # workflow.add_edge("item_planning", END)
-    
+
     # 그래프 컴파일
     app = workflow.compile()
     return app
-
-
-def load_monster_db_from_db() -> Optional[Dict[int, MonsterMetadata]]:
-    """
-    DB에서 몬스터 데이터를 로드
-    
-    Returns:
-        monsterId -> MonsterMetadata 매핑 딕셔너리, 실패 시 None
-    """
-    try:
-        # DBRepository는 embedding_model이 필수이지만, 
-        # 벡터 검색을 사용하지 않으므로 임의의 모델을 전달
-        # (실제로는 사용되지 않음)
-        from enums.EmbeddingModel import EmbeddingModel
-        repo = DBRepository(
-            collection_name=DBCollectionName.MONSTER,
-            embedding_model=EmbeddingModel.BGE_M3  # 벡터 검색은 사용하지 않지만 필수 파라미터
-        )
-        
-        # 모든 몬스터 데이터 조회
-        monsters_data = repo.select_data()
-        
-        if not monsters_data:
-            return None
-        
-        # MonsterMetadata 객체로 변환
-        monster_db = {}
-        for monster_row in monsters_data:
-            monster = MonsterMetadata.from_dict(monster_row)
-            monster_db[monster.monster_id] = monster
-        
-        return monster_db
-    except Exception as e:
-        print(f"DB에서 몬스터 데이터 로드 실패: {e}")
-        return None
-
 
 def create_mock_monster_db() -> Dict[int, MonsterMetadata]:
     """
@@ -206,13 +165,13 @@ def main(use_db: bool = True):
     print("\n=== 실행 결과 ===\n")
     
     # Monster Agent 결과
-    print("📊 Monster Agent 결과:")
+    print(" Monster Agent 결과:")
     print(f"  - 총 예산 할당: {result['difficulty_context']['total_budget_allocated']:.0f}")
     print(f"  - 총 예산 사용: {result['difficulty_context']['total_budget_used']:.0f}")
     print(f"  - 예산 사용률: {result['difficulty_context']['budget_utilization']:.2%}\n")
     
     # 각 방별 상세 정보
-    print("🏠 방별 상세 정보:")
+    print(" 방별 상세 정보:")
     for room in result['rooms']:
         room_type_names = {0: "빈방", 1: "전투", 2: "이벤트", 3: "보물"}
         print(f"\n  방 {room.room_id} ({room_type_names[room.room_type]}, 크기: {room.size}):")
@@ -227,7 +186,7 @@ def main(use_db: bool = True):
     
     # Event Agent 상세 결과
     if result.get('event_data'):
-        print("\n\n🎲 Event Agent 상세 결과:")
+        print("\n\n Event Agent 상세 결과:")
         for event_data in result['event_data']:
             print(f"\n  방 {event_data['room_id']} 이벤트:")
             print(f"    이벤트 소스: {event_data['event_source_type']}")
@@ -267,9 +226,9 @@ def main(use_db: bool = True):
         }
         
         write_json(output_file, result_dict)
-        print(f"\n💾 결과 저장: {output_file}")
+        print(f"\n결과 저장: {output_file}")
     except Exception as e:
-        print(f"\n⚠️ 결과 저장 실패: {e}")
+        print(f"\n결과 저장 실패: {e}")
 
 
 if __name__ == "__main__":
