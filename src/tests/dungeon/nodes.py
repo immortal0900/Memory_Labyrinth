@@ -1,5 +1,6 @@
 from state import DungeonState
-from monster_agent import MonsterCompositionAgent
+from monster_agent_with_llm import MonsterCompositionAgent
+from enums.LLM import LLM
 # from .event_agent import EventPlanningAgent
 
 
@@ -11,13 +12,16 @@ def monster_balancing_node(state: DungeonState) -> DungeonState:
     # room_count = state["room_count"]
     
     # Monster Agent 생성 및 실행
-    agent = MonsterCompositionAgent(state["hero_stats"], state["monster_db"])
+
+    selected_model = LLM.GPT4_1_MINI
+
+    agent = MonsterCompositionAgent(state["hero_stats"], state["monster_db"], model_name = selected_model)
     filled_json, log = agent.process_dungeon(state["dungeon_data"])
 
-    print(f"[System] 밸런싱 완료.")
-    print(f"   - 히로인 전투력: {log['hero_power']:.1f}")
-    print(f"   - 타겟 난이도: {log['target_score']:.1f}")
-    print(f"   - 후보 몬스터: {log['candidate_monsters']}")
+    print(f"[System] ✅ 밸런싱 완료 (Model: {log.get('model_used', 'Unknown')})")
+    print(f"   - AI 분석: {log.get('ai_reasoning', 'N/A')}")
+    print(f"   - 전략 배율: x{log.get('ai_multiplier', 1.0)}")
+    print(f"   - 타겟 점수: {log.get('target_score', 0):.1f}")
     
     return {
         "dungeon_data": filled_json,

@@ -52,6 +52,6 @@ MONSTER_STRATEGY:
     }
 
 
-input_variables: 
-  - "hero_summary"
-  - "floor"
+  input_variables: 
+    - "hero_summary"
+    - "floor"
