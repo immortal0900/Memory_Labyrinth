@@ -1,4 +1,4 @@
-from db.DBRepository import DBRepository
+from db.VectorDBRepository import VectorDBRepository
 from db.config import DBCollectionName
 from enums.EmbeddingModel import EmbeddingModel
 from langchain_community.document_loaders import TextLoader
@@ -10,7 +10,7 @@ def test_rag():
     # 0. 설정
     # RAG용 DBRepository 생성 (임베딩 모델 지정 필수)
     # 유료 모델인 TEXT_EMBEDDING_3_SMALL 사용 (OpenAI 키 필요)
-    repo = DBRepository(
+    repo = VectorDBRepository(
         collection_name=DBCollectionName.WORLD_SCENARIO,
         embedding_model=EmbeddingModel.TEXT_EMBEDDING_3_SMALL 
     )

@@ -1,4 +1,4 @@
-from db.DBRepository import DBRepository
+from db.VectorDBRepository import VectorDBRepository
 from db.config import DBCollectionName
 import json
 
@@ -7,7 +7,7 @@ def check_data():
 
     # 1. 몬스터 목록 확인
     print("[몬스터 목록]")
-    repo = DBRepository(DBCollectionName.MONSTER)
+    repo = VectorDBRepository(DBCollectionName.MONSTER)
     monsters = repo.select_data()
     
     for m in monsters:
@@ -21,7 +21,7 @@ def check_data():
 
     # 2. 아이템 목록 확인
     print("[아이템 목록]")
-    repo = DBRepository(DBCollectionName.ITEM)
+    repo = VectorDBRepository(DBCollectionName.ITEM)
     items = repo.select_data()
 
     for i in items:

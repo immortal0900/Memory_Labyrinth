@@ -7,7 +7,7 @@ load_dotenv()
 
 # 환경변수에서 DB 주소 읽기, 없으면 로컬 기본값 사용
 # 로컬 Docker 기본값: postgresql+psycopg://postgres:password@localhost:5432/game_db
-CONNECTION_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:password@localhost:5435/game_db")
+CONNECTION_URL = os.getenv("DATABASE_URL", "postgresql://postgres.mjyjbkjqvjyneqrgebsy:Wanted11!!@aws-1-ap-northeast-2.pooler.supabase.com:5432/postgres")
 
 class DBCollectionName(StrEnum):
     # 몬스터 관련
@@ -36,4 +36,6 @@ class DBCollectionName(StrEnum):
     WORLD_UNLOCK_STAGE = "world_scenario_unlock_stages"
     HEROINE_MEMORY_UNLOCK_STAGE = "heroine_memory_unlock_stages"
     ROMANCE_DOC = "romance_docs"
+
+    HEROINE_MEMORY = "heroine_memory"
 

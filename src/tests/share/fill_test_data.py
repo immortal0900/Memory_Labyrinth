@@ -1,4 +1,4 @@
-from db.DBRepository import DBRepository
+from db.VectorDBRepository import VectorDBRepository
 from db.config import DBCollectionName
 
 def fill_data():
@@ -7,7 +7,7 @@ def fill_data():
     # ---------------------------------------------------------
     # 1. 몬스터 데이터 추가
     # ---------------------------------------------------------
-    monster_repo = DBRepository(DBCollectionName.MONSTER)
+    monster_repo = VectorDBRepository(DBCollectionName.MONSTER)
     
     # 기존 데이터 삭제 (중복 방지)
     monster_repo.delete_data(condition="1=1") 
@@ -62,7 +62,7 @@ def fill_data():
     # ---------------------------------------------------------
     # 2. 아이템 데이터 추가
     # ---------------------------------------------------------
-    item_repo = DBRepository(DBCollectionName.ITEM)
+    item_repo = VectorDBRepository(DBCollectionName.ITEM)
     
     # 기존 데이터 삭제
     item_repo.delete_data(condition="1=1")
