@@ -2,3 +2,5 @@
 main.py
 pyproject.toml
 uv.lock
+__pycache__/
+*.pyc
