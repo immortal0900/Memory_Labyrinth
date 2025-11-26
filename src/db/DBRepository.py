@@ -142,9 +142,8 @@ class DBRepository:
 
     def search(self, query: str, k=5):
         return self.store.similarity_search(query, k=k)
-
-
-
+    
+    
 
 def resolve_embedding(model: EmbeddingModel):
     """모델 Enum → 실제 Embedding 객체로 변환"""

@@ -7,54 +7,14 @@ from agents.fairy.temp_string import reverse_questions
 from prompts.promptmanager import PromptManager
 from prompts.prompt_type.fairy.FairyPromptType import FairyPromptType
 import random
+from agents.fairy.util import add_ai_message, add_human_message, str_to_bool
+import asyncio
 
-llm = init_chat_model(model=LLM.GPT4_1_MINI,temperature=0.2)
 intent_llm = init_chat_model(model=LLM.GPT4_1_MINI,temperature=0)
-
-
-
-def memory_question(state:FairyState):
-    last = state["messages"][-1]
-    last_message = last.content
-
-    """
-
-    """
-
-
-def analyze_intent(state: FairyState):
-    last = state["messages"][-1]
-    last_message = last.content
-
-    parser_intent_llm = intent_llm.with_structured_output(FairyIntentOutput)
-    intent_output: FairyIntentOutput = parser_intent_llm.invoke(last_message)
-
-    if len(intent_output.intents) == 1 and intent_output.intents[0] == FairyIntentType.UNKNOWN_INTENT:
-        clarification = reverse_questions[random.randint(0, 49)]
-        user_resp = interrupt(clarification)
-        return {
-            "messages": [
-                AIMessage(content=clarification),
-                HumanMessage(content=user_resp), # 유저 답변 추가
-            ],
-            "intent_types": intent_output.intents, # 여전히 Unknown 상태
-        }
-
-    return {"intent_types": intent_output.intents}
-
-def check_clarity(state: FairyState):
-    intent_types = state.get("intent_types", [])
-
-    # Unknown이면 다시 analyze_intent로 돌아가서 재분석(Loop)
-    if len(intent_types) == 1 and intent_types[0] == FairyIntentType.UNKNOWN_INTENT:
-        return "retry"
-
-    return "continue"
 
 
 def monster_rag():
     return "\nasd"
-
 
 def get_event_info():
     return "\nasdasd"
@@ -62,10 +22,49 @@ def get_event_info():
 def dungeon_navigator():
     return "\ndungeon_navi"
 
-
 def create_interaction():
     return "\n뿌뿌뿌"
 
+async def clarify_intent(query):
+    parser_intent_llm = intent_llm.with_structured_output(FairyIntentOutput)
+    intent_output: FairyIntentOutput = await parser_intent_llm.ainvoke(query)
+    return intent_output
+
+async def check_memory_question(query:str):
+    prompt = PromptManager(FairyPromptType.QUESTION_HISTORY_CHECK).get_prompt(question=query)
+    reponse = await intent_llm.ainvoke(prompt)
+    return str_to_bool(reponse.content)
+
+async def analyze_intent(state: FairyState):
+    last = state["messages"][-1]
+    last_message = last.content
+
+    clarify_intent_type, is_question_memory = await asyncio.gather(
+        clarify_intent(last_message),
+        check_memory_question(last_message)
+    )
+
+    if len(clarify_intent_type.intents) == 1 and clarify_intent_type.intents[0] == FairyIntentType.UNKNOWN_INTENT:
+        clarification = reverse_questions[random.randint(0, 49)]
+        user_resp = interrupt(clarification)
+        return {
+            "messages": [
+                add_ai_message(content=clarification, intent_types=clarify_intent_type.intents),
+                add_human_message(content=user_resp), # 유저 답변 추가
+            ],
+            "intent_types": clarify_intent_type.intents, # 여전히 Unknown 상태
+        }
+
+    return {"intent_types": clarify_intent_type.intents}
+
+def check_condition(state: FairyState):
+    intent_types = state.get("intent_types", [])
+
+    # Unknown이면 다시 analyze_intent로 돌아가서 재분석(Loop)
+    if len(intent_types) == 1 and intent_types[0] == FairyIntentType.UNKNOWN_INTENT:
+        return "retry"
+
+    return "continue"
 
 def fairy_action(state: FairyState) -> Command:
     intent_types = state.get("intent_types")
@@ -75,13 +74,13 @@ def fairy_action(state: FairyState) -> Command:
     prompt_info = ""
     for intent in intent_types:
         if intent == FairyIntentType.MONSTER_GUIDE:
-            prompt_info = f"""\n몬스터 공략:{monster_rag()}"""
+            prompt_info += f"""\n몬스터 공략:{monster_rag()}"""
 
         elif intent == FairyIntentType.EVENT_GUIDE:
-            prompt_info = f"""\n이벤트:{get_event_info()}"""
+            prompt_info += f"""\n이벤트:{get_event_info()}"""
 
         elif intent == FairyIntentType.DUNGEON_NAVIGATOR:
-            prompt_info = f"""\n길안내:{dungeon_navigator()}"""
+            prompt_info += f"""\n길안내:{dungeon_navigator()}"""
 
         elif intent == FairyIntentType.INTERACTION_HANDLER:
             action_detail = create_interaction()
@@ -99,7 +98,7 @@ def fairy_action(state: FairyState) -> Command:
     print(prompt)
     print("*"*100)
     print(f"\n{ai_answer}")
-    return {"messages": [ai_answer]}
+    return {"messages": [add_ai_message(content = ai_answer.content, intent_types = intent_types)]}
 
 
 from langgraph.graph import START, END, StateGraph
@@ -112,7 +111,7 @@ graph_builder.add_edge(START, "analyze_intent")
 
 graph_builder.add_conditional_edges(
     "analyze_intent",      
-    check_clarity,         
+    check_condition,         
     {
         "retry": "analyze_intent",  
         "continue": "fairy_action"  
