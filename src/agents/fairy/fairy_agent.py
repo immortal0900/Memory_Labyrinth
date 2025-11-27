@@ -1,3 +1,13 @@
+
+from langchain_core.chat_history import InMemoryChatMessageHistory, BaseChatMessageHistory
+from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_core.prompts import (
+    ChatPromptTemplate,
+    MessagesPlaceholder,
+    SystemMessagePromptTemplate,
+    HumanMessagePromptTemplate,
+)
+
 from langchain.chat_models import init_chat_model
 from enums.LLM import LLM
 from agents.fairy.fairy_state import FairyIntentOutput, FairyState, FairyIntentType
@@ -9,9 +19,11 @@ from prompts.prompt_type.fairy.FairyPromptType import FairyPromptType
 import random
 from agents.fairy.util import add_ai_message, add_human_message, str_to_bool
 import asyncio
+from core.game_dto.z_muck_factory import MockFactory
 
+helper_llm = init_chat_model(model=LLM.GPT4_1_MINI,temperature=0)
+small_talk_llm = init_chat_model(model=LLM.GPT4_1_MINI,temperature=0.4)
 
-intent_llm = init_chat_model(model=LLM.GPT4_1_MINI,temperature=0)
 
 async def monster_rag():
     return "asd"
@@ -27,14 +39,14 @@ async def create_interaction():
 
 async def clarify_intent(query):
     intent_prompt = PromptManager(FairyPromptType.FAIRY_INTENT).get_prompt(question=query)
-    parser_intent_llm = intent_llm.with_structured_output(FairyIntentOutput)
+    parser_intent_llm = helper_llm.with_structured_output(FairyIntentOutput)
     intent_output: FairyIntentOutput = await parser_intent_llm.ainvoke(intent_prompt)
     return intent_output
 
 
 async def check_memory_question(query:str):
     prompt = PromptManager(FairyPromptType.QUESTION_HISTORY_CHECK).get_prompt(question=query)
-    reponse = await intent_llm.ainvoke(prompt)
+    reponse = await helper_llm.ainvoke(prompt)
     return str_to_bool(reponse.content)
 
 
@@ -75,7 +87,6 @@ INTENT_HANDLERS = {
     FairyIntentType.INTERACTION_HANDLER: create_interaction,
 }
 
-
 INTENT_LABELS = {
     FairyIntentType.MONSTER_GUIDE: "몬스터 공략",
     FairyIntentType.EVENT_GUIDE: "이벤트",
@@ -107,12 +118,12 @@ async def fairy_action(state: FairyState) -> Command:
         idx+=1
 
     prompt = PromptManager(FairyPromptType.FAIRY_DUNGEON_SYSTEM).get_prompt(
-        heroine_info = "테스트",
+        state_data = MockFactory.create_dungeon_player(1).model_dump_json(indent=2),
         use_intents = [rt.value if hasattr(rt, "value") else rt for rt in intent_types],
         info = prompt_info,
         question = state['messages'][-1].content
     )
-    ai_answer = await intent_llm.ainvoke(prompt)
+    ai_answer = await helper_llm.ainvoke(prompt)
     print(prompt)
     print("*"*100)
     print(f"\n{ai_answer}")

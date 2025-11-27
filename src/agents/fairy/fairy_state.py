@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional,Dict
 from enum import StrEnum
+
 
 
 class FairyIntentType(StrEnum):
@@ -26,7 +27,6 @@ class FairyState(MessagesState):
     intent_types: List[FairyIntentType]
     is_multi_turn: bool = False
 
-
 class FairyInteraction(BaseModel):
     room_right_on: Optional[bool] = Field(description="던전 방 불 밝히기 여부")
 
@@ -39,3 +39,4 @@ class FairyOutput(BaseModel):
     interation: Optional[FairyInteraction] = Field(
         description="사용하려는 능력 중 'INTERACTION_HANDLER'가 포함되어 있을 시 정보 (기본 None)"
     )
+
