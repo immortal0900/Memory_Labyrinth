@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional,Dict
 from enum import StrEnum
+from core.game_dto.DungeonPlayerData import DungeonPlayerData
 
 
 
@@ -24,8 +25,9 @@ from pydantic import BaseModel, Field
 
 
 class FairyState(MessagesState):
-    intent_types: List[FairyIntentType]
-    is_multi_turn: bool = False
+    intent_types: List[FairyIntentType] = []
+    dungenon_player:Optional[DungeonPlayerData] = None
+    is_multi_small_talk: bool = False
 
 class FairyInteraction(BaseModel):
     room_right_on: Optional[bool] = Field(description="던전 방 불 밝히기 여부")
