@@ -16,9 +16,8 @@ from langgraph.types import Command, interrupt
 from agents.fairy.cache_data import reverse_questions
 from prompts.promptmanager import PromptManager
 from prompts.prompt_type.fairy.FairyPromptType import FairyPromptType
-import random
+import random, asyncio
 from agents.fairy.util import add_ai_message, add_human_message, str_to_bool
-import asyncio
 from core.game_dto.z_muck_factory import MockFactory
 from agents.fairy.util import get_small_talk_history
 
@@ -65,9 +64,9 @@ async def analyze_intent(state: FairyState):
         return {
             "messages": [
                 add_ai_message(content=clarification, intent_types=clarify_intent_type.intents),
-                add_human_message(content=user_resp), # 유저 답변 추가
+                add_human_message(content=user_resp), 
             ],
-            "intent_types": clarify_intent_type.intents, # 여전히 Unknown 상태            
+            "intent_types": clarify_intent_type.intents, 
             "is_multi_small_talk":False
         }
 
@@ -78,10 +77,11 @@ async def analyze_intent(state: FairyState):
 
 def check_condition(state: FairyState):
     intent_types = state.get("intent_types", [])
+    is_multi_small_talk = state.get("is_multi_small_talk",False)
     if intent_types[0] == FairyIntentType.UNKNOWN_INTENT:
         return "retry"
 
-    if intent_types[0] == FairyIntentType.SMALLTALK:
+    if intent_types[0] == FairyIntentType.SMALLTALK and is_multi_small_talk:
         return "multi_small_talk"
 
     return "continue"
@@ -152,15 +152,15 @@ async def fairy_action(state: FairyState):
 
 
 from langgraph.graph import START, END, StateGraph
-graph_builder = StateGraph(FairyState)
+dungeon_graph_builder = StateGraph(FairyState)
 
-graph_builder.add_node("analyze_intent", analyze_intent)
-graph_builder.add_node("fairy_action", fairy_action)
-graph_builder.add_node("multi_small_talk",multi_small_talk_node)
+dungeon_graph_builder.add_node("analyze_intent", analyze_intent)
+dungeon_graph_builder.add_node("fairy_action", fairy_action)
+dungeon_graph_builder.add_node("multi_small_talk",multi_small_talk_node)
 
-graph_builder.add_edge(START, "analyze_intent")
+dungeon_graph_builder.add_edge(START, "analyze_intent")
 
-graph_builder.add_conditional_edges(
+dungeon_graph_builder.add_conditional_edges(
     "analyze_intent",      
     check_condition,         
     {
@@ -169,4 +169,4 @@ graph_builder.add_conditional_edges(
         "continue": "fairy_action"  
     }
 )
-graph_builder.add_edge("fairy_action", END)
+dungeon_graph_builder.add_edge("fairy_action", END)

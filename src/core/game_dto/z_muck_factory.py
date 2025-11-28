@@ -85,7 +85,7 @@ class MockFactory:
             stats=MockFactory.create_stat(),
             skills=MockFactory.create_skill(),
             weapon=MockFactory.create_weapon(),
-            inventory=[random.randint(1000, 2000) for _ in range(5)]
+            inventory=[0,21,42]
         )
 
     @staticmethod

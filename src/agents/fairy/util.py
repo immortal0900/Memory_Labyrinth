@@ -33,3 +33,6 @@ def get_small_talk_history(msgs):
         if isinstance(curr, AIMessage) and "SMALLTALK" in curr.additional_kwargs.get("intent_types", [])
         for msg in (prev, curr)
     ]
+
+
+
