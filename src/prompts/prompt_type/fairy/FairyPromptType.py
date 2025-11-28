@@ -9,4 +9,6 @@ class FairyPromptType(Enum):
     FAIRY_INTENT = str(BASE / "fairy" / "fairy_intent.yaml")
     FAIRY_MULTI_SMALL_TALK = str(BASE / "fairy" / "fairy_multi_small_talk.yaml")
     QUESTION_HISTORY_CHECK = str(BASE / "fairy" / "question_history_check.yaml")
+    FAIRY_INTERACTION_INTENT = str(BASE / "fairy" / "fairy_interaction_intent.yaml")
+    FAIRY_ITEM_USE = str(BASE / "fairy" / "fairy_item_use.yaml")
     

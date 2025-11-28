@@ -2,20 +2,26 @@
 from langchain.chat_models import init_chat_model
 from enums.LLM import LLM
 from agents.fairy.fairy_state import FairyIntentOutput, FairyState, FairyIntentType
-from langchain_core.messages import HumanMessage, AIMessage
-from langgraph.types import Command, interrupt
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langgraph.types import interrupt
 from agents.fairy.cache_data import reverse_questions
 from prompts.promptmanager import PromptManager
 from prompts.prompt_type.fairy.FairyPromptType import FairyPromptType
 import random, asyncio
-from agents.fairy.util import add_ai_message, add_human_message, str_to_bool
-from agents.fairy.util import get_small_talk_history
+from agents.fairy.util import (
+    add_ai_message,
+    add_human_message,
+    str_to_bool,
+    get_small_talk_history,
+    call_action_llm,
+    get_groq_llm_lc,
+)
 from core.common import get_inventory_items
-from core.game_dto.DungeonPlayerData import DungeonPlayerData
 
-
-helper_llm = init_chat_model(model=LLM.GPT4_1_MINI, temperature=0)
-small_talk_llm = init_chat_model(model=LLM.GPT4_1_MINI, temperature=0.4)
+check_multi_llm = get_groq_llm_lc(model="llama-3.1-8b-instant", max_token=8)
+intent_llm = get_groq_llm_lc(model="llama-3.1-8b-instant", max_token=40)
+action_llm = get_groq_llm_lc()
+small_talk_llm = get_groq_llm_lc(temperature=0.4)
 
 
 async def monster_rag():
@@ -33,21 +39,22 @@ async def get_event_info():
 async def dungeon_navigator():
     return "dungeon_navi"
 
+
 async def create_interaction(inventory_ids):
     #  items_descriptions = []
     #  for item in get_inventory_items(inventory_ids):
-    #      items_descriptions.append(item.model_dump_json(indent=2))    
-     inventory_prompt = f"\n        <인벤토리 내의 아이템 설명>\n{get_inventory_items(inventory_ids)}\n        </인벤토리 내의 아이템 설명>"
-     result = inventory_prompt 
-     return result 
+    #      items_descriptions.append(item.model_dump_json(indent=2))
+    inventory_prompt = f"        <인벤토리 내의 아이템 설명>\n{get_inventory_items(inventory_ids)}\n        </인벤토리 내의 아이템 설명>"
+
+    result = inventory_prompt
+    return result
 
 
-async def clarify_intent(query):
-    intent_prompt = PromptManager(FairyPromptType.FAIRY_INTENT).get_prompt(
-        question=query
-    )
-    parser_intent_llm = helper_llm.with_structured_output(FairyIntentOutput)
-    intent_output: FairyIntentOutput = await parser_intent_llm.ainvoke(intent_prompt)
+async def _clarify_intent(query):
+    intent_prompt = PromptManager(FairyPromptType.FAIRY_INTENT).get_prompt()
+    messages = [SystemMessage(content=intent_prompt), HumanMessage(content=query)]
+    parser_llm = intent_llm.with_structured_output(FairyIntentOutput)
+    intent_output: FairyIntentOutput = await parser_llm.ainvoke(messages)
     return intent_output
 
 
@@ -55,8 +62,10 @@ async def check_memory_question(query: str):
     prompt = PromptManager(FairyPromptType.QUESTION_HISTORY_CHECK).get_prompt(
         question=query
     )
-    reponse = await helper_llm.ainvoke(prompt)
-    return str_to_bool(reponse.content)
+    reponse = await check_multi_llm.ainvoke(prompt)
+    return {
+        str_to_bool(reponse.content)
+    }
 
 
 async def analyze_intent(state: FairyState):
@@ -64,8 +73,9 @@ async def analyze_intent(state: FairyState):
     last_message = last.content
 
     clarify_intent_type, is_question_memory = await asyncio.gather(
-        clarify_intent(last_message), check_memory_question(last_message)
+        _clarify_intent(last_message), check_memory_question(last_message)
     )
+
 
     if clarify_intent_type.intents[0] == FairyIntentType.UNKNOWN_INTENT:
         clarification = reverse_questions[random.randint(0, 49)]
@@ -80,12 +90,15 @@ async def analyze_intent(state: FairyState):
             "intent_types": clarify_intent_type.intents,
             "is_multi_small_talk": False,
         }
-
+    print("의도 포함",FairyIntentType.SMALLTALK in clarify_intent_type.intents)
+    print("체크 메모리",is_question_memory)
+    is_multi_small_talk = (
+        FairyIntentType.SMALLTALK in clarify_intent_type.intents
+    ) and is_question_memory
+    print("멀티턴", is_multi_small_talk)
     return {
         "intent_types": clarify_intent_type.intents,
-        "is_multi_small_talk": clarify_intent_type.intents[0]
-        == FairyIntentType.SMALLTALK
-        and is_question_memory,
+        "is_multi_small_talk": is_multi_small_talk,
     }
 
 
@@ -95,21 +108,25 @@ def check_condition(state: FairyState):
     if intent_types[0] == FairyIntentType.UNKNOWN_INTENT:
         return "retry"
 
-    if intent_types[0] == FairyIntentType.SMALLTALK and is_multi_small_talk:
+    if (FairyIntentType.SMALLTALK in intent_types) and is_multi_small_talk:
         return "multi_small_talk"
 
     return "continue"
 
 
 from agents.fairy.util import get_small_talk_history
+
+
 def multi_small_talk_node(state: FairyState):
     intent_types = state.get("intent_types")
     player = state["dungenon_player"]
     histories = get_small_talk_history(state["messages"])
-    question = state["messages"][-1]
     prompt = PromptManager(FairyPromptType.FAIRY_MULTI_SMALL_TALK).get_prompt(
-        location="던전", dungenon_player=player, histories=histories, question=question
+        location="던전", dungenon_player=player, histories=histories
     )
+    question = state["messages"][-1].content
+    action_llm.invoke([SystemMessage(content=prompt), HumanMessage(content=question)])
+
     ai_answer = small_talk_llm.invoke(prompt)
     return {
         "messages": [
@@ -125,7 +142,9 @@ async def fairy_action(state: FairyState):
         FairyIntentType.MONSTER_GUIDE: monster_rag,
         FairyIntentType.EVENT_GUIDE: get_event_info,
         FairyIntentType.DUNGEON_NAVIGATOR: dungeon_navigator,
-        FairyIntentType.INTERACTION_HANDLER: lambda: create_interaction(dungenon_player.inventory),
+        FairyIntentType.INTERACTION_HANDLER: lambda: create_interaction(
+            dungenon_player.inventory
+        ),
     }
 
     INTENT_LABELS = {
@@ -153,18 +172,23 @@ async def fairy_action(state: FairyState):
             prompt_info += f"\n    <{label}>\n{value}\n    </{label}>"
         idx += 1
 
-
-    pretty_dungenon_player =  dungenon_player.model_dump_json(indent=2)
+    pretty_dungenon_player = dungenon_player.model_dump_json(indent=2)
     prompt = PromptManager(FairyPromptType.FAIRY_DUNGEON_SYSTEM).get_prompt(
         dungenon_player=pretty_dungenon_player,
         use_intents=[rt.value if hasattr(rt, "value") else rt for rt in intent_types],
         info=prompt_info,
-        question=state["messages"][-1].content,
     )
-    ai_answer = await helper_llm.ainvoke(prompt)
-    print(prompt)
-    print("*" * 100)
-    print(f"\n{ai_answer}")
+
+    ai_answer = action_llm.invoke(
+        [
+            SystemMessage(content=prompt),
+            HumanMessage(content=state["messages"][-1].content),
+        ]
+    )
+
+    # print(prompt)
+    # print("*" * 100)
+    # print(f"\n{ai_answer}")
     return {
         "messages": [
             add_ai_message(content=ai_answer.content, intent_types=intent_types)
@@ -174,15 +198,15 @@ async def fairy_action(state: FairyState):
 
 from langgraph.graph import START, END, StateGraph
 
-dungeon_graph_builder = StateGraph(FairyState)
+graph_builder = StateGraph(FairyState)
 
-dungeon_graph_builder.add_node("analyze_intent", analyze_intent)
-dungeon_graph_builder.add_node("fairy_action", fairy_action)
-dungeon_graph_builder.add_node("multi_small_talk", multi_small_talk_node)
+graph_builder.add_node("analyze_intent", analyze_intent)
+graph_builder.add_node("fairy_action", fairy_action)
+graph_builder.add_node("multi_small_talk", multi_small_talk_node)
 
-dungeon_graph_builder.add_edge(START, "analyze_intent")
+graph_builder.add_edge(START, "analyze_intent")
 
-dungeon_graph_builder.add_conditional_edges(
+graph_builder.add_conditional_edges(
     "analyze_intent",
     check_condition,
     {
@@ -191,4 +215,4 @@ dungeon_graph_builder.add_conditional_edges(
         "continue": "fairy_action",
     },
 )
-dungeon_graph_builder.add_edge("fairy_action", END)
+graph_builder.add_edge("fairy_action", END)

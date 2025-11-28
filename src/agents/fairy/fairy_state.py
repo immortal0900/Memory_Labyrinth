@@ -1,8 +1,7 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional,Dict
+from typing import List, Optional, Dict
 from enum import StrEnum
 from core.game_dto.DungeonPlayerData import DungeonPlayerData
-
 
 
 class FairyIntentType(StrEnum):
@@ -16,7 +15,7 @@ class FairyIntentType(StrEnum):
 
 class FairyIntentOutput(BaseModel):
     intents: List[FairyIntentType] = Field(
-        description="선택된 라우터 타입들의 목록 (질문에 여러 의도가 섞여있으면 다중 선택 가능)"
+        description="선택된 의도 타입들의 목록 (질문에 여러 의도가 섞여있으면 다중 선택 가능)"
     )
 
 
@@ -26,17 +25,31 @@ from pydantic import BaseModel, Field
 
 class FairyState(MessagesState):
     intent_types: List[FairyIntentType] = []
-    dungenon_player:Optional[DungeonPlayerData] = None
-    targetMonsterIds:List[int] = []
+    dungenon_player: Optional[DungeonPlayerData] = None
+    targetMonsterIds: List[int] = []
     is_multi_small_talk: bool = False
 
-class FairyInteractionState(BaseModel):
-    roomRightOn: Optional[bool] = None
-    isCheckNextRoom:bool = False
+
+class FairyInterationIntentType(StrEnum):
+    INVENTORY_ITEM_USE = "INVENTORY_ITEM_USE"
+    LIGHT_ON_ROOM = "LIGHT_ON_ROOM"
+    LIGHT_OFF_ROOM = "LIGHT_OFF_ROOM"
+    MOVE_NEXT_ROOM = "MOVE_NEXT_ROOM"
+    NONE = "NONE"
 
 
-    
+class FairyInterationIntentOutput(BaseModel):
+    intents: List[FairyInterationIntentType] = Field(
+        description="선택된 요청 타입들의 목록 (질문에 여러 의도가 섞여있으면 다중 선택 가능)"
+    )
 
+class FairyItemUseOutput(BaseModel):
+    item_id: Optional[int] = Field(description="사용하려는 item의 id", default=None)
 
-
-
+class FairyInteractionState(MessagesState):
+    inventory: List[int] = []
+    roomLight: Optional[bool] = None
+    isCheckNextRoom: bool = False
+    useItemId: Optional[int] = None
+    intent_types: List[FairyInterationIntentType]
+    temp_use_item_id: Optional[int] = None
