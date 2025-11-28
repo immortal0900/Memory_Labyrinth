@@ -25,4 +25,14 @@ def str_to_bool(text):
         return True
     else:
         return False
-    
+
+def get_small_talk_history(msgs):
+    return [
+        msg 
+        for prev, curr in zip(msgs, msgs[1:]) 
+        if isinstance(curr, AIMessage) and "SMALLTALK" in curr.additional_kwargs.get("intent_types", [])
+        for msg in (prev, curr)
+    ]
+
+
+

@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional,Dict
 from enum import StrEnum
+from core.game_dto.DungeonPlayerData import DungeonPlayerData
 
 
 
@@ -24,19 +25,18 @@ from pydantic import BaseModel, Field
 
 
 class FairyState(MessagesState):
-    intent_types: List[FairyIntentType]
-    is_multi_turn: bool = False
+    intent_types: List[FairyIntentType] = []
+    dungenon_player:Optional[DungeonPlayerData] = None
+    targetMonsterIds:List[int] = []
+    is_multi_small_talk: bool = False
 
-class FairyInteraction(BaseModel):
-    room_right_on: Optional[bool] = Field(description="던전 방 불 밝히기 여부")
+class FairyInteractionState(BaseModel):
+    roomRightOn: Optional[bool] = None
+    isCheckNextRoom:bool = False
 
 
-class FairyOutput(BaseModel):
-    response: str = Field(description="요정의 대답")
-    use_intents: List[FairyIntentType] = Field(
-        description="사용하려는 정령의 능력 목록"
-    )
-    interation: Optional[FairyInteraction] = Field(
-        description="사용하려는 능력 중 'INTERACTION_HANDLER'가 포함되어 있을 시 정보 (기본 None)"
-    )
+    
+
+
+
 

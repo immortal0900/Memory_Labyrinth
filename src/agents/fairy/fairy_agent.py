@@ -13,17 +13,16 @@ from enums.LLM import LLM
 from agents.fairy.fairy_state import FairyIntentOutput, FairyState, FairyIntentType
 from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.types import Command, interrupt
-from agents.fairy.temp_string import reverse_questions
+from agents.fairy.cache_data import reverse_questions
 from prompts.promptmanager import PromptManager
 from prompts.prompt_type.fairy.FairyPromptType import FairyPromptType
-import random
+import random, asyncio
 from agents.fairy.util import add_ai_message, add_human_message, str_to_bool
-import asyncio
 from core.game_dto.z_muck_factory import MockFactory
+from agents.fairy.util import get_small_talk_history
 
 helper_llm = init_chat_model(model=LLM.GPT4_1_MINI,temperature=0)
 small_talk_llm = init_chat_model(model=LLM.GPT4_1_MINI,temperature=0.4)
-
 
 async def monster_rag():
     return "asd"
@@ -59,23 +58,31 @@ async def analyze_intent(state: FairyState):
         check_memory_question(last_message)
     )
 
-    if len(clarify_intent_type.intents) == 1 and clarify_intent_type.intents[0] == FairyIntentType.UNKNOWN_INTENT:
+    if clarify_intent_type.intents[0] == FairyIntentType.UNKNOWN_INTENT:
         clarification = reverse_questions[random.randint(0, 49)]
         user_resp = interrupt(clarification)
         return {
             "messages": [
                 add_ai_message(content=clarification, intent_types=clarify_intent_type.intents),
-                add_human_message(content=user_resp), # 유저 답변 추가
+                add_human_message(content=user_resp), 
             ],
-            "intent_types": clarify_intent_type.intents, # 여전히 Unknown 상태
+            "intent_types": clarify_intent_type.intents, 
+            "is_multi_small_talk":False
         }
 
-    return {"intent_types": clarify_intent_type.intents}
+    return {
+        "intent_types": clarify_intent_type.intents,
+        "is_multi_small_talk":clarify_intent_type.intents[0] == FairyIntentType.SMALLTALK and is_question_memory
+     }
 
 def check_condition(state: FairyState):
     intent_types = state.get("intent_types", [])
-    if len(intent_types) == 1 and intent_types[0] == FairyIntentType.UNKNOWN_INTENT:
+    is_multi_small_talk = state.get("is_multi_small_talk",False)
+    if intent_types[0] == FairyIntentType.UNKNOWN_INTENT:
         return "retry"
+
+    if intent_types[0] == FairyIntentType.SMALLTALK and is_multi_small_talk:
+        return "multi_small_talk"
 
     return "continue"
 
@@ -94,11 +101,24 @@ INTENT_LABELS = {
     FairyIntentType.INTERACTION_HANDLER: "상호작용",
 }
 
-async def fairy_action(state: FairyState) -> Command:
+from agents.fairy.util import get_small_talk_history
+def multi_small_talk_node(state: FairyState):
     intent_types = state.get("intent_types")
-    if intent_types is None:
-        raise Exception("fairy_action 호출 전에 intent_type이 설정되지 않았습니다.")
+    player = state["dungenon_player"]
+    histories = get_small_talk_history(state["messages"])
+    question = state["messages"][-1]
+    prompt = PromptManager(FairyPromptType.FAIRY_MULTI_SMALL_TALK).get_prompt(
+        location="던전",
+        dungenon_player=player,
+        histories = histories,
+        question = question
+    )
+    ai_answer = small_talk_llm.invoke(prompt)
+    return {"messages": [add_ai_message(content = ai_answer.content, intent_types = intent_types)]}
 
+
+async def fairy_action(state: FairyState):
+    intent_types = state.get("intent_types")
     handlers = [INTENT_HANDLERS[i]() for i in intent_types if i in INTENT_HANDLERS]
     results = await asyncio.gather(*handlers)
 
@@ -117,8 +137,9 @@ async def fairy_action(state: FairyState) -> Command:
             prompt_info += f"\n    <{label}>\n{value}\n    </{label}>"
         idx+=1
 
+    dungenon_player = state["dungenon_player"]
     prompt = PromptManager(FairyPromptType.FAIRY_DUNGEON_SYSTEM).get_prompt(
-        state_data = MockFactory.create_dungeon_player(1).model_dump_json(indent=2),
+        dungenon_player = dungenon_player,
         use_intents = [rt.value if hasattr(rt, "value") else rt for rt in intent_types],
         info = prompt_info,
         question = state['messages'][-1].content
@@ -131,19 +152,21 @@ async def fairy_action(state: FairyState) -> Command:
 
 
 from langgraph.graph import START, END, StateGraph
-graph_builder = StateGraph(FairyState)
+dungeon_graph_builder = StateGraph(FairyState)
 
-graph_builder.add_node("analyze_intent", analyze_intent)
-graph_builder.add_node("fairy_action", fairy_action)
+dungeon_graph_builder.add_node("analyze_intent", analyze_intent)
+dungeon_graph_builder.add_node("fairy_action", fairy_action)
+dungeon_graph_builder.add_node("multi_small_talk",multi_small_talk_node)
 
-graph_builder.add_edge(START, "analyze_intent")
+dungeon_graph_builder.add_edge(START, "analyze_intent")
 
-graph_builder.add_conditional_edges(
+dungeon_graph_builder.add_conditional_edges(
     "analyze_intent",      
     check_condition,         
     {
         "retry": "analyze_intent",  
+        "multi_small_talk":"multi_small_talk",
         "continue": "fairy_action"  
     }
 )
-graph_builder.add_edge("fairy_action", END)
+dungeon_graph_builder.add_edge("fairy_action", END)
