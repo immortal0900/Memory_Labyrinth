@@ -67,7 +67,9 @@ def get_best_device():
     
 
 from core.game_dto.z_cache_data import items
-def get_inventory_items(inventory_ids:list):
+from core.game_dto.ItemData import ItemData
+from typing import List
+def get_inventory_items(inventory_ids:list) -> List[ItemData]:
     return [item for item in items if item.itemId in inventory_ids]
 
 # 아래는 주피터 노트북에서 src 경로를 고정시키기위한 코드 
