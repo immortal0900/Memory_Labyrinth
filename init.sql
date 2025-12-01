@@ -65,14 +65,9 @@ CREATE TABLE IF NOT EXISTS sage_conversations (
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 9. 히로인끼리의 대화 내역
-CREATE TABLE IF NOT EXISTS heroine_heroine_conversations (
-    id SERIAL PRIMARY KEY,
-    heroine1_id VARCHAR(100),
-    heroine2_id VARCHAR(100),
-    conversation TEXT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+-- 9. 히로인끼리의 대화 내역 
+-- 통합 메모리 테이블(agent_memories)로 이전됨
+-- 스키마: src/db/agent_memory_schema.sql 참조
 
 -- 10. 던전 생성 입력 데이터
 CREATE TABLE IF NOT EXISTS dungeon_generation_input (
@@ -118,4 +113,97 @@ CREATE TABLE IF NOT EXISTS romance_docs (
     heroine_id VARCHAR(100),
     data JSONB -- 좋아하는 키워드 등
 );
+
+-- ============================================
+-- NPC Agent System 테이블
+-- ============================================
+
+-- 16. 세션 체크포인트 (Redis 백업용)
+CREATE TABLE IF NOT EXISTS session_checkpoints (
+    id SERIAL PRIMARY KEY,
+    player_id INT NOT NULL,
+    heroine_id INT,
+    session_data JSONB NOT NULL,
+    last_active_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(player_id, heroine_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_checkpoint_player_heroine ON session_checkpoints(player_id, heroine_id);
+CREATE INDEX IF NOT EXISTS idx_checkpoint_last_active ON session_checkpoints(last_active_at);
+
+-- 17. 히로인 시나리오 (벡터 검색용) - 기존 테이블 대체
+DROP TABLE IF EXISTS heroine_scenarios CASCADE;
+CREATE TABLE heroine_scenarios (
+    id SERIAL PRIMARY KEY,
+    heroine_id INT NOT NULL,
+    memory_progress INT NOT NULL,
+    title VARCHAR(200),
+    content TEXT NOT NULL,
+    content_embedding VECTOR(1536),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_heroine_scenarios_filter ON heroine_scenarios(heroine_id, memory_progress);
+
+-- 18. 대현자 시나리오
+CREATE TABLE IF NOT EXISTS sage_scenarios (
+    id SERIAL PRIMARY KEY,
+    scenario_level INT NOT NULL,
+    title VARCHAR(200),
+    content TEXT NOT NULL,
+    content_embedding VECTOR(1536),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sage_level ON sage_scenarios(scenario_level);
+
+-- 19. 히로인 시나리오 검색 함수
+-- hs -> heroine_scenarios
+-- p_match_count -> 반환할 최대 결과 개수수
+-- p_ -> 파라미터의 약자
+CREATE OR REPLACE FUNCTION match_heroine_scenarios(
+    query_embedding VECTOR(1536),
+    p_heroine_id INT,
+    p_max_progress INT,
+    p_match_count INT
+) RETURNS TABLE (id INT, content TEXT, memory_progress INT, similarity FLOAT)
+LANGUAGE plpgsql AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        hs.id,
+        hs.content,
+        hs.memory_progress,
+        1 - (hs.content_embedding <=> query_embedding) AS similarity
+    FROM heroine_scenarios hs
+    WHERE hs.heroine_id = p_heroine_id
+      AND hs.memory_progress <= p_max_progress
+    ORDER BY hs.content_embedding <=> query_embedding
+    LIMIT p_match_count;
+END;
+$$;
+
+-- 20. 대현플레이어 진행도 → Redis 세션에 저장
+-- 대현자 대화 시 → 세션에서 레벨 조회자 시나리오 검색 함수
+CREATE OR REPLACE FUNCTION match_sage_scenarios(
+    query_embedding VECTOR(1536),
+    p_max_level INT,
+    p_match_count INT
+) RETURNS TABLE (id INT, content TEXT, scenario_level INT, similarity FLOAT)
+LANGUAGE plpgsql AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        ss.id,
+        ss.content,
+        ss.scenario_level,
+        1 - (ss.content_embedding <=> query_embedding) AS similarity
+    FROM sage_scenarios ss
+    WHERE ss.scenario_level <= p_max_level
+    ORDER BY ss.content_embedding <=> query_embedding
+    LIMIT p_match_count;
+END;
+$$;
 

@@ -5,9 +5,10 @@ from dotenv import load_dotenv
 # .env 파일 로드
 load_dotenv()
 
-# 환경변수에서 DB 주소 읽기, 없으면 로컬 기본값 사용
-# 로컬 Docker 기본값: postgresql+psycopg://postgres:password@localhost:5432/game_db
-CONNECTION_URL = os.getenv("DATABASE_URL", "postgresql://postgres.mjyjbkjqvjyneqrgebsy:Wanted11!!@aws-1-ap-northeast-2.pooler.supabase.com:5432/postgres")
+# 환경변수에서 DB 주소 읽기
+# postgresql:// 형식 사용 (SQLAlchemy, Mem0 모두 호환)
+CONNECTION_URL = os.getenv("DATABASE_URL")
+
 
 class DBCollectionName(StrEnum):
     # 몬스터 관련
