@@ -1,7 +1,5 @@
 
-from langchain.chat_models import init_chat_model
-from enums.LLM import LLM
-from agents.fairy.fairy_state import FairyIntentOutput, FairyState, FairyIntentType
+from agents.fairy.fairy_state import FairyIntentOutput, FairyDungeonState, FairyIntentType
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langgraph.types import interrupt
 from agents.fairy.cache_data import reverse_questions
@@ -19,7 +17,7 @@ from agents.fairy.util import (
 from core.common import get_inventory_items
 
 check_multi_llm = get_groq_llm_lc(model="llama-3.1-8b-instant", max_token=8)
-intent_llm = get_groq_llm_lc(model="llama-3.1-8b-instant", max_token=40)
+intent_llm = get_groq_llm_lc(model="llama-3.1-8b-instant", max_token=43)
 action_llm = get_groq_llm_lc()
 small_talk_llm = get_groq_llm_lc(temperature=0.4)
 
@@ -35,6 +33,8 @@ async def item_list():
 async def get_event_info():
     return "asdasd"
 
+async def get_system_info():
+    return "test"
 
 async def dungeon_navigator():
     return "dungeon_navi"
@@ -51,7 +51,7 @@ async def create_interaction(inventory_ids):
 
 
 async def _clarify_intent(query):
-    intent_prompt = PromptManager(FairyPromptType.FAIRY_INTENT).get_prompt()
+    intent_prompt = PromptManager(FairyPromptType.FAIRY_DUNGEON_INTENT).get_prompt()
     messages = [SystemMessage(content=intent_prompt), HumanMessage(content=query)]
     parser_llm = intent_llm.with_structured_output(FairyIntentOutput)
     intent_output: FairyIntentOutput = await parser_llm.ainvoke(messages)
@@ -68,10 +68,10 @@ async def check_memory_question(query: str):
     }
 
 
-async def analyze_intent(state: FairyState):
+async def analyze_intent(state: FairyDungeonState):
     last = state["messages"][-1]
     last_message = last.content
-
+    print("질문",last_message)
     clarify_intent_type, is_question_memory = await asyncio.gather(
         _clarify_intent(last_message), check_memory_question(last_message)
     )
@@ -102,7 +102,7 @@ async def analyze_intent(state: FairyState):
     }
 
 
-def check_condition(state: FairyState):
+def check_condition(state: FairyDungeonState):
     intent_types = state.get("intent_types", [])
     is_multi_small_talk = state.get("is_multi_small_talk", False)
     if intent_types[0] == FairyIntentType.UNKNOWN_INTENT:
@@ -117,7 +117,7 @@ def check_condition(state: FairyState):
 from agents.fairy.util import get_small_talk_history
 
 
-def multi_small_talk_node(state: FairyState):
+def multi_small_talk_node(state: FairyDungeonState):
     intent_types = state.get("intent_types")
     player = state["dungenon_player"]
     histories = get_small_talk_history(state["messages"])
@@ -135,7 +135,7 @@ def multi_small_talk_node(state: FairyState):
     }
 
 
-async def fairy_action(state: FairyState):
+async def fairy_action(state: FairyDungeonState):
     intent_types = state.get("intent_types")
     dungenon_player = state["dungenon_player"]
     INTENT_HANDLERS = {
@@ -145,6 +145,7 @@ async def fairy_action(state: FairyState):
         FairyIntentType.INTERACTION_HANDLER: lambda: create_interaction(
             dungenon_player.inventory
         ),
+        FairyIntentType.GAME_SYSTEM_INFO: get_system_info()
     }
 
     INTENT_LABELS = {
@@ -152,6 +153,7 @@ async def fairy_action(state: FairyState):
         FairyIntentType.EVENT_GUIDE: "이벤트",
         FairyIntentType.DUNGEON_NAVIGATOR: "길안내",
         FairyIntentType.INTERACTION_HANDLER: "상호작용",
+        FairyIntentType.GAME_SYSTEM_INFO: "시스템 정보"
     }
 
     handlers = [INTENT_HANDLERS[i]() for i in intent_types if i in INTENT_HANDLERS]
@@ -198,7 +200,7 @@ async def fairy_action(state: FairyState):
 
 from langgraph.graph import START, END, StateGraph
 
-graph_builder = StateGraph(FairyState)
+graph_builder = StateGraph(FairyDungeonState)
 
 graph_builder.add_node("analyze_intent", analyze_intent)
 graph_builder.add_node("fairy_action", fairy_action)

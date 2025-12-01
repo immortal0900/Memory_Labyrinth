@@ -1,14 +1,20 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict
+from typing import List, Optional, TypedDict
 from enum import StrEnum
 from core.game_dto.DungeonPlayerData import DungeonPlayerData
 
+class FairyState(TypedDict):
+    player_id:Optional[str]
+    hiroine_id:Optional[str]
+    question:Optional[str]
+    answer:Optional[str]
 
 class FairyIntentType(StrEnum):
     MONSTER_GUIDE = "MONSTER_GUIDE"
     EVENT_GUIDE = "EVENT_GUIDE"
     DUNGEON_NAVIGATOR = "DUNGEON_NAVIGATOR"
     INTERACTION_HANDLER = "INTERACTION_HANDLER"
+    GAME_SYSTEM_INFO = "GAME_SYSTEM_INFO"
     SMALLTALK = "SMALLTALK"
     UNKNOWN_INTENT = "UNKNOWN_INTENT"
 
@@ -18,12 +24,10 @@ class FairyIntentOutput(BaseModel):
         description="선택된 의도 타입들의 목록 (질문에 여러 의도가 섞여있으면 다중 선택 가능)"
     )
 
-
 from langgraph.graph import MessagesState
 from pydantic import BaseModel, Field
 
-
-class FairyState(MessagesState):
+class FairyDungeonState(MessagesState):
     intent_types: List[FairyIntentType] = []
     dungenon_player: Optional[DungeonPlayerData] = None
     targetMonsterIds: List[int] = []
