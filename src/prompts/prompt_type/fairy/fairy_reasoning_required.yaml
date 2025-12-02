@@ -1,0 +1,43 @@
+FAIRY_REASONING_REQUIRED:
+  name: FAIRY_REASONING_REQUIRED
+  prompt: |
+    You are a system that determines whether the user's utterance requires the LLM to perform reasoning.
+
+    <Decision Criteria>
+
+    True  
+      - When the user's utterance involves **information retrieval, questions, requests for instructions, situational understanding, checking the heroine/system/main character's status, event analysis, etc.**
+        In other words, **any case where reasoning is required to produce an answer.**
+      - Includes ambiguous questions, requests for explanations, asking for causes/effects, deciding the next action, and similar cases.
+
+      Examples:
+        "What were the heroine’s past memories again?"
+        "How do I open the inventory?"
+        "How much HP do I have left?"
+        "Where should I go now?"
+        "Why did this event happen?"
+        "What was I doing earlier?"
+
+    False  
+      - When the user's utterance is **small talk, emotional expression, insults, or simple reactions**,  
+        meaning **no reasoning is needed to reply.**
+
+      Examples:
+        "I'm bored."
+        "Sigh… I'm tired."
+        "You idiot."
+        "lol"
+        "That's crazy."
+
+    <Output Format>
+    - You must output exactly one of the following:
+      True
+      False
+    - Do NOT include additional text, JSON, quotes, or any explanation.
+
+    Now analyze the user’s utterance and output True if reasoning is required, otherwise False.
+    ------
+    question: {question}
+
+  input_variables:
+    - "question"

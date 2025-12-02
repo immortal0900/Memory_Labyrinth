@@ -9,13 +9,14 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from api.npc_router import router as npc_router
+from api.fairy_router import router as fairy_router
 
 
 # FastAPI 앱 생성
 app = FastAPI(
-    title="NPC Agent System",
-    description="게임 NPC 대화 시스템 API",
-    version="1.0.0"
+    title="AI Agent System",
+    description="AI 에이전트 시스템 API 입니다.",
+    version="1.0.0_alpha"
 )
 
 # CORS 설정 (언리얼 엔진에서 접근 허용)
@@ -29,12 +30,13 @@ app.add_middleware(
 
 # 라우터 등록
 app.include_router(npc_router)
+app.include_router(fairy_router)
 
 
 @app.get("/")
 async def root():
     """헬스 체크"""
-    return {"status": "ok", "message": "NPC Agent System is running"}
+    return {"status": "ok", "message": "AI Agent System is running"}
 
 
 @app.get("/health")

@@ -1,5 +1,5 @@
 
-from agents.fairy.fairy_state import FairyIntentOutput, FairyDungeonState, FairyIntentType
+from agents.fairy.fairy_state import FairyDungeonIntentOutput, FairyDungeonState, FairyDungeonIntentType
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langgraph.types import interrupt
 from agents.fairy.cache_data import reverse_questions
@@ -15,26 +15,21 @@ from agents.fairy.util import (
     get_groq_llm_lc,
 )
 from core.common import get_inventory_items
+from enums.LLM import LLM
+from langchain.chat_models import init_chat_model
 
-check_multi_llm = get_groq_llm_lc(model="llama-3.1-8b-instant", max_token=8)
-intent_llm = get_groq_llm_lc(model="llama-3.1-8b-instant", max_token=43)
+check_multi_llm = get_groq_llm_lc(model=LLM.LLAMA_3_1_8B_INSTANT, max_token=8)
+intent_llm = get_groq_llm_lc(model=LLM.LLAMA_3_1_8B_INSTANT, max_token=43)
 action_llm = get_groq_llm_lc()
-small_talk_llm = get_groq_llm_lc(temperature=0.4)
+# small_talk_llm = get_groq_llm_lc(temperature=0.4)
+small_talk_llm = init_chat_model(model=LLM.GPT4_1_MINI, temperature=0.4)
 
 
 async def monster_rag():
     return "asd"
 
-
-async def item_list():
-    return ""
-
-
 async def get_event_info():
     return "asdasd"
-
-async def get_system_info():
-    return "test"
 
 async def dungeon_navigator():
     return "dungeon_navi"
@@ -49,12 +44,17 @@ async def create_interaction(inventory_ids):
     result = inventory_prompt
     return result
 
+async def get_system_info():
+    return "test"
+
+
+
 
 async def _clarify_intent(query):
     intent_prompt = PromptManager(FairyPromptType.FAIRY_DUNGEON_INTENT).get_prompt()
     messages = [SystemMessage(content=intent_prompt), HumanMessage(content=query)]
-    parser_llm = intent_llm.with_structured_output(FairyIntentOutput)
-    intent_output: FairyIntentOutput = await parser_llm.ainvoke(messages)
+    parser_llm = intent_llm.with_structured_output(FairyDungeonIntentOutput)
+    intent_output: FairyDungeonIntentOutput = await parser_llm.ainvoke(messages)
     return intent_output
 
 
@@ -77,7 +77,7 @@ async def analyze_intent(state: FairyDungeonState):
     )
 
 
-    if clarify_intent_type.intents[0] == FairyIntentType.UNKNOWN_INTENT:
+    if clarify_intent_type.intents[0] == FairyDungeonIntentType.UNKNOWN_INTENT:
         clarification = reverse_questions[random.randint(0, 49)]
         user_resp = interrupt(clarification)
         return {
@@ -90,10 +90,10 @@ async def analyze_intent(state: FairyDungeonState):
             "intent_types": clarify_intent_type.intents,
             "is_multi_small_talk": False,
         }
-    print("의도 포함",FairyIntentType.SMALLTALK in clarify_intent_type.intents)
+    print("의도 포함",FairyDungeonIntentType.SMALLTALK in clarify_intent_type.intents)
     print("체크 메모리",is_question_memory)
     is_multi_small_talk = (
-        FairyIntentType.SMALLTALK in clarify_intent_type.intents
+        FairyDungeonIntentType.SMALLTALK in clarify_intent_type.intents
     ) and is_question_memory
     print("멀티턴", is_multi_small_talk)
     return {
@@ -105,10 +105,10 @@ async def analyze_intent(state: FairyDungeonState):
 def check_condition(state: FairyDungeonState):
     intent_types = state.get("intent_types", [])
     is_multi_small_talk = state.get("is_multi_small_talk", False)
-    if intent_types[0] == FairyIntentType.UNKNOWN_INTENT:
+    if intent_types[0] == FairyDungeonIntentType.UNKNOWN_INTENT:
         return "retry"
 
-    if (FairyIntentType.SMALLTALK in intent_types) and is_multi_small_talk:
+    if (FairyDungeonIntentType.SMALLTALK in intent_types) and is_multi_small_talk:
         return "multi_small_talk"
 
     return "continue"
@@ -139,21 +139,21 @@ async def fairy_action(state: FairyDungeonState):
     intent_types = state.get("intent_types")
     dungenon_player = state["dungenon_player"]
     INTENT_HANDLERS = {
-        FairyIntentType.MONSTER_GUIDE: monster_rag,
-        FairyIntentType.EVENT_GUIDE: get_event_info,
-        FairyIntentType.DUNGEON_NAVIGATOR: dungeon_navigator,
-        FairyIntentType.INTERACTION_HANDLER: lambda: create_interaction(
+        FairyDungeonIntentType.MONSTER_GUIDE: monster_rag,
+        FairyDungeonIntentType.EVENT_GUIDE: get_event_info,
+        FairyDungeonIntentType.DUNGEON_NAVIGATOR: dungeon_navigator,
+        FairyDungeonIntentType.INTERACTION_HANDLER: lambda: create_interaction(
             dungenon_player.inventory
         ),
-        FairyIntentType.GAME_SYSTEM_INFO: get_system_info()
+        FairyDungeonIntentType.GAME_SYSTEM_INFO: get_system_info()
     }
 
     INTENT_LABELS = {
-        FairyIntentType.MONSTER_GUIDE: "몬스터 공략",
-        FairyIntentType.EVENT_GUIDE: "이벤트",
-        FairyIntentType.DUNGEON_NAVIGATOR: "길안내",
-        FairyIntentType.INTERACTION_HANDLER: "상호작용",
-        FairyIntentType.GAME_SYSTEM_INFO: "시스템 정보"
+        FairyDungeonIntentType.MONSTER_GUIDE: "몬스터 공략",
+        FairyDungeonIntentType.EVENT_GUIDE: "이벤트",
+        FairyDungeonIntentType.DUNGEON_NAVIGATOR: "길안내",
+        FairyDungeonIntentType.INTERACTION_HANDLER: "상호작용",
+        FairyDungeonIntentType.GAME_SYSTEM_INFO: "시스템 정보"
     }
 
     handlers = [INTENT_HANDLERS[i]() for i in intent_types if i in INTENT_HANDLERS]
@@ -199,7 +199,6 @@ async def fairy_action(state: FairyDungeonState):
 
 
 from langgraph.graph import START, END, StateGraph
-
 graph_builder = StateGraph(FairyDungeonState)
 
 graph_builder.add_node("analyze_intent", analyze_intent)
