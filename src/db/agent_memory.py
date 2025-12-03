@@ -155,7 +155,7 @@ class AgentMemoryManager:
         sql = text("""
             INSERT INTO agent_memories 
             (id, agent_id, memory_type, content, embedding, importance_score, metadata)
-            VALUES (:id, :agent_id, :memory_type, :content, :embedding::vector, :importance, :metadata::jsonb)
+            VALUES (:id, :agent_id, :memory_type, :content, CAST(:embedding AS vector), CAST(:importance AS integer), CAST(:metadata AS jsonb))
             RETURNING id
         """)
         
@@ -334,7 +334,7 @@ class AgentMemoryManager:
         sql = text("""
             SELECT * FROM search_memories_hybrid(
                 :agent_id,
-                :query_embedding::vector,
+                CAST(:query_embedding AS vector),
                 :top_k,
                 :w_recency,
                 :w_importance,
@@ -380,12 +380,14 @@ class AgentMemoryManager:
             
             # 조회 시간 업데이트 (선택적)
             if update_access_time and memory_ids:
+                # UUID 리스트를 문자열 리스트로 변환
+                id_strings = [str(mid) for mid in memory_ids]
                 update_sql = text("""
                     UPDATE agent_memories
                     SET last_accessed_at = NOW()
-                    WHERE id = ANY(:ids::uuid[])
+                    WHERE id::text = ANY(:ids)
                 """)
-                conn.execute(update_sql, {"ids": memory_ids})
+                conn.execute(update_sql, {"ids": id_strings})
                 conn.commit()
         
         return memories
@@ -424,7 +426,7 @@ class AgentMemoryManager:
         sql = text("""
             SELECT * FROM search_npc_memories(
                 :npc_id,
-                :query_embedding::vector,
+                CAST(:query_embedding AS vector),
                 :top_k,
                 :w_recency,
                 :w_importance,
@@ -487,12 +489,12 @@ class AgentMemoryManager:
             WITH scored AS (
                 SELECT 
                     m.*,
-                    1 - (m.embedding <=> :query_embedding::vector) AS relevance
+                    1 - (m.embedding <=> CAST(:query_embedding AS vector)) AS relevance
                 FROM agent_memories m
                 WHERE m.memory_type = 'npc_conversation'
                   AND (
-                      m.agent_id LIKE 'conv_%_' || :npc_id
-                      OR m.agent_id LIKE 'conv_' || :npc_id || '_%'
+                      m.agent_id LIKE 'conv_%_' || CAST(:npc_id AS TEXT)
+                      OR m.agent_id LIKE 'conv_' || CAST(:npc_id AS TEXT) || '_%'
                   )
             )
             SELECT * FROM scored

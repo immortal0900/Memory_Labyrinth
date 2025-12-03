@@ -31,8 +31,9 @@ from agents.npc.npc_state import HeroineState, IntentType
 from agents.npc.base_npc_agent import (
     BaseNPCAgent,
     calculate_memory_progress,
-    calculate_affection_change
+    calculate_affection_change,
 )
+from agents.npc.emotion_mapper import heroine_emotion_to_int
 from db.redis_manager import redis_manager
 from db.mem0_manager import mem0_manager
 from db.agent_memory import agent_memory_manager
@@ -45,14 +46,20 @@ from agents.npc.heroine_heroine_agent import heroine_heroine_agent
 # ============================================
 
 # 페르소나 YAML 파일 경로
-PERSONA_PATH = Path(__file__).parent.parent.parent / "prompts" / "prompt_type" / "npc" / "heroine_persona.yaml"
+PERSONA_PATH = (
+    Path(__file__).parent.parent.parent
+    / "prompts"
+    / "prompt_type"
+    / "npc"
+    / "heroine_persona.yaml"
+)
 
 
 def load_persona_data() -> Dict[str, Any]:
     """페르소나 YAML 파일 로드
-    
+
     파일이 없거나 오류가 있으면 기본값 반환
-    
+
     Returns:
         페르소나 데이터 딕셔너리
     """
@@ -78,13 +85,11 @@ def _get_default_persona() -> Dict[str, Any]:
                 "low": {"description": "경계", "examples": ["...뭐야."]},
                 "mid": {"description": "중립", "examples": ["흠..."]},
                 "high": {"description": "친근", "examples": ["...고마워."]},
-                "max": {"description": "애정", "examples": ["...바보."]}
+                "max": {"description": "애정", "examples": ["...바보."]},
             },
-            "sanity_responses": {
-                "zero": {"description": "우울", "examples": ["..."]}
-            },
+            "sanity_responses": {"zero": {"description": "우울", "examples": ["..."]}},
             "liked_keywords": ["검", "훈련", "강해지기"],
-            "trauma_keywords": ["화재", "불", "가족"]
+            "trauma_keywords": ["화재", "불", "가족"],
         }
     }
 
@@ -93,55 +98,51 @@ def _get_default_persona() -> Dict[str, Any]:
 PERSONA_DATA = load_persona_data()
 
 # 히로인 ID -> 페르소나 키 매핑
-HEROINE_KEY_MAP = {
-    1: "letia",     # 레티아
-    2: "lupames",   # 루파메스
-    3: "roco"       # 로코
-}
+HEROINE_KEY_MAP = {1: "letia", 2: "lupames", 3: "roco"}  # 레티아  # 루파메스  # 로코
 
 
 class HeroineAgent(BaseNPCAgent):
     """히로인 NPC Agent
-    
+
     기억을 잃은 히로인과의 대화를 처리합니다.
     스트리밍과 비스트리밍 모두 동일한 응답을 생성합니다.
-    
+
     사용 예시:
         agent = HeroineAgent()
-        
+
         # 비스트리밍
         result = await agent.process_message(state)
-        
+
         # 스트리밍
         async for chunk in agent.generate_response_stream(state):
             print(chunk, end="")
     """
-    
+
     def __init__(self, model_name: str = "gpt-4o-mini"):
         """초기화
-        
+
         Args:
             model_name: 사용할 LLM 모델명
         """
         super().__init__(model_name)
-        
+
         # 의도 분류용 LLM (temperature=0으로 일관된 분류)
         self.intent_llm = init_chat_model(model=model_name, temperature=0)
-        
+
         # LangGraph 빌드 (비스트리밍용)
         self.graph = self._build_graph()
-    
+
     # ============================================
     # 세션 및 페르소나 관련 메서드
     # ============================================
-    
+
     def _create_initial_session(self, player_id: int, npc_id: int) -> dict:
         """히로인 초기 세션 생성
-        
+
         Args:
             player_id: 플레이어 ID
             npc_id: 히로인 ID
-        
+
         Returns:
             초기 세션 딕셔너리
         """
@@ -149,35 +150,35 @@ class HeroineAgent(BaseNPCAgent):
             "player_id": player_id,
             "npc_id": npc_id,
             "npc_type": "heroine",
-            "conversation_buffer": [],          # 최근 대화 목록 (최대 20개)
-            "short_term_summary": "",           # 단기 요약
-            "recent_used_keywords": [],         # 최근 5턴 내 사용된 좋아하는 키워드
+            "conversation_buffer": [],  # 최근 대화 목록 (최대 20개)
+            "short_term_summary": "",  # 단기 요약
+            "recent_used_keywords": [],  # 최근 5턴 내 사용된 좋아하는 키워드
             "state": {
-                "affection": 0,                 # 호감도 (0-100)
-                "sanity": 100,                  # 정신력 (0-100)
-                "memoryProgress": 0,            # 기억 진척도 (0-100)
-                "emotion": "neutral"            # 현재 감정
-            }
+                "affection": 0,  # 호감도 (0-100)
+                "sanity": 100,  # 정신력 (0-100)
+                "memoryProgress": 0,  # 기억 진척도 (0-100)
+                "emotion": "neutral",  # 현재 감정
+            },
         }
-    
+
     def _get_persona(self, heroine_id: int) -> Dict[str, Any]:
         """히로인 페르소나 가져오기
-        
+
         Args:
             heroine_id: 히로인 ID (1=레티아, 2=루파메스, 3=로코)
-        
+
         Returns:
             페르소나 딕셔너리
         """
         key = HEROINE_KEY_MAP.get(heroine_id, "letia")
         return PERSONA_DATA.get(key, PERSONA_DATA.get("letia", {}))
-    
+
     def _get_affection_level(self, affection: int) -> str:
         """호감도 레벨 결정
-        
+
         Args:
             affection: 호감도 (0-100)
-        
+
         Returns:
             레벨 문자열 (low/mid/high/max)
         """
@@ -188,20 +189,22 @@ class HeroineAgent(BaseNPCAgent):
         elif affection >= 30:
             return "mid"
         return "low"
-    
-    def _format_persona(self, persona: Dict[str, Any], affection: int, sanity: int) -> str:
+
+    def _format_persona(
+        self, persona: Dict[str, Any], affection: int, sanity: int
+    ) -> str:
         """페르소나를 프롬프트용 문자열로 포맷
-        
+
         Args:
             persona: 페르소나 딕셔너리
             affection: 현재 호감도
             sanity: 현재 정신력
-        
+
         Returns:
             포맷된 문자열
         """
         level = self._get_affection_level(affection)
-        
+
         # 기본 정보
         lines = [
             f"이름: {persona.get('name', '알 수 없음')}",
@@ -210,81 +213,81 @@ class HeroineAgent(BaseNPCAgent):
             "",
             f"[현재 호감도 레벨: {level}]",
         ]
-        
+
         # 호감도 레벨별 반응
-        affection_resp = persona.get('affection_responses', {}).get(level, {})
+        affection_resp = persona.get("affection_responses", {}).get(level, {})
         lines.append(f"반응 스타일: {affection_resp.get('description', '')}")
         lines.append("예시 대사:")
-        for example in affection_resp.get('examples', [])[:3]:
+        for example in affection_resp.get("examples", [])[:3]:
             lines.append(f"  - {example}")
-        
+
         # 정신력 0이면 우울 상태 추가
         if sanity == 0:
             lines.append("")
             lines.append("[경고: 정신력 0 - 우울 상태]")
-            sanity_resp = persona.get('sanity_responses', {}).get('zero', {})
+            sanity_resp = persona.get("sanity_responses", {}).get("zero", {})
             lines.append(f"반응: {sanity_resp.get('description', '우울함')}")
-            for example in sanity_resp.get('examples', [])[:2]:
+            for example in sanity_resp.get("examples", [])[:2]:
                 lines.append(f"  - {example}")
-        
+
         return "\n".join(lines)
-    
+
     # ============================================
     # 컨텍스트 준비 메서드 (스트리밍/비스트리밍 공통)
     # ============================================
-    
+
     async def _analyze_keywords(self, state: HeroineState) -> Tuple[int, Optional[str]]:
         """키워드 분석 - 호감도 변화량 사전 계산
-        
+
         사용자 메시지에서 좋아하는 키워드/트라우마 키워드를 찾아
         호감도 변화량을 미리 계산합니다.
-        
+
         Args:
             state: 현재 상태
-        
+
         Returns:
             (호감도 변화량, 사용된 좋아하는 키워드 또는 None)
         """
         user_message = state["messages"][-1].content
         npc_id = state["npc_id"]
         persona = self._get_persona(npc_id)
-        
+
         # 현재 상태
         affection = state.get("affection", 0)
         recent_used_keywords = state.get("recent_used_keywords", [])
-        
+
         # 페르소나에서 키워드 가져오기
         liked_keywords = persona.get("liked_keywords", [])
         trauma_keywords = persona.get("trauma_keywords", [])
-        
+
         # 호감도 변화량 계산 (5턴 내 반복 키워드 방지)
         affection_delta, used_keyword = calculate_affection_change(
             current_affection=affection,
             liked_keywords=liked_keywords,
             trauma_keywords=trauma_keywords,
             user_message=user_message,
-            recent_used_keywords=recent_used_keywords
+            recent_used_keywords=recent_used_keywords,
         )
-        
+
         return affection_delta, used_keyword
-    
+
     async def _classify_intent(self, state: HeroineState) -> str:
         """의도 분류
-        
+
         사용자 메시지의 의도를 분류합니다:
         - general: 일반 대화
         - memory_recall: 과거 대화/경험 질문 (Mem0 검색)
         - scenario_inquiry: 히로인 과거/비밀 질문 (시나리오 DB 검색)
-        
+
         Args:
             state: 현재 상태
-        
+
         Returns:
             의도 문자열
         """
         user_message = state["messages"][-1].content
         conversation_context = state.get("short_term_summary", "")
-        
+
         prompt = f"""다음 플레이어 메시지의 의도를 분류하세요.
 
 [최근 대화 맥락]
@@ -302,162 +305,187 @@ class HeroineAgent(BaseNPCAgent):
 
         response = await self.intent_llm.ainvoke(prompt)
         intent = response.content.strip().lower()
-        
+
         # 유효하지 않으면 기본값
         if intent not in ["general", "memory_recall", "scenario_inquiry"]:
             intent = "general"
-        
+
         return intent
-    
+
     async def _retrieve_memory(self, state: HeroineState) -> str:
         """기억 검색 (User-NPC + NPC-NPC 모두)
-        
+
         1. Mem0에서 User-NPC 대화 기억 검색
         2. agent_memories에서 NPC-NPC 대화 검색
         3. agent_memories에서 다른 NPC에 대한 기억 검색
-        
+
         Args:
             state: 현재 상태
-        
+
         Returns:
             검색된 기억 텍스트
         """
         user_message = state["messages"][-1].content
         player_id = state["player_id"]
         npc_id = state["npc_id"]
-        
+
         facts_parts = []
-        
+
         # 1. Mem0에서 User-NPC 대화 기억 검색
-        user_memories = mem0_manager.search_memory(player_id, npc_id, user_message, limit=3)
+        user_memories = mem0_manager.search_memory(
+            player_id, npc_id, user_message, limit=3
+        )
         if user_memories:
             facts_parts.append("[플레이어와의 기억]")
             for m in user_memories:
-                memory_text = m.get('memory', m.get('text', ''))
+                memory_text = m.get("memory", m.get("text", ""))
                 facts_parts.append(f"- {memory_text}")
-        
+
         # 2. NPC-NPC 대화 검색
         other_heroine_ids = [h for h in [1, 2, 3] if h != npc_id]
-        
+
         npc_conversations = heroine_heroine_agent.search_conversations(
-            heroine_id=npc_id,
-            query=user_message,
-            top_k=2
+            heroine_id=npc_id, query=user_message, top_k=2
         )
-        
+
         if npc_conversations:
             facts_parts.append("\n[다른 히로인과의 대화 기억]")
             for conv in npc_conversations:
-                content_preview = conv['content'][:200]
+                content_preview = conv["content"][:200]
                 facts_parts.append(f"- {content_preview}...")
-        
+
         # 3. 다른 NPC에 대한 개별 기억 검색
         for other_id in other_heroine_ids:
             agent_id = f"npc_{npc_id}_about_{other_id}"
             npc_memories = agent_memory_manager.search_memories(
-                agent_id=agent_id,
-                query=user_message,
-                top_k=1,
-                memory_type="npc_memory"
+                agent_id=agent_id, query=user_message, top_k=1, memory_type="npc_memory"
             )
             if npc_memories:
                 other_persona = self._get_persona(other_id)
-                facts_parts.append(f"\n[{other_persona.get('name', '다른 히로인')}에 대한 기억]")
+                facts_parts.append(
+                    f"\n[{other_persona.get('name', '다른 히로인')}에 대한 기억]"
+                )
                 for mem in npc_memories:
                     facts_parts.append(f"- {mem.content}")
-        
+
         return "\n".join(facts_parts) if facts_parts else "관련 기억 없음"
-    
+
     async def _retrieve_scenario(self, state: HeroineState) -> str:
         """시나리오 DB 검색
-        
+
         현재 기억진척도 이하로 해금된 시나리오를 검색합니다.
-        
+
         Args:
             state: 현재 상태
-        
+
         Returns:
             검색된 시나리오 텍스트
         """
         user_message = state["messages"][-1].content
         npc_id = state["npc_id"]
         memory_progress = state.get("memoryProgress", 0)
-        
+
         scenarios = heroine_scenario_service.search_scenarios(
             query=user_message,
             heroine_id=npc_id,
             max_memory_progress=memory_progress,
-            limit=2
+            limit=2,
         )
-        
+
         if scenarios:
             return "\n\n".join([s["content"] for s in scenarios])
         return "해금된 시나리오 없음"
-    
+
     async def _prepare_context(self, state: HeroineState) -> Dict[str, Any]:
         """컨텍스트 준비 (스트리밍/비스트리밍 공통)
-        
+
         LLM 호출 전에 필요한 모든 정보를 준비합니다:
         1. 키워드 분석 (호감도 변화량 계산)
         2. 의도 분류
         3. 의도에 따른 검색 (기억/시나리오)
-        
+
         Args:
             state: 현재 상태
-        
+
         Returns:
             컨텍스트 딕셔너리 (affection_delta, used_liked_keyword, intent, retrieved_facts, unlocked_scenarios)
         """
         # 1. 키워드 분석
         affection_delta, used_keyword = await self._analyze_keywords(state)
-        
+
         # 2. 의도 분류
         intent = await self._classify_intent(state)
-        
-        # 3. 의도에 따른 검색
+        user_message = state["messages"][-1].content
+        print(f"[DEBUG] 의도 분류 결과: {intent}")
+
+        # 3. 시나리오 관련 키워드 확인 (의도 분류 보완)
+        scenario_keywords = [
+            "고향",
+            "과거",
+            "기억",
+            "옛날",
+            "가족",
+            "어렸을",
+            "예전",
+            "해금",
+            "비밀",
+            "정체",
+        ]
+        has_scenario_keyword = any(kw in user_message for kw in scenario_keywords)
+
+        if has_scenario_keyword and intent != "scenario_inquiry":
+            intent = "scenario_inquiry"
+            print(f"[DEBUG] 키워드 감지로 의도 변경: scenario_inquiry")
+
+        # 4. 의도에 따른 검색
         retrieved_facts = "없음"
         unlocked_scenarios = "없음"
-        
+
         if intent == "memory_recall":
             # 기억 회상 -> Mem0 + NPC간 기억 검색
             retrieved_facts = await self._retrieve_memory(state)
+            print(
+                f"[DEBUG] 기억 검색 결과: {retrieved_facts[:200] if retrieved_facts else 'None'}..."
+            )
         elif intent == "scenario_inquiry":
             # 시나리오 질문 -> 시나리오 DB 검색
             unlocked_scenarios = await self._retrieve_scenario(state)
-        
+            print(
+                f"[DEBUG] 시나리오 검색 결과: {unlocked_scenarios[:200] if unlocked_scenarios else 'None'}..."
+            )
+        else:
+            print(f"[DEBUG] general 의도 - 검색 안 함")
+
         return {
             "affection_delta": affection_delta,
             "used_liked_keyword": used_keyword,
             "intent": intent,
             "retrieved_facts": retrieved_facts,
-            "unlocked_scenarios": unlocked_scenarios
+            "unlocked_scenarios": unlocked_scenarios,
         }
-    
+
     def _build_full_prompt(
-        self, 
-        state: HeroineState, 
-        context: Dict[str, Any],
-        for_streaming: bool = False
+        self, state: HeroineState, context: Dict[str, Any], for_streaming: bool = False
     ) -> str:
         """전체 프롬프트 생성 (스트리밍/비스트리밍 공통)
-        
+
         동일한 컨텍스트로 동일한 프롬프트를 생성합니다.
-        
+
         Args:
             state: 현재 상태
             context: 컨텍스트 (검색 결과 등)
             for_streaming: 스트리밍용이면 JSON 형식 요청 안함
-        
+
         Returns:
             프롬프트 문자열
         """
         npc_id = state["npc_id"]
         persona = self._get_persona(npc_id)
-        
+
         affection = state.get("affection", 0)
         sanity = state.get("sanity", 100)
         memory_progress = state.get("memoryProgress", 0)
-        
+
         # 호감도 변화 힌트 (LLM에게 알려줌)
         pre_calculated_delta = context.get("affection_delta", 0)
         if pre_calculated_delta > 0:
@@ -466,7 +494,7 @@ class HeroineAgent(BaseNPCAgent):
             affection_hint = f"플레이어가 당신의 트라우마를 건드렸습니다. 불쾌합니다. (호감도 {pre_calculated_delta})"
         else:
             affection_hint = "특별한 호감도 변화 없음"
-        
+
         # 출력 형식 (스트리밍은 텍스트만, 비스트리밍은 JSON)
         if for_streaming:
             output_format = "캐릭터로서 자연스럽게 대답하세요. 대화만 출력하세요."
@@ -476,9 +504,9 @@ class HeroineAgent(BaseNPCAgent):
 {
     "thought": "(내면의 생각 - 플레이어에게 보이지 않음)",
     "text": "(실제 대화 내용)",
-    "emotion": "neutral|happy|sad|angry|shy|fear|trauma"
+    "emotion": "neutral|joy|fun|sorrow|angry|surprise|mysterious"
 }"""
-        
+
         prompt = f"""당신은 히로인 {persona.get('name', '알 수 없음')}입니다.
 
 [현재 상태]
@@ -491,7 +519,8 @@ class HeroineAgent(BaseNPCAgent):
 
 [페르소나 규칙]
 - 해금되지 않은 기억(memoryProgress > {memory_progress})은 절대 말하지 않습니다.
-- 기억이 없는 질문에는 "잘 기억이 안 나..." 라고 답합니다.
+- [해금된 시나리오]에 내용이 있으면 이를 바탕으로 자세히 답변하세요.
+- [해금된 시나리오]가 "없음"일 때만 "잘 기억이 안 나..." 라고 답합니다.
 - Sanity가 0이면 매우 우울한 상태로 대화합니다.
 - 캐릭터의 말투와 성격을 일관되게 유지합니다.
 
@@ -511,50 +540,52 @@ class HeroineAgent(BaseNPCAgent):
 {state['messages'][-1].content}
 
 {output_format}"""
-        
+
         return prompt
-    
+
     async def _update_state_after_response(
-        self, 
-        state: HeroineState, 
+        self,
+        state: HeroineState,
         context: Dict[str, Any],
         response_text: str,
-        emotion: str = "neutral"
+        emotion_int: int = 0,
     ) -> Dict[str, Any]:
         """응답 후 상태 업데이트 (LLM 재호출 없이)
-        
+
         스트리밍/비스트리밍 모두 이 메서드로 상태를 업데이트합니다.
-        
+
         저장 위치:
         - Redis: 세션 상태 (affection, sanity, memoryProgress, conversation_buffer)
         - Mem0: User-NPC 대화 기억
-        
+
         Args:
             state: 현재 상태
             context: 컨텍스트 (affection_delta 등)
             response_text: 생성된 응답 텍스트
-            emotion: 감정 (기본값 neutral)
-        
+            emotion_int: 감정 정수값 (기본값 0=neutral)
+
         Returns:
             업데이트된 상태 값들
         """
         player_id = state["player_id"]
         npc_id = state["npc_id"]
-        
+
         # 현재 상태
         affection = state.get("affection", 0)
         sanity = state.get("sanity", 100)
         memory_progress = state.get("memoryProgress", 0)
-        
+
         # 변화량
         affection_delta = context.get("affection_delta", 0)
         sanity_delta = affection_delta if affection_delta > 0 else 0
-        
+
         # 새 값 계산
         new_affection = max(0, min(100, affection + affection_delta))
         new_sanity = max(0, min(100, sanity + sanity_delta))
-        new_memory_progress = calculate_memory_progress(new_affection, memory_progress, affection_delta)
-        
+        new_memory_progress = calculate_memory_progress(
+            new_affection, memory_progress, affection_delta
+        )
+
         # Redis 세션 업데이트
         session = redis_manager.load_session(player_id, npc_id)
         if session:
@@ -562,50 +593,47 @@ class HeroineAgent(BaseNPCAgent):
             session["state"]["affection"] = new_affection
             session["state"]["sanity"] = new_sanity
             session["state"]["memoryProgress"] = new_memory_progress
-            session["state"]["emotion"] = emotion
-            
+            session["state"]["emotion"] = emotion_int
+
             # 대화 버퍼에 추가
-            session["conversation_buffer"].append({
-                "role": "user",
-                "content": state["messages"][-1].content
-            })
-            session["conversation_buffer"].append({
-                "role": "assistant",
-                "content": response_text
-            })
-            
+            session["conversation_buffer"].append(
+                {"role": "user", "content": state["messages"][-1].content}
+            )
+            session["conversation_buffer"].append(
+                {"role": "assistant", "content": response_text}
+            )
+
             # 최근 사용된 좋아하는 키워드 업데이트 (5개 유지)
             used_keyword = context.get("used_liked_keyword")
             recent_keywords = session.get("recent_used_keywords", [])
             if used_keyword:
                 recent_keywords.append(used_keyword)
             session["recent_used_keywords"] = recent_keywords[-5:]
-            
+
             # 세션 저장
             redis_manager.save_session(player_id, npc_id, session)
-        
+
         # Mem0에 대화 저장 (User-NPC 장기 기억)
         user_msg = state["messages"][-1].content
         mem0_manager.add_memory(
-            player_id, npc_id,
-            f"플레이어: {user_msg}\n히로인: {response_text}"
+            player_id, npc_id, f"플레이어: {user_msg}\n히로인: {response_text}"
         )
-        
+
         return {
             "affection": new_affection,
             "sanity": new_sanity,
             "memoryProgress": new_memory_progress,
-            "emotion": emotion,
-            "response_text": response_text
+            "emotion": emotion_int,
+            "response_text": response_text,
         }
-    
+
     # ============================================
     # LangGraph 빌드 (비스트리밍용)
     # ============================================
-    
+
     def _build_graph(self) -> StateGraph:
         """LangGraph 빌드
-        
+
         노드 흐름:
         START -> keyword_analyze -> router
         router -> (분기)
@@ -613,12 +641,12 @@ class HeroineAgent(BaseNPCAgent):
             - memory_recall -> memory_retrieve -> generate
             - scenario_inquiry -> scenario_retrieve -> generate
         generate -> post_process -> END
-        
+
         Returns:
             컴파일된 StateGraph
         """
         graph = StateGraph(HeroineState)
-        
+
         # 노드 추가
         graph.add_node("keyword_analyze", self._keyword_analyze_node)
         graph.add_node("router", self._router_node)
@@ -626,11 +654,11 @@ class HeroineAgent(BaseNPCAgent):
         graph.add_node("scenario_retrieve", self._scenario_retrieve_node)
         graph.add_node("generate", self._generate_node)
         graph.add_node("post_process", self._post_process_node)
-        
+
         # 엣지 추가
         graph.add_edge(START, "keyword_analyze")
         graph.add_edge("keyword_analyze", "router")
-        
+
         # 조건부 분기
         graph.add_conditional_edges(
             "router",
@@ -638,61 +666,87 @@ class HeroineAgent(BaseNPCAgent):
             {
                 "general": "generate",
                 "memory_recall": "memory_retrieve",
-                "scenario_inquiry": "scenario_retrieve"
-            }
+                "scenario_inquiry": "scenario_retrieve",
+            },
         )
-        
+
         graph.add_edge("memory_retrieve", "generate")
         graph.add_edge("scenario_retrieve", "generate")
         graph.add_edge("generate", "post_process")
         graph.add_edge("post_process", END)
-        
+
         return graph.compile()
-    
+
     # ============================================
     # LangGraph 노드 구현
     # ============================================
-    
+
     async def _keyword_analyze_node(self, state: HeroineState) -> dict:
         """키워드 분석 노드"""
         affection_delta, used_keyword = await self._analyze_keywords(state)
-        return {
-            "affection_delta": affection_delta,
-            "used_liked_keyword": used_keyword
-        }
-    
+        return {"affection_delta": affection_delta, "used_liked_keyword": used_keyword}
+
     async def _router_node(self, state: HeroineState) -> dict:
         """의도 분류 노드"""
         intent = await self._classify_intent(state)
+        user_message = state["messages"][-1].content
+        print(f"[DEBUG] 의도 분류 결과: {intent}")
+
+        # 시나리오 관련 키워드 확인 (의도 분류 보완)
+        scenario_keywords = [
+            "고향",
+            "과거",
+            "기억",
+            "전에",
+            "옛날",
+            "가족",
+            "어렸을",
+            "예전",
+            "해금",
+            "비밀",
+            "정체",
+        ]
+        has_scenario_keyword = any(kw in user_message for kw in scenario_keywords)
+
+        if has_scenario_keyword and intent != "scenario_inquiry":
+            intent = "scenario_inquiry"
+            print(f"[DEBUG] 키워드 감지로 의도 변경: scenario_inquiry")
+
         return {"intent": intent}
-    
+
     def _route_by_intent(self, state: HeroineState) -> str:
         """의도에 따라 라우팅"""
         return state.get("intent", "general")
-    
+
     async def _memory_retrieve_node(self, state: HeroineState) -> dict:
         """기억 검색 노드"""
         facts = await self._retrieve_memory(state)
         return {"retrieved_facts": facts}
-    
+
     async def _scenario_retrieve_node(self, state: HeroineState) -> dict:
         """시나리오 DB 검색 노드"""
         scenarios = await self._retrieve_scenario(state)
+        print(
+            f"[DEBUG] 시나리오 검색 결과: {scenarios[:200] if scenarios else 'None'}..."
+        )
         return {"unlocked_scenarios": scenarios}
-    
+
     async def _generate_node(self, state: HeroineState) -> dict:
         """응답 생성 노드"""
         # 컨텍스트 구성
         context = {
             "affection_delta": state.get("affection_delta", 0),
             "retrieved_facts": state.get("retrieved_facts", "없음"),
-            "unlocked_scenarios": state.get("unlocked_scenarios", "없음")
+            "unlocked_scenarios": state.get("unlocked_scenarios", "없음"),
         }
-        
+        print(
+            f"[DEBUG] generate 노드 - unlocked_scenarios: {context['unlocked_scenarios'][:200] if context['unlocked_scenarios'] != '없음' else '없음'}..."
+        )
+
         # 프롬프트 생성 및 LLM 호출
         prompt = self._build_full_prompt(state, context, for_streaming=False)
         response = await self.llm.ainvoke(prompt)
-        
+
         # JSON 파싱
         try:
             content = response.content
@@ -702,83 +756,82 @@ class HeroineAgent(BaseNPCAgent):
                 content = content.split("```")[1].split("```")[0]
             result = json.loads(content.strip())
         except (json.JSONDecodeError, IndexError):
-            result = {
-                "thought": "",
-                "text": response.content,
-                "emotion": "neutral"
-            }
-        
+            result = {"thought": "", "text": response.content, "emotion": "neutral"}
+
+        emotion_str = result.get("emotion", "neutral")
         return {
             "response_text": result.get("text", ""),
-            "emotion": result.get("emotion", "neutral")
+            "emotion": heroine_emotion_to_int(emotion_str),
+            "emotion_str": emotion_str,
         }
-    
+
     async def _post_process_node(self, state: HeroineState) -> dict:
         """후처리 노드 - 상태 업데이트"""
         context = {
             "affection_delta": state.get("affection_delta", 0),
-            "used_liked_keyword": state.get("used_liked_keyword")
+            "used_liked_keyword": state.get("used_liked_keyword"),
         }
-        
+
         result = await self._update_state_after_response(
-            state, 
-            context, 
+            state,
+            context,
             state.get("response_text", ""),
-            state.get("emotion", "neutral")
+            state.get("emotion", 0),
         )
-        
+
         return {
             "affection": result["affection"],
             "sanity": result["sanity"],
-            "memoryProgress": result["memoryProgress"]
+            "memoryProgress": result["memoryProgress"],
         }
-    
+
     # ============================================
     # 공개 메서드
     # ============================================
-    
+
     async def process_message(self, state: HeroineState) -> HeroineState:
         """메시지 처리 (비스트리밍)
-        
+
         LangGraph 전체 파이프라인을 실행합니다.
-        
+
         Args:
             state: 입력 상태
-        
+
         Returns:
             처리 후 상태
         """
         result = await self.graph.ainvoke(state)
         return result
-    
+
     async def generate_response_stream(self, state: HeroineState) -> AsyncIterator[str]:
         """스트리밍 응답 생성 (컨텍스트 포함)
-        
+
         비스트리밍과 동일한 컨텍스트를 사용합니다.
         LLM은 1번만 호출됩니다.
-        
+
         Args:
             state: 입력 상태
-        
+
         Yields:
             응답 토큰
         """
         # 1. 컨텍스트 준비 (기억/시나리오 검색)
         context = await self._prepare_context(state)
-        
+
         # 2. 전체 프롬프트 생성 (비스트리밍과 동일한 컨텍스트)
         prompt = self._build_full_prompt(state, context, for_streaming=True)
-        
+
         # 3. 스트리밍으로 응답 생성 (LLM 1번만 호출)
         full_response = ""
         async for chunk in self.streaming_llm.astream(prompt):
             if chunk.content:
                 full_response += chunk.content
                 yield chunk.content
-        
+
         # 4. 상태 업데이트 (LLM 재호출 없이)
+        # 스트리밍에서는 emotion 추출 불가, 기본값 사용
         await self._update_state_after_response(
-            state, context, full_response, "neutral"
+            state, context, full_response, 0  # neutral
         )
 
 

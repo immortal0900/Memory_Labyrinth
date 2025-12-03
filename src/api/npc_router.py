@@ -59,7 +59,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     text: str
-    emotion: str
+    emotion: int
     affection: int
     sanity: int
     memoryProgress: int
@@ -72,7 +72,7 @@ class SageChatRequest(BaseModel):
 
 class SageChatResponse(BaseModel):
     text: str
-    emotion: str
+    emotion: int
     scenarioLevel: int
     infoRevealed: bool
 
@@ -81,7 +81,7 @@ class HeroineConversationRequest(BaseModel):
     heroine1Id: int
     heroine2Id: int
     situation: Optional[str] = None
-    turnCount: Optional[int] = 5
+    turnCount: Optional[int] = 10
 
 
 class GuildRequest(BaseModel):
@@ -116,7 +116,7 @@ async def background_npc_conversation_loop(player_id: int):
                 await heroine_heroine_agent.generate_and_save_conversation(
                     heroine1_id=npc1_id,
                     heroine2_id=npc2_id,
-                    turn_count=3
+                    turn_count=10
                 )
             except Exception as e:
                 print(f"Background NPC conversation error: {e}")
@@ -152,7 +152,7 @@ async def login(request: LoginRequest):
                 "affection": heroine.affection,
                 "sanity": heroine.sanity,
                 "memoryProgress": heroine.memoryProgress,
-                "emotion": "neutral"
+                "emotion": 0  # neutral
             }
         }
         redis_manager.save_session(player_id, heroine.heroineId, session)
@@ -165,7 +165,7 @@ async def login(request: LoginRequest):
         "short_term_summary": "",
         "state": {
             "scenarioLevel": scenario_level,
-            "emotion": "neutral"
+            "emotion": 0  # neutral
         }
     }
     redis_manager.save_session(player_id, 0, sage_session)
@@ -346,13 +346,13 @@ async def sage_chat(request: SageChatRequest):
         
         # 상태 업데이트 (LLM 재호출 없이)
         await sage_agent._update_state_after_response(
-            state, context, full_response, "neutral", False
+            state, context, full_response, 0, False  # 0 = neutral
         )
         
         final_data = {
             "type": "final",
             "scenarioLevel": session["state"]["scenarioLevel"],
-            "emotion": "neutral",
+            "emotion": 0,  # neutral
             "infoRevealed": False
         }
         yield f"data: {str(final_data)}\n\n"
@@ -408,7 +408,7 @@ async def generate_heroine_conversation(request: HeroineConversationRequest):
         heroine1_id=request.heroine1Id,
         heroine2_id=request.heroine2Id,
         situation=request.situation,
-        turn_count=request.turnCount or 5
+        turn_count=request.turnCount or 10
     )
     return result
 
@@ -424,7 +424,7 @@ async def generate_heroine_conversation_stream(request: HeroineConversationReque
             heroine1_id=request.heroine1Id,
             heroine2_id=request.heroine2Id,
             situation=request.situation,
-            turn_count=request.turnCount or 5
+            turn_count=request.turnCount or 10
         ):
             yield f"data: {chunk}\n\n"
         yield "data: [DONE]\n\n"

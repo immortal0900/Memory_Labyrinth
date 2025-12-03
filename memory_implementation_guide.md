@@ -577,4 +577,4 @@ def calculate_memory_progress(affection: int) -> int:
 
 ---
 
-*이 명세서를 LLM에게 주고 "위 아키텍처를 FastAPI + LangGraph로 구현해줘"라고 하면, 프로덕션 레벨의 코드가 나올 것입니다.*
+

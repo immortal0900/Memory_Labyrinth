@@ -6,3 +6,5 @@ __pycache__/
 *.pyc
 .cursor/
 .cursorignore
+NPC_SYSTEM_MASTER.md
+NPC_SYSTEM_IMPLEMENTATION.md   

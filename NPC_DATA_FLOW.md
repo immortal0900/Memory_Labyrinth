@@ -549,6 +549,21 @@
 ```
 
 ---
+agent_memories 테이블 컬럼 의미
+
+|컬럼|타입|의미|
+|---|---|---|
+|id|UUID|고유 식별자|
+|agent_id|VARCHAR(100)|기억 주체 (누가 기억하는지)|
+|memory_type|VARCHAR(50)|기억 종류|
+|content|TEXT|기억 내용|
+|embedding|VECTOR(1536)|벡터 임베딩|
+|importance_score|INTEGER|중요도 (1~10)|
+|created_at|TIMESTAMPTZ|생성 시간|
+|last_accessed_at|TIMESTAMPTZ|마지막 조회 시간|
+|metadata|JSONB|추가 정보 (speakers, situation, emotions 등)|
+
+---
 
 ## 5.2 길드 진입/퇴장 및 NPC 대화 자동화
 

@@ -34,10 +34,10 @@ class SageScenarioService:
         # 벡터 검색 SQL
         sql = text("""
             SELECT id, content, scenario_level,
-                   1 - (content_embedding <=> :embedding::vector) as similarity
+                   1 - (content_embedding <=> CAST(:embedding AS vector)) as similarity
             FROM sage_scenarios
             WHERE scenario_level <= :max_level
-            ORDER BY content_embedding <=> :embedding::vector
+            ORDER BY content_embedding <=> CAST(:embedding AS vector)
             LIMIT :limit
         """)
         
