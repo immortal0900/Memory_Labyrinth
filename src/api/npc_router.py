@@ -33,6 +33,7 @@ _background_tasks: Dict[int, asyncio.Task] = {}
 # Request/Response 모델
 # ============================================
 
+
 class HeroineData(BaseModel):
     heroineId: int
     affection: int
@@ -98,34 +99,33 @@ class GuildResponse(BaseModel):
 # 백그라운드 NPC 대화 태스크
 # ============================================
 
+
 async def background_npc_conversation_loop(player_id: int):
     """백그라운드에서 주기적으로 NPC간 대화 생성"""
     heroine_ids = [1, 2, 3]
-    
+
     while redis_manager.is_in_guild(player_id):
         active_conv = redis_manager.get_active_npc_conversation(player_id)
-        
+
         if not active_conv:
             pair = random.sample(heroine_ids, 2)
             npc1_id = pair[0]
             npc2_id = pair[1]
-            
+
             redis_manager.start_npc_conversation(player_id, npc1_id, npc2_id)
-            
+
             try:
                 await heroine_heroine_agent.generate_and_save_conversation(
-                    heroine1_id=npc1_id,
-                    heroine2_id=npc2_id,
-                    turn_count=10
+                    heroine1_id=npc1_id, heroine2_id=npc2_id, turn_count=10
                 )
             except Exception as e:
                 print(f"Background NPC conversation error: {e}")
             finally:
                 if redis_manager.is_in_guild(player_id):
                     redis_manager.stop_npc_conversation(player_id)
-        
+
         await asyncio.sleep(random.randint(30, 60))
-    
+
     if player_id in _background_tasks:
         del _background_tasks[player_id]
 
@@ -134,12 +134,13 @@ async def background_npc_conversation_loop(player_id: int):
 # 로그인/세션 엔드포인트
 # ============================================
 
+
 @router.post("/login", response_model=LoginResponse)
 async def login(request: LoginRequest):
     """게임 로그인시 세션 초기화"""
     player_id = request.playerId
     scenario_level = request.scenarioLevel
-    
+
     for heroine in request.heroines:
         session = {
             "player_id": player_id,
@@ -152,24 +153,21 @@ async def login(request: LoginRequest):
                 "affection": heroine.affection,
                 "sanity": heroine.sanity,
                 "memoryProgress": heroine.memoryProgress,
-                "emotion": 0  # neutral
-            }
+                "emotion": 0,  # neutral
+            },
         }
         redis_manager.save_session(player_id, heroine.heroineId, session)
-    
+
     sage_session = {
         "player_id": player_id,
         "npc_id": 0,
         "npc_type": "sage",
         "conversation_buffer": [],
         "short_term_summary": "",
-        "state": {
-            "scenarioLevel": scenario_level,
-            "emotion": 0  # neutral
-        }
+        "state": {"scenarioLevel": scenario_level, "emotion": 0},  # neutral
     }
     redis_manager.save_session(player_id, 0, sage_session)
-    
+
     return LoginResponse(success=True, message="세션 초기화 완료")
 
 
@@ -177,27 +175,28 @@ async def login(request: LoginRequest):
 # 히로인 대화 엔드포인트
 # ============================================
 
+
 @router.post("/heroine/chat")
 async def heroine_chat(request: ChatRequest):
     """히로인과 대화 (스트리밍)
-    
+
     비스트리밍과 동일한 컨텍스트/응답 생성
     LLM 호출 1번만 (중복 호출 없음)
     """
     player_id = request.playerId
     heroine_id = request.heroineId
     user_message = request.text
-    
+
     # 해당 히로인이 NPC 대화 중이면 인터럽트
     if redis_manager.is_heroine_in_conversation(player_id, heroine_id):
         redis_manager.stop_npc_conversation(player_id)
-    
+
     # 세션 로드
     session = redis_manager.load_session(player_id, heroine_id)
     if session is None:
         session = heroine_agent._create_initial_session(player_id, heroine_id)
         redis_manager.save_session(player_id, heroine_id, session)
-    
+
     # LangGraph 상태 구성
     state = {
         "player_id": player_id,
@@ -210,47 +209,44 @@ async def heroine_chat(request: ChatRequest):
         "emotion": session["state"]["emotion"],
         "conversation_buffer": session["conversation_buffer"],
         "short_term_summary": session.get("short_term_summary", ""),
-        "recent_used_keywords": session.get("recent_used_keywords", [])
+        "recent_used_keywords": session.get("recent_used_keywords", []),
     }
-    
+
     # 컨텍스트 준비 (기억/시나리오 검색)
     context = await heroine_agent._prepare_context(state)
-    
+
     async def generate():
         """SSE 스트리밍 생성기"""
         # 전체 프롬프트 생성
         prompt = heroine_agent._build_full_prompt(state, context, for_streaming=True)
-        
+
         # 스트리밍으로 응답 생성 (LLM 1번만 호출)
         full_response = ""
         async for chunk in heroine_agent.streaming_llm.astream(prompt):
             if chunk.content:
                 full_response += chunk.content
                 yield f"data: {chunk.content}\n\n"
-        
+
         # 상태 업데이트 (LLM 재호출 없이)
         result = await heroine_agent._update_state_after_response(
             state, context, full_response, 0
         )
-        
+
         # 최종 상태 전송
         final_data = {
             "type": "final",
             "affection": result["affection"],
             "sanity": result["sanity"],
             "memoryProgress": result["memoryProgress"],
-            "emotion": result["emotion"]
+            "emotion": result["emotion"],
         }
         yield f"data: {str(final_data)}\n\n"
         yield "data: [DONE]\n\n"
-    
+
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive"
-        }
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
     )
 
 
@@ -260,17 +256,17 @@ async def heroine_chat_sync(request: ChatRequest):
     player_id = request.playerId
     heroine_id = request.heroineId
     user_message = request.text
-    
+
     # 해당 히로인이 NPC 대화 중이면 인터럽트
     if redis_manager.is_heroine_in_conversation(player_id, heroine_id):
         redis_manager.stop_npc_conversation(player_id)
-    
+
     # 세션 로드
     session = redis_manager.load_session(player_id, heroine_id)
     if session is None:
         session = heroine_agent._create_initial_session(player_id, heroine_id)
         redis_manager.save_session(player_id, heroine_id, session)
-    
+
     # 상태 구성
     state = {
         "player_id": player_id,
@@ -283,18 +279,18 @@ async def heroine_chat_sync(request: ChatRequest):
         "emotion": session["state"]["emotion"],
         "conversation_buffer": session["conversation_buffer"],
         "short_term_summary": session.get("short_term_summary", ""),
-        "recent_used_keywords": session.get("recent_used_keywords", [])
+        "recent_used_keywords": session.get("recent_used_keywords", []),
     }
-    
+
     # 메시지 처리 (LangGraph 전체 파이프라인)
     result = await heroine_agent.process_message(state)
-    
+
     return ChatResponse(
         text=result.get("response_text", ""),
-        emotion=result.get("emotion", "neutral"),
+        emotion=result.get("emotion", 0),
         affection=result.get("affection", session["state"]["affection"]),
         sanity=result.get("sanity", session["state"]["sanity"]),
-        memoryProgress=result.get("memoryProgress", session["state"]["memoryProgress"])
+        memoryProgress=result.get("memoryProgress", session["state"]["memoryProgress"]),
     )
 
 
@@ -302,22 +298,23 @@ async def heroine_chat_sync(request: ChatRequest):
 # 대현자 대화 엔드포인트
 # ============================================
 
+
 @router.post("/sage/chat")
 async def sage_chat(request: SageChatRequest):
     """대현자와 대화 (스트리밍)
-    
+
     비스트리밍과 동일한 컨텍스트/응답 생성
     """
     player_id = request.playerId
     user_message = request.text
     npc_id = 0
-    
+
     # 세션 로드
     session = redis_manager.load_session(player_id, npc_id)
     if session is None:
         session = sage_agent._create_initial_session(player_id, npc_id)
         redis_manager.save_session(player_id, npc_id, session)
-    
+
     # 상태 구성
     state = {
         "player_id": player_id,
@@ -327,41 +324,38 @@ async def sage_chat(request: SageChatRequest):
         "scenarioLevel": session["state"]["scenarioLevel"],
         "emotion": session["state"]["emotion"],
         "conversation_buffer": session["conversation_buffer"],
-        "short_term_summary": session.get("short_term_summary", "")
+        "short_term_summary": session.get("short_term_summary", ""),
     }
-    
+
     # 컨텍스트 준비 (시나리오 검색)
     context = await sage_agent._prepare_context(state)
-    
+
     async def generate():
         """SSE 스트리밍 생성기"""
         prompt = sage_agent._build_full_prompt(state, context, for_streaming=True)
-        
+
         # 스트리밍으로 응답 생성 (LLM 1번만 호출)
         full_response = ""
         async for chunk in sage_agent.streaming_llm.astream(prompt):
             if chunk.content:
                 full_response += chunk.content
                 yield f"data: {chunk.content}\n\n"
-        
+
         # 상태 업데이트 (LLM 재호출 없이)
         await sage_agent._update_state_after_response(
             state, context, full_response, 0, False  # 0 = neutral
         )
-        
+
         final_data = {
             "type": "final",
             "scenarioLevel": session["state"]["scenarioLevel"],
             "emotion": 0,  # neutral
-            "infoRevealed": False
+            "infoRevealed": False,
         }
         yield f"data: {str(final_data)}\n\n"
         yield "data: [DONE]\n\n"
-    
-    return StreamingResponse(
-        generate(),
-        media_type="text/event-stream"
-    )
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 @router.post("/sage/chat/sync", response_model=SageChatResponse)
@@ -370,12 +364,12 @@ async def sage_chat_sync(request: SageChatRequest):
     player_id = request.playerId
     user_message = request.text
     npc_id = 0
-    
+
     session = redis_manager.load_session(player_id, npc_id)
     if session is None:
         session = sage_agent._create_initial_session(player_id, npc_id)
         redis_manager.save_session(player_id, npc_id, session)
-    
+
     state = {
         "player_id": player_id,
         "npc_id": npc_id,
@@ -384,22 +378,23 @@ async def sage_chat_sync(request: SageChatRequest):
         "scenarioLevel": session["state"]["scenarioLevel"],
         "emotion": session["state"]["emotion"],
         "conversation_buffer": session["conversation_buffer"],
-        "short_term_summary": session.get("short_term_summary", "")
+        "short_term_summary": session.get("short_term_summary", ""),
     }
-    
+
     result = await sage_agent.process_message(state)
-    
+
     return SageChatResponse(
         text=result.get("response_text", ""),
-        emotion=result.get("emotion", "neutral"),
+        emotion=result.get("emotion", 0),
         scenarioLevel=session["state"]["scenarioLevel"],
-        infoRevealed=result.get("info_revealed", False)
+        infoRevealed=result.get("info_revealed", False),
     )
 
 
 # ============================================
 # 히로인간 대화 엔드포인트
 # ============================================
+
 
 @router.post("/heroine-conversation/generate")
 async def generate_heroine_conversation(request: HeroineConversationRequest):
@@ -408,7 +403,7 @@ async def generate_heroine_conversation(request: HeroineConversationRequest):
         heroine1_id=request.heroine1Id,
         heroine2_id=request.heroine2Id,
         situation=request.situation,
-        turn_count=request.turnCount or 10
+        turn_count=request.turnCount or 10,
     )
     return result
 
@@ -416,26 +411,24 @@ async def generate_heroine_conversation(request: HeroineConversationRequest):
 @router.post("/heroine-conversation/stream")
 async def generate_heroine_conversation_stream(request: HeroineConversationRequest):
     """히로인간 대화 생성 (스트리밍)
-    
+
     비스트리밍과 동일하게 DB에 저장
     """
+
     async def generate():
         async for chunk in heroine_heroine_agent.generate_conversation_stream(
             heroine1_id=request.heroine1Id,
             heroine2_id=request.heroine2Id,
             situation=request.situation,
-            turn_count=request.turnCount or 10
+            turn_count=request.turnCount or 10,
         ):
             yield f"data: {chunk}\n\n"
         yield "data: [DONE]\n\n"
-    
+
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive"
-        }
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
     )
 
 
@@ -443,13 +436,11 @@ async def generate_heroine_conversation_stream(request: HeroineConversationReque
 async def get_heroine_conversations(
     heroine1_id: Optional[int] = None,
     heroine2_id: Optional[int] = None,
-    limit: int = 10
+    limit: int = 10,
 ):
     """히로인간 대화 기록 조회"""
     conversations = heroine_heroine_agent.get_conversations(
-        heroine1_id=heroine1_id,
-        heroine2_id=heroine2_id,
-        limit=limit
+        heroine1_id=heroine1_id, heroine2_id=heroine2_id, limit=limit
     )
     return {"conversations": conversations}
 
@@ -458,27 +449,27 @@ async def get_heroine_conversations(
 # 길드 시스템 엔드포인트
 # ============================================
 
+
 @router.post("/guild/enter", response_model=GuildResponse)
 async def enter_guild(request: GuildRequest, background_tasks: BackgroundTasks):
     """길드 진입 - NPC간 백그라운드 대화 시작"""
     player_id = request.playerId
-    
+
     if redis_manager.is_in_guild(player_id):
         return GuildResponse(
             success=True,
             message="이미 길드에 있습니다",
-            activeConversation=redis_manager.get_active_npc_conversation(player_id)
+            activeConversation=redis_manager.get_active_npc_conversation(player_id),
         )
-    
+
     redis_manager.enter_guild(player_id)
-    
+
     if player_id not in _background_tasks:
         task = asyncio.create_task(background_npc_conversation_loop(player_id))
         _background_tasks[player_id] = task
-    
+
     return GuildResponse(
-        success=True,
-        message="길드에 진입했습니다. NPC 대화가 시작됩니다."
+        success=True, message="길드에 진입했습니다. NPC 대화가 시작됩니다."
     )
 
 
@@ -486,24 +477,21 @@ async def enter_guild(request: GuildRequest, background_tasks: BackgroundTasks):
 async def leave_guild(request: GuildRequest):
     """길드 퇴장 - NPC간 백그라운드 대화 중단"""
     player_id = request.playerId
-    
+
     if not redis_manager.is_in_guild(player_id):
-        return GuildResponse(
-            success=True,
-            message="길드에 있지 않습니다"
-        )
-    
+        return GuildResponse(success=True, message="길드에 있지 않습니다")
+
     active_conv = redis_manager.get_active_npc_conversation(player_id)
     redis_manager.leave_guild(player_id)
-    
+
     if player_id in _background_tasks:
         _background_tasks[player_id].cancel()
         del _background_tasks[player_id]
-    
+
     return GuildResponse(
         success=True,
         message="길드에서 퇴장했습니다. NPC 대화가 중단됩니다.",
-        activeConversation=active_conv
+        activeConversation=active_conv,
     )
 
 
@@ -513,13 +501,14 @@ async def get_guild_status(player_id: int):
     return {
         "in_guild": redis_manager.is_in_guild(player_id),
         "active_conversation": redis_manager.get_active_npc_conversation(player_id),
-        "has_background_task": player_id in _background_tasks
+        "has_background_task": player_id in _background_tasks,
     }
 
 
 # ============================================
 # 디버그 엔드포인트
 # ============================================
+
 
 @router.get("/session/{player_id}/{npc_id}")
 async def get_session(player_id: int, npc_id: int):

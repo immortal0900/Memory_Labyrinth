@@ -23,6 +23,7 @@ reasoning_llm = init_chat_model(
 )
 
 
+
 @tool
 def get_scenarios(config: RunnableConfig):
     """히로인의 과거 데이터 입니다. 히로인 정보에 있는 히로인 일때만 데이터를 찾습니다."""
@@ -33,6 +34,7 @@ def get_scenarios(config: RunnableConfig):
 
 def get_heroine_info(config: RunnableConfig):
     heroine_id = config.get("configurable", {}).get("heroine_id")
+    heroine_id
     
 
 def reasoning_required(state: FairyGuildState):
