@@ -95,6 +95,8 @@ def find_scenarios(heroine_id: int, memory_progress: int) -> List[Dict[str, Any]
     ]
 
 
+
+
 def find_heroine_info(heroine_id: int):
     for hero in HEROINE_INFOS:
         if hero["heroine_id"] == heroine_id:
