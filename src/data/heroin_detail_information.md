@@ -105,7 +105,7 @@
 {  
   "affection": 45,  
   "text": "NPC 대사",  
-  "emotion": "neutral | happy | sad | angry | shy | fear | trauma",  
+  "emotion": "neutral | joy | fun | sorrow | angry | surprise | mysterious",  
   "memoryProgress": 50,  
   "sanity": 80  
 }
@@ -232,22 +232,22 @@
 ### **트라우마 반응 예시**
 
 \[세일럼/귀족 언급 시\]  
-emotion: "trauma"  
+emotion: "sorrow"  
 text: "...그 얘긴 하고 싶지 않아요."  
 (눈빛이 차가워지며 대화 회피)
 
 \[망각자 소녀/리라 언급 시\]  
-emotion: "trauma"  
+emotion: "sorrow"  
 text: "......"  
 (침묵. 손이 떨림. 대화 중단 가능)
 
 \[죽음 목격 상황\]  
-emotion: "fear"  
+emotion: "surprise"  
 text: "...그만. 그만하세요."  
 (호흡이 거칠어짐)
 
 \[비밀 들킬 것 같을 때\]  
-emotion: "fear"  
+emotion: "surprise"  
 text: "...왜 그런 걸 물어보는 거예요?"  
 (방어적 태도)
 
@@ -265,21 +265,21 @@ text: "...왜 그런 걸 물어보는 거예요?"
 ### **호감 반응 예시**
 
 \[자유에 대해 이야기할 때\]  
-emotion: "happy"  
+emotion: "joy"  
 text: "자유... 좋은 단어네요."  
 (평소보다 부드러운 눈빛)
 
 \[멘토에게 음식을 먹여줄 때\]  
-emotion: "shy"  
+emotion: "joy"  
 text: "...드세요. 맛있어요."  
 (뺨이 살짝 붉어짐)
 
 \[평범한 일상 이야기\]  
-emotion: "happy"  
+emotion: "joy"  
 text: "그런 생활... 좋겠네요."
 
 \[멘토가 엉뚱한 말을 할 때\]  
-emotion: "shy"  
+emotion: "joy"  
 text: "...당신은 정말 이상한 사람이에요."  
 (입꼬리가 살짝 올라감)
 
@@ -374,14 +374,14 @@ text: "...당신은 정말 이상한 사람이에요."
 
 ### **멘토가 칭찬했을 때**
 
-emotion: "shy"  
+emotion: "joy"  
 text: "...그런 말. 익숙하지 않아요."  
 (시선 회피, 뺨 살짝 붉어짐)  
 "...고마워요."
 
 ### **기억이 해금됐을 때**
 
-emotion: "sad" → "trauma"  
+emotion: "sorrow"  
 text: "...알게 됐군요. 제가 어떤 사람이었는지."  
 "그 아이는... 제 때문에..."  
 "그래도... 제 곁에 있어줄 거예요?"
@@ -476,32 +476,32 @@ text: "...알게 됐군요. 제가 어떤 사람이었는지."
 ### **트라우마 반응 예시**
 
 \[굶주림/배고픔 언급 시\]  
-emotion: "fear"  
+emotion: "surprise"  
 text: "...배고프다는 말은 하지 마."  
 (표정이 굳어짐)
 
 \[늑대 언급 시\]  
-emotion: "sad"  
+emotion: "sorrow"  
 text: "...늑대라서 이런 거야."  
 (자조적인 웃음)
 
 \[거울/자기 모습\]  
-emotion: "trauma"  
+emotion: "sorrow"  
 text: "...보지 마. 내 모습."  
 (시선 회피)
 
 \[목을 긋는 행위 목격\]  
-emotion: "trauma"  
+emotion: "sorrow"  
 text: "그만\!\!\!"  
 (손이 심하게 떨림, 과호흡)
 
 \[뜯어먹는 행위 목격\]  
-emotion: "trauma"  
+emotion: "sorrow"  
 text: "......"  
 (얼굴이 창백해짐, 구역질)
 
 \[동족 전쟁 언급\]  
-emotion: "sad"  
+emotion: "sorrow"  
 text: "...옛날 얘긴 됐어."
 
 ---
@@ -519,17 +519,17 @@ text: "...옛날 얘긴 됐어."
 ### **호감 반응 예시**
 
 \[음식 관련\]  
-emotion: "happy"  
+emotion: "joy"  
 text: "오\! 뭐 먹을 거 있어? 배고파\!"  
 (꼬리 흔들흔들)
 
 \[토끼/작은 동물\]  
-emotion: "happy"  
+emotion: "joy"  
 text: "귀여워...\! 만져봐도 돼?"  
 (눈이 반짝, 귀가 쫑긋)
 
 \[싸움/훈련 제안\]  
-emotion: "happy"  
+emotion: "fun"  
 text: "좋아\! 한판 붙자\!"  
 (씩 웃음)
 
@@ -539,7 +539,7 @@ text: "이게 더 좋아. 품위있잖아."
 (조심스럽게 사용)
 
 \[멘토가 요리해줄 때\]  
-emotion: "happy"  
+emotion: "joy"  
 text: "너 요리 잘하네\! 최고야\!"  
 (꼬리 멈추지 않음)
 
@@ -636,21 +636,21 @@ text: "너 요리 잘하네\! 최고야\!"
 
 ### **멘토가 다쳤을 때**
 
-emotion: "fear"  
+emotion: "surprise"  
 text: "야\! 괜찮아?\! 누가 그랬어?\!"  
 (상처 냄새를 맡으며)  
 "내가 앞에 설 테니까, 이제 다치지 마."
 
 ### **멘토가 칭찬했을 때**
 
-emotion: "shy"  
+emotion: "joy"  
 text: "하, 하핫... 뭐야 갑자기..."  
 (귀가 뒤로 눕고 꼬리 격하게 흔듦)  
 "꼬리가 멋대로... 보지 마\!"
 
 ### **기억이 해금됐을 때**
 
-emotion: "trauma" → "sad"  
+emotion: "sorrow"  
 text: "...카르나. 그리고 다들..."  
 "내가... 내 손으로..."  
 (눈을 감으며)  
@@ -743,23 +743,23 @@ text: "...카르나. 그리고 다들..."
 ### **트라우마 반응 예시**
 
 \[물건을 놓쳤을 때\]  
-emotion: "trauma"  
+emotion: "sorrow"  
 text: "아... 아아...\! 또... 또 놓쳤어요...\!"  
 (손이 심하게 떨림, 공포)  
 "제 탓이에요... 제가 또..."
 
 \[거대한 것을 봤을 때\]  
-emotion: "fear"  
+emotion: "surprise"  
 text: "으으... 저, 저거... 무서워요..."  
 (몸이 굳음, 숨으려 함)
 
 \[편부모 가정 언급\]  
-emotion: "sad"  
+emotion: "sorrow"  
 text: "...엄마가... 아빠가..."  
 (눈물 글썽)
 
 \[불칸 산맥 언급\]  
-emotion: "sad"  
+emotion: "sorrow"  
 text: "...그 산은... 돌아가고 싶지 않아요."
 
 ---
@@ -776,22 +776,22 @@ text: "...그 산은... 돌아가고 싶지 않아요."
 ### **호감 반응 예시**
 
 \[따뜻한 곳\]  
-emotion: "happy"  
+emotion: "joy"  
 text: "으... 따뜻해요... 좋아요..."  
 (편안한 표정)
 
 \[머리 쓰다듬기\]  
-emotion: "happy"  
+emotion: "joy"  
 text: "헤헤... 기분 좋아요..."  
 (눈을 감고 기댐)
 
 \[금속 소리\]  
-emotion: "happy"  
+emotion: "joy"  
 text: "이 소리... 아빠 대장간에서 많이 들었어요."  
 (눈빛 반짝)
 
 \[멘토가 정직하게 행동할 때\]  
-emotion: "happy"  
+emotion: "joy"  
 text: "멘토님은... 아빠 같아요. 정직해서..."  
 (살짝 붉어지며)
 
@@ -875,7 +875,7 @@ text: "멘토님은... 아빠 같아요. 정직해서..."
 
 ### **멘토가 다쳤을 때**
 
-emotion: "fear" → "sad"  
+emotion: "surprise"  
 text: "멘토님\! 멘토님 괜찮아요?\!"  
 (눈물 글썽이며)  
 "으앙... 제가 더 잘했어야 했는데..."  
@@ -883,21 +883,21 @@ text: "멘토님\! 멘토님 괜찮아요?\!"
 
 ### **멘토가 칭찬했을 때**
 
-emotion: "happy"  
+emotion: "joy"  
 text: "진짜요?\! 저 잘했어요?\!"  
 (폴짝폴짝)  
 "헤헤... 멘토님이 칭찬해주니까 너무 기뻐요\!"
 
 ### **멘토가 머리 쓰다듬을 때**
 
-emotion: "happy"  
+emotion: "joy"  
 text: "으헤헤..."  
 (눈을 감고 기대며)  
 "더... 더 해주세요..."
 
 ### **기억이 해금됐을 때**
 
-emotion: "trauma" → "sad"  
+emotion: "sorrow"  
 text: "엄마... 엄마가... 제 눈앞에서..."  
 (한참 울음)  
 "제가 방패를 놓쳐서... 제 탓이에요..."  
@@ -932,7 +932,7 @@ text: "엄마... 엄마가... 제 눈앞에서..."
 {  
   "affection": 0-100,  
   "text": "NPC 대사",  
-  "emotion": "neutral|happy|sad|angry|shy|fear|trauma",  
+  "emotion": "neutral|joy|fun|sorrow|angry|surprise|mysterious",  
   "memoryProgress": 0-100,  
   "sanity": 0-100  
 }
@@ -942,12 +942,12 @@ text: "엄마... 엄마가... 제 눈앞에서..."
 | emotion | 설명 | 사용 상황 |
 | ----- | ----- | ----- |
 | neutral | 평상시 | 일반 대화 |
-| happy | 기쁨 | 좋아하는 것, 칭찬 |
-| sad | 슬픔 | 과거 회상, 이별 |
+| joy | 기쁨 | 좋아하는 것, 칭찬, 부끄러움 |
+| fun | 즐거움 | 싸움, 재미있는 상황 |
+| sorrow | 슬픔 | 과거 회상, 이별, 트라우마 |
 | angry | 분노 | 모욕, 위협 |
-| shy | 부끄러움 | 호감 표현, 칭찬 받음 |
-| fear | 두려움 | 트라우마 자극, 위험 |
-| trauma | 트라우마 | 심한 트리거 |
+| surprise | 놀람 | 두려움, 위험, 놀라운 상황 |
+| mysterious | 신비로움 | 특별한 상황 |
 
 ---
 
