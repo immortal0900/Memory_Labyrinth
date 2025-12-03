@@ -11,7 +11,6 @@ import uvicorn
 from api.npc_router import router as npc_router
 from api.fairy_router import router as fairy_router
 
-
 # FastAPI 앱 생성
 app = FastAPI(
     title="AI Agent System",

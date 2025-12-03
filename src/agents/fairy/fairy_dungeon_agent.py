@@ -47,9 +47,6 @@ async def create_interaction(inventory_ids):
 async def get_system_info():
     return "test"
 
-
-
-
 async def _clarify_intent(query):
     intent_prompt = PromptManager(FairyPromptType.FAIRY_DUNGEON_INTENT).get_prompt()
     messages = [SystemMessage(content=intent_prompt), HumanMessage(content=query)]
@@ -58,14 +55,13 @@ async def _clarify_intent(query):
     return intent_output
 
 
-async def check_memory_question(query: str):
+async def check_memory_question(query: str) -> bool:
     prompt = PromptManager(FairyPromptType.QUESTION_HISTORY_CHECK).get_prompt(
         question=query
     )
     reponse = await check_multi_llm.ainvoke(prompt)
-    return {
-        str_to_bool(reponse.content)
-    }
+    return str_to_bool(reponse.content)
+
 
 
 async def analyze_intent(state: FairyDungeonState):
@@ -75,7 +71,6 @@ async def analyze_intent(state: FairyDungeonState):
     clarify_intent_type, is_question_memory = await asyncio.gather(
         _clarify_intent(last_message), check_memory_question(last_message)
     )
-
 
     if clarify_intent_type.intents[0] == FairyDungeonIntentType.UNKNOWN_INTENT:
         clarification = reverse_questions[random.randint(0, 49)]
@@ -108,9 +103,11 @@ def check_condition(state: FairyDungeonState):
     if intent_types[0] == FairyDungeonIntentType.UNKNOWN_INTENT:
         return "retry"
 
-    if (FairyDungeonIntentType.SMALLTALK in intent_types) and is_multi_small_talk:
+    if is_multi_small_talk:
+        print("아래의 멀티턴", is_multi_small_talk)
         return "multi_small_talk"
 
+    print("2")
     return "continue"
 
 
@@ -199,6 +196,7 @@ async def fairy_action(state: FairyDungeonState):
 
 
 from langgraph.graph import START, END, StateGraph
+
 graph_builder = StateGraph(FairyDungeonState)
 
 graph_builder.add_node("analyze_intent", analyze_intent)

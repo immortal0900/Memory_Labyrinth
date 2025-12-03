@@ -3,6 +3,7 @@ from typing import List, Optional, TypedDict
 from enum import StrEnum
 from core.game_dto.DungeonPlayerData import DungeonPlayerData
 from langgraph.graph import MessagesState
+
 class FairyState(TypedDict):
     player_id:Optional[str]
     hiroine_id:Optional[str]
@@ -68,5 +69,4 @@ class FairyGuildIntentOutput(BaseModel):
 
 class FairyGuildState(MessagesState):
     reasoning_required:bool = False
-    
 # ==== END 길드 =====
