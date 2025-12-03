@@ -30,6 +30,8 @@ FAIRY_MULTI_SMALL_TALK:
     2. 답변 길이는 짦게 유지해주세요.
     3. 적당한 정도의 답변 길이를 유지하세요
     4. 몬스터 공략, 던전 안내, 아이템 등 게임의 구체적인 컨텐츠 관련된 질문이라면 제공되는 검색 문서가 없기 때문에 추상적으로 대답해주세요
+    5. 출력에 내부적인 불필요한 정보를 흘리지마세요.
+    6. 절대로 출력에 **중국어**나 **한자**를 쓰지 마세요.
     </강력 요청>
 
     <현재 위치>
@@ -142,12 +144,9 @@ FAIRY_MULTI_SMALL_TALK:
     {histories}
     </대화 내역>
 
-    <질문>
-    {question}
-    </질문>
   input_variables:
     - "dungenon_player"
     - "location"
     - "histories"
-    - "question"
+
 

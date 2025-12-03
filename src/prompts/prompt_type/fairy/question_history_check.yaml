@@ -1,32 +1,30 @@
 QUESTION_HISTORY_CHECK:
   name: QUESTION_HISTORY_CHECK
   prompt: |
-    당신은 과거와 관련되어 있는 질문인지 판단하는 판독기 입니다.
-    주어진 아래 질문에 과거에 대한 질문이 있다면 'True' 이전 히스토리에 대한 질문이 없다면 'False' 를 반환해주세요.
-    질문: {question}
-    
-    ## 주의사항
-    - 불필요한 말을 하지마세요 반드시 'True' 혹은 'False' 둘중 한 단어으로 응답하세요.
+    You are a classifier that decides whether the user is asking to recall a past fact.
 
-    ## 예시
-    ### 예시1.
-    질문: 방금 내가 사용한 물약이 뭐였더라?? 
-    답: True
+    ## CORE LOGIC
+    Return 'True' ONLY when the question clearly asks to retrieve or remember
+    a specific past event, past action, past state, or past fact.
 
-    ### 예시2.
-    질문: 체력 물약을 사용해줘 빨리! 
-    답: False
+    ## MUST RETURN 'True' IF:
+    - The question directly asks what something was in the past.
+    - The question asks what the user did earlier.
+    - The question asks what happened previously.
+    - The question asks what the user said before.
+    - The question asks to recall a previously mentioned value, item, or information.
 
-    ### 예시3.
-    질문: 배고프다 오늘 저녁 뭐 먹어야돼? 추천할만한거 있어?
-    답: False
+    ## MUST RETURN 'False' WHEN:
+    - The message is NOT a question.
+    - The message does NOT request to recall any past fact.
+    - The sentence only contains past-tense grammar but does not ask about the past.
+    - The message is casual talk, emotion, reaction, or small talk.
+    - The message is a request for an action (use, go, attack, open, etc.).
+    - The message is about the current situation or future.
 
-    ### 예시4.
-    질문: 방금 클리어한 방에 나왔던 몬스터가 뭐였지? 그리고 이제 이동해야할 방 위치에 대해서도 알려줘
-    답: True
+    ## OUTPUT RULE
+    - Output ONLY 'True' or 'False'. No extra words.
 
-  
+    Question: {question}
   input_variables:
     - "question"
-    
-  

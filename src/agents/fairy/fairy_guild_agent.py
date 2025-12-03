@@ -1,0 +1,83 @@
+from prompts.promptmanager import PromptManager
+from prompts.prompt_type.fairy.FairyPromptType import FairyPromptType
+from langchain_core.messages import SystemMessage
+from agents.fairy.util import get_groq_llm_lc
+from langgraph.graph import START, END, StateGraph
+from agents.fairy.fairy_state import FairyGuildState
+
+from langchain.chat_models import init_chat_model
+from enums.LLM import LLM
+from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import tool
+from langgraph.prebuilt import ToolNode, tools_condition
+from agents.fairy.util import find_scenarios, str_to_bool, find_heroine_info
+
+
+fast_llm = init_chat_model(
+    model=LLM.GROK_4_FAST_NON_REASONING,
+    model_provider="xai",
+)
+
+reasoning_llm = init_chat_model(
+    model=LLM.GROK_4_FAST_REASONING, model_provider="xai", temperature=0.2
+)
+
+
+@tool
+def get_scenarios(config: RunnableConfig):
+    """히로인의 과거 데이터 입니다. 히로인 정보에 있는 히로인 일때만 데이터를 찾습니다."""
+    heroine_id = config.get("configurable", {}).get("heroine_id")
+    memory_progress = config.get("configurable", {}).get("memory_progress")
+    return f"""[히로인의 과거]\n{find_scenarios(heroine_id, memory_progress)}"""
+
+
+def get_heroine_info(config: RunnableConfig):
+    heroine_id = config.get("configurable", {}).get("heroine_id")
+    
+
+def reasoning_required(state: FairyGuildState):
+    last_meesage = state["messages"][-1].content
+    reasoning_required_prompt = PromptManager(
+        FairyPromptType.FAIRY_REASONING_REQUIRED
+    ).get_prompt(question=last_meesage)
+    return {
+        "reasoning_required": str_to_bool(
+            get_groq_llm_lc(LLM.LLAMA_3_1_8B_INSTANT)
+            .invoke(reasoning_required_prompt)
+            .content
+        )
+    }
+
+
+def call_llm(state: FairyGuildState, config: RunnableConfig):
+    heroine_id = config.get("configurable", {}).get("heroine_id")
+    heroine_info = find_heroine_info(heroine_id=heroine_id)
+
+    messages = state["messages"]
+    if state["reasoning_required"]:
+        llm = reasoning_llm.bind_tools([get_scenarios])
+    else:
+        llm = fast_llm
+
+    system_prompt = PromptManager(FairyPromptType.FAIRY_GUILD_SYSTEM).get_prompt(
+        heroine_info=heroine_info
+    )
+    new_messages = [SystemMessage(content=system_prompt)] + messages
+    ai_answer = llm.invoke(new_messages)
+    return {"messages": [ai_answer]}
+
+
+graph_builder = StateGraph(FairyGuildState)
+
+graph_builder.add_node("reasoning_required", reasoning_required)
+graph_builder.add_node("call_llm", call_llm)
+tool_node = ToolNode([get_scenarios])
+graph_builder.add_node("tools", tool_node)
+
+graph_builder.add_edge(START, "reasoning_required")
+graph_builder.add_edge("reasoning_required", "call_llm")
+graph_builder.add_edge("call_llm", END)
+
+graph_builder.add_conditional_edges("call_llm", tools_condition)
+graph_builder.add_edge("tools", "call_llm")
+graph_builder
