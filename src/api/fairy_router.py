@@ -21,7 +21,7 @@ class TalkDungeonRequest(BaseModel):
         description="(통신 프로토콜 기준 - dungeonPlayerData) 던전 플레이어의 실시간 상태",
         example=MockFactory.create_dungeon_player(1),
     )
-    question: str = Field(..., description="사용자의 질문", examples="현재 방의 불좀 켜줘")
+    question: str = Field(..., description="사용자의 질문", example="현재 방의 불좀 켜줘")
     targetMonsterIds: List[int] = Field(
         default_factory=list,
         description="히로인 시야에 있는 몬스터들 (사실 1개면 됨, 혹시 몰라 리스트로 열어둠)",

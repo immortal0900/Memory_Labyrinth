@@ -59,7 +59,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     text: str
-    emotion: int
+    emotion: str
     affection: int
     sanity: int
     memoryProgress: int
@@ -72,7 +72,7 @@ class SageChatRequest(BaseModel):
 
 class SageChatResponse(BaseModel):
     text: str
-    emotion: int
+    emotion: str
     scenarioLevel: int
     infoRevealed: bool
 
