@@ -18,6 +18,7 @@ def add_human_message(content: str):
         content=content, additional_kwargs={"created_at": datetime.now().isoformat()}
     )
 
+
 def str_to_bool(text):
     if text == "True" or text == "true":
         return True
@@ -63,35 +64,6 @@ def stream_action_llm(
         content = chunk.choices[0].delta.content
         if content:
             yield content
-
-
-def call_action_llm(
-    model="llama-3.3-70b-versatile", max_token=200, system_prompt=None, question=None
-):
-    if system_prompt is None or question is None:
-        raise RuntimeError("시스템 프롬프트 혹은 질문 프롬프트가 필요합니다.")
-
-    import os
-    from dotenv import load_dotenv
-
-    load_dotenv()
-
-    from groq import Groq
-
-    client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-    completion = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": question},
-        ],
-        temperature=0,
-        max_completion_tokens=max_token,
-        top_p=1,
-        stream=False,
-        stop=None,
-    )
-    return completion.choices[0].message.content
 
 
 from langchain_groq import ChatGroq

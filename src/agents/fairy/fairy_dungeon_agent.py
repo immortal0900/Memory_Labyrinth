@@ -2,7 +2,7 @@
 from agents.fairy.fairy_state import FairyDungeonIntentOutput, FairyDungeonState, FairyDungeonIntentType
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langgraph.types import interrupt
-from agents.fairy.cache_data import reverse_questions
+from agents.fairy.cache_data import reverse_questions, GAME_SYSTEM_INFO
 from prompts.promptmanager import PromptManager
 from prompts.prompt_type.fairy.FairyPromptType import FairyPromptType
 import random, asyncio
@@ -11,12 +11,12 @@ from agents.fairy.util import (
     add_human_message,
     str_to_bool,
     get_small_talk_history,
-    call_action_llm,
     get_groq_llm_lc,
 )
 from core.common import get_inventory_items
 from enums.LLM import LLM
 from langchain.chat_models import init_chat_model
+
 
 check_multi_llm = get_groq_llm_lc(model=LLM.LLAMA_3_1_8B_INSTANT, max_token=8)
 intent_llm = get_groq_llm_lc(model=LLM.LLAMA_3_1_8B_INSTANT, max_token=43)
@@ -45,7 +45,7 @@ async def create_interaction(inventory_ids):
     return result
 
 async def get_system_info():
-    return "test"
+    return GAME_SYSTEM_INFO
 
 async def _clarify_intent(query):
     intent_prompt = PromptManager(FairyPromptType.FAIRY_DUNGEON_INTENT).get_prompt()
@@ -142,7 +142,7 @@ async def fairy_action(state: FairyDungeonState):
         FairyDungeonIntentType.INTERACTION_HANDLER: lambda: create_interaction(
             dungenon_player.inventory
         ),
-        FairyDungeonIntentType.GAME_SYSTEM_INFO: get_system_info()
+        FairyDungeonIntentType.GAME_SYSTEM_INFO: get_system_info
     }
 
     INTENT_LABELS = {
@@ -150,7 +150,7 @@ async def fairy_action(state: FairyDungeonState):
         FairyDungeonIntentType.EVENT_GUIDE: "이벤트",
         FairyDungeonIntentType.DUNGEON_NAVIGATOR: "길안내",
         FairyDungeonIntentType.INTERACTION_HANDLER: "상호작용",
-        FairyDungeonIntentType.GAME_SYSTEM_INFO: "시스템 정보"
+        FairyDungeonIntentType.GAME_SYSTEM_INFO: "게임 시스템 정보"
     }
 
     handlers = [INTENT_HANDLERS[i]() for i in intent_types if i in INTENT_HANDLERS]
