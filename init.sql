@@ -137,7 +137,7 @@ CREATE INDEX IF NOT EXISTS idx_checkpoint_last_chat ON session_checkpoints(last_
 
 -- 17. 히로인 시나리오 (벡터 검색용) 
 
-CREATE TABLE heroine_scenarios (
+CREATE TABLE IF NOT EXISTS heroine_scenarios (
     id SERIAL PRIMARY KEY,
     heroine_id INT NOT NULL,
     memory_progress INT NOT NULL,

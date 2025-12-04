@@ -663,10 +663,10 @@ class HeroineAgent(BaseNPCAgent):
             # 세션 저장
             redis_manager.save_session(player_id, npc_id, session)
 
-        # Mem0에 대화 저장 (User-NPC 장기 기억)
+        # Mem0에 대화 저장 (백그라운드)
         user_msg = state["messages"][-1].content
-        mem0_manager.add_memory(
-            player_id, npc_id, f"플레이어: {user_msg}\n히로인: {response_text}"
+        asyncio.create_task(
+            self._save_to_mem0_background(player_id, npc_id, user_msg, response_text)
         )
 
         return {
@@ -676,6 +676,24 @@ class HeroineAgent(BaseNPCAgent):
             "emotion": emotion_int,
             "response_text": response_text,
         }
+
+    async def _save_to_mem0_background(
+        self, player_id: int, npc_id: int, user_msg: str, npc_response: str
+    ) -> None:
+        """백그라운드로 Mem0에 대화 저장
+
+        Args:
+            player_id: 플레이어 ID
+            npc_id: NPC ID
+            user_msg: 유저 메시지
+            npc_response: NPC 응답
+        """
+        try:
+            mem0_manager.add_memory(
+                player_id, npc_id, f"플레이어: {user_msg}\n히로인: {npc_response}"
+            )
+        except Exception as e:
+            print(f"[ERROR] Mem0 저장 실패: {e}")
 
     async def _generate_and_save_summary(
         self, player_id: int, npc_id: int, conversations: list

@@ -230,17 +230,20 @@ async def heroine_chat(request: ChatRequest):
         session = heroine_agent._create_initial_session(player_id, heroine_id)
         redis_manager.save_session(player_id, heroine_id, session)
 
+    # 상태 안전하게 가져오기
+    session_state = session.get("state", {})
+
     # LangGraph 상태 구성
     state = {
         "player_id": player_id,
         "npc_id": heroine_id,
         "npc_type": "heroine",
         "messages": [HumanMessage(content=user_message)],
-        "affection": session["state"]["affection"],
-        "sanity": session["state"]["sanity"],
-        "memoryProgress": session["state"]["memoryProgress"],
-        "emotion": session["state"]["emotion"],
-        "conversation_buffer": session["conversation_buffer"],
+        "affection": session_state.get("affection", 0),
+        "sanity": session_state.get("sanity", 100),
+        "memoryProgress": session_state.get("memoryProgress", 0),
+        "emotion": session_state.get("emotion", 0),
+        "conversation_buffer": session.get("conversation_buffer", []),
         "short_term_summary": session.get("short_term_summary", ""),
         "recent_used_keywords": session.get("recent_used_keywords", []),
     }
@@ -300,17 +303,20 @@ async def heroine_chat_sync(request: ChatRequest, background_tasks: BackgroundTa
         session = heroine_agent._create_initial_session(player_id, heroine_id)
         redis_manager.save_session(player_id, heroine_id, session)
 
+    # 상태 안전하게 가져오기
+    session_state = session.get("state", {})
+
     # 상태 구성
     state = {
         "player_id": player_id,
         "npc_id": heroine_id,
         "npc_type": "heroine",
         "messages": [HumanMessage(content=user_message)],
-        "affection": session["state"]["affection"],
-        "sanity": session["state"]["sanity"],
-        "memoryProgress": session["state"]["memoryProgress"],
-        "emotion": session["state"]["emotion"],
-        "conversation_buffer": session["conversation_buffer"],
+        "affection": session_state.get("affection", 0),
+        "sanity": session_state.get("sanity", 100),
+        "memoryProgress": session_state.get("memoryProgress", 0),
+        "emotion": session_state.get("emotion", 0),
+        "conversation_buffer": session.get("conversation_buffer", []),
         "short_term_summary": session.get("short_term_summary", ""),
         "recent_used_keywords": session.get("recent_used_keywords", []),
     }
@@ -320,11 +326,9 @@ async def heroine_chat_sync(request: ChatRequest, background_tasks: BackgroundTa
 
     response_text = result.get("response_text", "")
     new_state = {
-        "affection": result.get("affection", session["state"]["affection"]),
-        "sanity": result.get("sanity", session["state"]["sanity"]),
-        "memoryProgress": result.get(
-            "memoryProgress", session["state"]["memoryProgress"]
-        ),
+        "affection": result.get("affection", state["affection"]),
+        "sanity": result.get("sanity", state["sanity"]),
+        "memoryProgress": result.get("memoryProgress", state["memoryProgress"]),
         "emotion": result.get("emotion", 0),
     }
 
@@ -367,15 +371,19 @@ async def sage_chat(request: SageChatRequest):
         session = sage_agent._create_initial_session(player_id, npc_id)
         redis_manager.save_session(player_id, npc_id, session)
 
+    # 상태 안전하게 가져오기
+    session_state = session.get("state", {})
+    scenario_level = session_state.get("scenarioLevel", 1)
+
     # 상태 구성
     state = {
         "player_id": player_id,
         "npc_id": npc_id,
         "npc_type": "sage",
         "messages": [HumanMessage(content=user_message)],
-        "scenarioLevel": session["state"]["scenarioLevel"],
-        "emotion": session["state"]["emotion"],
-        "conversation_buffer": session["conversation_buffer"],
+        "scenarioLevel": scenario_level,
+        "emotion": session_state.get("emotion", 0),
+        "conversation_buffer": session.get("conversation_buffer", []),
         "short_term_summary": session.get("short_term_summary", ""),
     }
 
@@ -400,7 +408,7 @@ async def sage_chat(request: SageChatRequest):
 
         final_data = {
             "type": "final",
-            "scenarioLevel": session["state"]["scenarioLevel"],
+            "scenarioLevel": scenario_level,
             "emotion": 0,  # neutral
             "infoRevealed": False,
         }
@@ -422,14 +430,18 @@ async def sage_chat_sync(request: SageChatRequest, background_tasks: BackgroundT
         session = sage_agent._create_initial_session(player_id, npc_id)
         redis_manager.save_session(player_id, npc_id, session)
 
+    # 상태 안전하게 가져오기
+    session_state = session.get("state", {})
+    scenario_level = session_state.get("scenarioLevel", 1)
+
     state = {
         "player_id": player_id,
         "npc_id": npc_id,
         "npc_type": "sage",
         "messages": [HumanMessage(content=user_message)],
-        "scenarioLevel": session["state"]["scenarioLevel"],
-        "emotion": session["state"]["emotion"],
-        "conversation_buffer": session["conversation_buffer"],
+        "scenarioLevel": scenario_level,
+        "emotion": session_state.get("emotion", 0),
+        "conversation_buffer": session.get("conversation_buffer", []),
         "short_term_summary": session.get("short_term_summary", ""),
     }
 
@@ -437,7 +449,7 @@ async def sage_chat_sync(request: SageChatRequest, background_tasks: BackgroundT
 
     response_text = result.get("response_text", "")
     new_state = {
-        "scenarioLevel": session["state"]["scenarioLevel"],
+        "scenarioLevel": scenario_level,
         "emotion": result.get("emotion", 0),
     }
 
