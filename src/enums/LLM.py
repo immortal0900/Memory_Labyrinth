@@ -35,3 +35,5 @@ class LLM(StrEnum):
 
     LLAMA_3_3_70B_VERSATILE = "llama-3.3-70b-versatile"
     LLAMA_3_1_8B_INSTANT = "llama-3.1-8b-instant"
+
+    KIMI_K2_INSTRUCT_0905 = "moonshotai/kimi-k2-instruct-0905"

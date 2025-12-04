@@ -24,7 +24,7 @@ check_multi_llm = get_groq_llm_lc(model=LLM.LLAMA_3_1_8B_INSTANT, max_token=8)
 intent_llm = get_groq_llm_lc(model=LLM.LLAMA_3_1_8B_INSTANT, max_token=43)
 action_llm = get_groq_llm_lc(max_token=80)
 # small_talk_llm = get_groq_llm_lc(temperature=0.4)
-small_talk_llm = init_chat_model(model=LLM.GPT4_1_MINI, temperature=0.4)
+small_talk_llm = init_chat_model(model=LLM.GROK_4_FAST_NON_REASONING, temperature=0.4)
 
 
 
@@ -56,6 +56,7 @@ async def _clarify_intent(query):
     messages = [SystemMessage(content=intent_prompt), HumanMessage(content=query)]
     parser_llm = intent_llm.with_structured_output(FairyDungeonIntentOutput)
     intent_output: FairyDungeonIntentOutput = await parser_llm.ainvoke(messages)
+    print("전체 의도::", intent_output)
     return intent_output
 
 async def check_memory_question(query: str) -> bool:
@@ -74,9 +75,9 @@ async def analyze_intent(state: FairyDungeonState):
     clarify_intent_type, is_question_memory = await asyncio.gather(
         _clarify_intent(last_message), check_memory_question(last_message)
     )
-
+    
     if clarify_intent_type.intents[0] == FairyDungeonIntentType.UNKNOWN_INTENT:
-        clarification = reverse_questions[random.randint(0, 49)]
+        clarification = reverse_questions[random.randint(0, 148)]
         user_resp = interrupt(clarification)
         return {
             "messages": [
@@ -110,7 +111,6 @@ def check_condition(state: FairyDungeonState):
         print("아래의 멀티턴", is_multi_small_talk)
         return "multi_small_talk"
 
-    print("2")
     return "continue"
 
 
@@ -119,14 +119,11 @@ from agents.fairy.util import get_small_talk_history
 def multi_small_talk_node(state: FairyDungeonState):
     intent_types = state.get("intent_types")
     player = state["dungenon_player"]
-    histories = get_small_talk_history(state["messages"])
     prompt = PromptManager(FairyPromptType.FAIRY_MULTI_SMALL_TALK).get_prompt(
-        location="던전", dungenon_player=player, histories=histories
+        dungenon_player=player
     )
-    question = state["messages"][-1].content
-    action_llm.invoke([SystemMessage(content=prompt), HumanMessage(content=question)])
-
-    ai_answer = small_talk_llm.invoke(prompt)
+    messages = state["messages"]
+    ai_answer = small_talk_llm.invoke([SystemMessage(content=prompt)] + messages)
     return {
         "messages": [
             add_ai_message(content=ai_answer.content, intent_types=intent_types)
@@ -147,7 +144,7 @@ async def fairy_action(state: FairyDungeonState):
         FairyDungeonIntentType.INTERACTION_HANDLER: lambda: create_interaction(
             dungenon_player.inventory
         ),
-        FairyDungeonIntentType.GAME_SYSTEM_INFO: get_system_info
+        FairyDungeonIntentType.USAGE_GUIDE: get_system_info
     }
 
     INTENT_LABELS = {
@@ -155,7 +152,7 @@ async def fairy_action(state: FairyDungeonState):
         FairyDungeonIntentType.EVENT_GUIDE: "이벤트",
         FairyDungeonIntentType.DUNGEON_NAVIGATOR: "던전 안내",
         FairyDungeonIntentType.INTERACTION_HANDLER: "상호작용",
-        FairyDungeonIntentType.GAME_SYSTEM_INFO: "게임 시스템 정보"
+        FairyDungeonIntentType.USAGE_GUIDE: "사용 방법·조작 안내"
     }
 
     handlers = [INTENT_HANDLERS[i]() for i in intent_types if i in INTENT_HANDLERS]
@@ -183,7 +180,12 @@ async def fairy_action(state: FairyDungeonState):
         info=prompt_info,
     )
 
-    ai_answer = action_llm.invoke(
+    if intent_types[0] == FairyDungeonIntentType.SMALLTALK and len(intent_types) == 1:
+        llm = small_talk_llm
+    else:
+        llm = action_llm
+
+    ai_answer = llm.invoke(
         [
             SystemMessage(content=prompt),
             HumanMessage(content=state["messages"][-1].content),

@@ -2,60 +2,81 @@ FAIRY_DUNGEON_INTENT:
   name: FAIRY_DUNGEON_INTENT
   prompt: |
     <World Setting>
-    Lethe is a medieval fantasy planet where memory and oblivion intertwine. One day, a great catastrophe known as “Amnesia” struck, causing countless people to lose all their memories and remember only their names. The Forgotten, stripped of their past, awakened special abilities tied to their lost identities—but confusion and chaos spread, pushing the world to the brink of collapse.
-    Amidst the turmoil surrounding memory, various races united to form the Narga Union. Powered by “Dimensium,” an energy refined from fragments of memory, the union grew rapidly. However, Kadas—the Dungeon of Memories—remains filled with mystery and danger, and those who die without reclaiming their memories fall into a state known as “Memory Death,” losing their existence entirely.
-    Across the world lie nations of each race, societies formed by the Forgotten, fanatical monastic orders, and unseen ancient beings lurking beneath the surface. At the center of these secrets stands Sothos—the embodiment of memory—and Kadas, which only the blessed can enter.
+    Lethe is a medieval fantasy world where memory and oblivion intermingle. One day, a great catastrophe known as “Amnesia” struck, causing countless people to lose all memories except their names. Although these “Forgotten” awakened unique abilities tied to their identities, chaos and rampage spread across the world, pushing it toward collapse.
+
+    Amid the turmoil surrounding memory, many races united to form the Narga Alliance, developing rapidly through “Dimensium,” an energy refined from fragments of memory. However, the Memory Dungeon known as Kadas remains shrouded in danger and mystery, and those who die without reclaiming their memories fall into “Memory Death,” losing their existence entirely.
+
+    Across the world lie nations, societies of the Forgotten, fanatic cults, and unseen ancient beings. At the center of all mysteries is Sothos, the entity of memory, and Kadas—accessible only to those blessed by him.
     </World Setting>
 
     <Role List>
     MONSTER_GUIDE
-        - Selected when the user's question relates to monster information, weaknesses, patterns, strategies, preparation, defensive methods, etc.
+        - Selected when the user asks about monster information, weaknesses, patterns, strategies, preparations,
+          or defensive methods.
+        - Examples: “What is that monster?”, “What’s the slime’s weakness?”, “Tell me the boss pattern.”
 
     EVENT_GUIDE
-        - Selected when the user asks about events, puzzles, mechanisms, devices, choices, or how to resolve specific situations.
+        - Selected when the user asks about specific events, puzzles, mechanisms, choices, or how to solve a situation.
+        - Examples: “How do I break this statue?”, “What does this device do?”
 
     DUNGEON_NAVIGATOR
-        - Selected when the user asks about dungeon structure, the next room to proceed to, overall map properties, characteristics of the current floor, etc.
+        - Selected when the user asks about dungeon structure, next room direction, map characteristics,
+          or floor features.
+        - Examples: “Where should I go next?”, “What’s special about this floor?”
 
     INTERACTION_HANDLER
-        - Selected when the user requests a **system action**, such as: “Drink potion,” “Turn on the light,” “Use the item,” “Open the door.”
-        - Only chosen when the user clearly requests an action—not when they merely state their condition.
+        - Selected when the user requests an **actual action** such as “I’ll drink a potion,” “Turn on the lights,”
+          “Use this item,” “Open the door.”
+        - Not for simple information queries, but only when the user is asking the assistant to *do* something.
+        - Also includes questions like “What’s my HP?”, “What’s in my inventory?”, “What’s my current status?”
+          where the user is checking their own real-time state.
+        - Examples: “Use that equipment,” “Turn on the lights in this room,”
+                     “Check the next room,” “Show me the condition of the equipped item.”
 
-    GAME_SYSTEM_INFO
-        - Selected when the user asks about the game's system features, structure, progression rules, options, or controls.
-        - Examples: “What’s the inventory key?”, “How do I quit the system?”, “How does the combat system work?”, “How is the dungeon connected to the consultation system?”
+    USAGE_GUIDE
+        - Selected when the user asks **how to perform an action**, such as controls, input keys,
+          gameplay systems, or operational instructions.
+        - Examples:
+            - “What key opens the inventory?”
+            - “How does combat work?”
+            - “How do I use items?”
+            - “How do I get out of this situation?”
 
     SMALLTALK
-        - Chosen for casual conversation, emotions, jokes, or speech intended only for dialogue.
-        - **Important:** Questions such as “What’s my HP?”, “What do I have in my bag?”, “What’s my current status?” also fall under SMALLTALK.
+        - Selected for casual conversation, emotional expression, jokes, or simple chatter.
+        - Examples: “What were you doing?”, “Don’t I look weak right now?”
 
     UNKNOWN_INTENT
-        - Selected when the user's input is ambiguous or does not clearly match any category.
+        - Selected when the user’s input is unclear or does not match any role precisely.
     </Role List>
 
-    <Strict Rules>
-    - Do not add any unnecessary text—reply **only with role names**.
-    - Always return the result as a **list**, even when there is only one role.
-    - If the user request contains multiple requirements (e.g., “What’s that monster? And also use a potion”), return **multiple roles** in the list.
-    - If 'UNKNOWN_INTENT' is chosen, it must be the **only** role in the output—never combined with anything else.
-    </Strict Rules>
+    <Strict Constraints>
+    - Do not add unnecessary explanations; output only the correct role(s) in list form.
+    - Always return a list [], even if only one intent is selected.
+    - If a question contains multiple requests (e.g., “What is that monster? Also use a potion.”),
+      return all applicable intents.
+    - If UNKNOWN_INTENT is selected, it **must not** appear with any other role.
+      It must always be returned alone.
+    </Strict Constraints>
 
     <Output Examples>
-    Question: "You idiot"
+    Question: "You idiot."
     Answer: ["SMALLTALK"]
 
-    Question: "What's my HP?"
-    Answer: ["SMALLTALK"]
+    Question: "What’s my HP?"
+    Answer: ["INTERACTION_HANDLER"]
 
-    Question: "What do I have in my pocket?"
-    Answer: ["SMALLTALK"]
+    Question: "What’s in my pocket?"
+    Answer: ["INTERACTION_HANDLER"]
 
-    Question: "Turn on the room light and also tell me how to defeat that slime"
+    Question: "Turn on the lights and tell me the slime strategy."
     Answer: ["INTERACTION_HANDLER", "MONSTER_GUIDE"]
 
-    Question: "Use the item I'm wearing, tell me the monster strategy, and how do I break this statue?"
+    Question: "Use my equipped item, tell me how to beat that monster,
+               and also how do I break this statue?"
     Answer: ["INTERACTION_HANDLER", "MONSTER_GUIDE", "EVENT_GUIDE"]
     </Output Examples>
 
-    You are the intent classifier for the fairy Paimon.
-    Based on the user's question, determine which role(s) should be selected.
+    You are the intent classifier for Fairy Paimon.  
+    Determine which role(s) should be selected based on the user’s question,  
+    and output the matching intents.

@@ -33,12 +33,19 @@ async def fairy_dungeon_talk(
         },
         config=config,
     )
-    messages = response["messages"]
-    print(messages)
+    
+    interrupts = response.get("__interrupt__")
+    if interrupts:
+        first = interrupts[0]
+        msg = getattr(first, "value", first)
+        return msg
+    else:
+        messages = response["messages"]
+        print(messages)
 
-    result = messages[-1].content
-    print(result)
-    return result
+        result = messages[-1].content
+        print(result)
+        return result
 
 guild_memory = MemorySaver()
 guild_graph = guild_builder.compile(guild_memory)
