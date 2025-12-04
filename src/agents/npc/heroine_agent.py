@@ -21,6 +21,8 @@
 
 import json
 import yaml
+import asyncio
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import AsyncIterator, Dict, Any, Optional, Tuple
 from langchain.chat_models import init_chat_model
@@ -37,6 +39,7 @@ from agents.npc.emotion_mapper import heroine_emotion_to_int
 from db.redis_manager import redis_manager
 from db.mem0_manager import mem0_manager
 from db.agent_memory import agent_memory_manager
+from db.session_checkpoint_manager import session_checkpoint_manager
 from services.heroine_scenario_service import heroine_scenario_service
 from agents.npc.heroine_heroine_agent import heroine_heroine_agent
 
@@ -507,7 +510,12 @@ class HeroineAgent(BaseNPCAgent):
     "emotion": "neutral|joy|fun|sorrow|angry|surprise|mysterious"
 }"""
 
+        time_since_last_chat = self.get_time_since_last_chat(state["player_id"], npc_id)
+
         prompt = f"""당신은 히로인 {persona.get('name', '알 수 없음')}입니다.
+
+[마지막 대화로부터 경과 시간]
+{time_since_last_chat}
 
 [현재 상태]
 - 호감도(Affection): {affection}
@@ -610,13 +618,55 @@ class HeroineAgent(BaseNPCAgent):
                 recent_keywords.append(used_keyword)
             session["recent_used_keywords"] = recent_keywords[-5:]
 
+            # turn_count 업데이트
+            turn_count = session.get("turn_count", 0) + 1
+            session["turn_count"] = turn_count
+
+            # last_chat_at 업데이트
+            session["last_chat_at"] = datetime.now().isoformat()
+
+            # 요약 생성 조건 확인 (20턴 또는 1시간 경과)
+            last_summary_at = session.get("last_summary_at")
+            should_generate_summary = False
+
+            if turn_count >= 20:
+                should_generate_summary = True
+            elif last_summary_at:
+                last_summary_time = datetime.fromisoformat(last_summary_at)
+                if datetime.now() - last_summary_time > timedelta(hours=1):
+                    should_generate_summary = True
+            elif turn_count >= 10:
+                should_generate_summary = True
+
+            if should_generate_summary:
+                session["turn_count"] = 0
+                session["last_summary_at"] = datetime.now().isoformat()
+
+                conversations = []
+                for i in range(0, len(session["conversation_buffer"]), 2):
+                    if i + 1 < len(session["conversation_buffer"]):
+                        conversations.append(
+                            {
+                                "user": session["conversation_buffer"][i].get(
+                                    "content", ""
+                                ),
+                                "npc": session["conversation_buffer"][i + 1].get(
+                                    "content", ""
+                                ),
+                            }
+                        )
+
+                asyncio.create_task(
+                    self._generate_and_save_summary(player_id, npc_id, conversations)
+                )
+
             # 세션 저장
             redis_manager.save_session(player_id, npc_id, session)
 
-        # Mem0에 대화 저장 (User-NPC 장기 기억)
+        # Mem0에 대화 저장 (백그라운드)
         user_msg = state["messages"][-1].content
-        mem0_manager.add_memory(
-            player_id, npc_id, f"플레이어: {user_msg}\n히로인: {response_text}"
+        asyncio.create_task(
+            self._save_to_mem0_background(player_id, npc_id, user_msg, response_text)
         )
 
         return {
@@ -626,6 +676,56 @@ class HeroineAgent(BaseNPCAgent):
             "emotion": emotion_int,
             "response_text": response_text,
         }
+
+    async def _save_to_mem0_background(
+        self, player_id: int, npc_id: int, user_msg: str, npc_response: str
+    ) -> None:
+        """백그라운드로 Mem0에 대화 저장
+
+        Args:
+            player_id: 플레이어 ID
+            npc_id: NPC ID
+            user_msg: 유저 메시지
+            npc_response: NPC 응답
+        """
+        try:
+            mem0_manager.add_memory(
+                player_id, npc_id, f"플레이어: {user_msg}\n히로인: {npc_response}"
+            )
+        except Exception as e:
+            print(f"[ERROR] Mem0 저장 실패: {e}")
+
+    async def _generate_and_save_summary(
+        self, player_id: int, npc_id: int, conversations: list
+    ) -> None:
+        """백그라운드로 요약 생성 및 저장
+
+        Args:
+            player_id: 플레이어 ID
+            npc_id: NPC ID
+            conversations: 대화 목록
+        """
+        try:
+            summary_item = await session_checkpoint_manager.generate_summary(
+                player_id, npc_id, conversations
+            )
+
+            session = redis_manager.load_session(player_id, npc_id)
+            if session:
+                summary_list = session.get("summary_list", [])
+                summary_list.append(summary_item)
+
+                summary_list = session_checkpoint_manager.prune_summary_list(
+                    summary_list
+                )
+                session["summary_list"] = summary_list
+
+                redis_manager.save_session(player_id, npc_id, session)
+
+            session_checkpoint_manager.save_summary(player_id, npc_id, summary_item)
+
+        except Exception as e:
+            print(f"[ERROR] _generate_and_save_summary 실패: {e}")
 
     # ============================================
     # LangGraph 빌드 (비스트리밍용)

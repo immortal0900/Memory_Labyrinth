@@ -24,24 +24,43 @@
 
 ### 요청 방식 (Body)
 
-| Field | Type | Required | Description |
-| :--- | :--- | :--- | :--- |
-| `dungeonPlayer` | Object | Yes | (통신 프로토콜 기준) 던전 플레이어의 실시간 상태 데이터 |
-| `question` | String | Yes | 사용자의 질문 (예: "현재 방의 불 좀 켜줘") |
-| `targetMonsterIds` | List[int] | No | 히로인 시야에 있는 몬스터 ID 목록 (기본값: `[]`) |
-| `nextRoomId` | Integer | Yes | 히로인이 이동해야 할 다음 방 ID |
+| Field              | Type      | Required | Description                            |
+| :----------------- | :-------- | :------- | :------------------------------------- |
+| `dungeonPlayer`    | Object    | Yes      | 던전 플레이어의 **실시간 상태 데이터**. 아래 필드를 포함합니다. |
+| ├── `playerId`     | Integer   | Yes      | 플레이어 고유 ID                             |
+| ├── `heroineId`    | Integer   | Yes      | 히로인의 고유 ID                             |
+| ├── `currRoomId`   | Integer   | Yes      | 현재 위치한 방 ID                            |
+| ├── `difficulty`   | Integer   | Yes      | 던전 난이도 (디폴트 = 0)                        |
+| ├── `hp`           | Integer   | Yes      | 현재 체력 (디폴트 = 250)                                  |
+| ├── `moveSpeed`    | Float     | Yes      | 이동 속도 배율 (디폴트 = 1.0)                              |
+| ├── `attackSpeed`  | Float     | Yes      | 공격 속도 배율 (디폴트 = 1.0)                              |
+| ├── `weaponId`     | Integer   | Yes      | 장착 중인 무기 ID                            |
+| └── `inventory`    | List[int] | Yes      | 인벤토리에 포함된 아이템 ID 목록                    |
+| `question`         | String    | Yes      | 사용자의 질문 (예: `"현재 방의 불좀 켜줘"`)           |
+| `targetMonsterIds` | List[int] | No       | 히로인 시야에 감지된 몬스터 ID 목록 (기본값: `[]`)      |
+| `nextRoomIds`       | List[int]   | Yes      | 히로인이 이동 가능한 방 ID list (기본값: `[]`)    |
 
 ```json
 {
   "dungeonPlayer": {
     "playerId": 1,
-    "hp": 100,
-    "currentRoomId": 5,
-    "status": "normal"
+    "heroineId": 1,
+    "currRoomId": 1,
+    "difficulty": 0,
+    "hp": 250,
+    "moveSpeed": 1,
+    "attackSpeed": 1,
+    "inventory": [
+      21,
+      42
+    ],
+    "weaponId": 0
   },
-  "question": "방에 불좀 켜줘",
-  "targetMonsterIds": [101, 102],
-  "nextRoomId": 6
+  "question": "현재 방의 불좀 켜줘",
+  "targetMonsterIds": [
+    0
+  ],
+  "nextRoomIds": [0,2]
 }
 ```
 
@@ -66,15 +85,12 @@
 
 | Field | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `dungeonPlayer` | Object | Yes | (통신 프로토콜 기준) 던전 플레이어의 실시간 상태 데이터 |
+| `inventory`    | List[int] | Yes      | 인벤토리에 포함된 아이템 ID 목록                    |
 | `question` | String | Yes | 사용자의 질문 |
 
 ```json
 {
-  "dungeonPlayer": {
-    "playerId": 1,
-    "currentRoomId": 5
-  },
+  "inventory": [21,42],
   "question": "여기 너무 어두워, 불 좀 켜줘"
 }
 ```
@@ -83,7 +99,7 @@
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `roomLight` | Boolean (Optional) | 방 밝기 조절 여부 (`true`: 켜기, `false`: 끄기, `null`: 행동 없음) |
+| `roomLight` | Integer | 방 밝기 조절 여부 (`0`: 행동 없음, `1`: 켜기, `2`: 끄기) |
 | `isCheckNextRoom` | Boolean | 다음 방 확인 필요 여부 (정령 행동 필요 없으면 `false`) |
 | `useItemId` | Integer (Optional) | 사용할 아이템의 ID (`null`: 사용 안 함) |
 

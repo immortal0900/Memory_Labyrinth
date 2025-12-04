@@ -119,23 +119,25 @@ CREATE TABLE IF NOT EXISTS romance_docs (
 -- ============================================
 
 -- 16. 세션 체크포인트 (Redis 백업용)
-CREATE TABLE IF NOT EXISTS session_checkpoints (
+-- 매 대화마다 conversation 저장, 20턴/1시간마다 summary_list 업데이트
+DROP TABLE IF EXISTS session_checkpoints CASCADE;
+CREATE TABLE session_checkpoints (
     id SERIAL PRIMARY KEY,
-    player_id INT NOT NULL,
-    heroine_id INT,
-    session_data JSONB NOT NULL,
-    last_active_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(player_id, heroine_id)
+    user_id INT NOT NULL,
+    npc_id INT NOT NULL,
+    conversation JSONB,
+    summary_list JSONB DEFAULT '[]'::jsonb,
+    state JSONB,
+    last_chat_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_checkpoint_player_heroine ON session_checkpoints(player_id, heroine_id);
-CREATE INDEX IF NOT EXISTS idx_checkpoint_last_active ON session_checkpoints(last_active_at);
+CREATE INDEX IF NOT EXISTS idx_checkpoint_user_npc ON session_checkpoints(user_id, npc_id);
+CREATE INDEX IF NOT EXISTS idx_checkpoint_last_chat ON session_checkpoints(last_chat_at DESC);
 
--- 17. 히로인 시나리오 (벡터 검색용) - 기존 테이블 대체
-DROP TABLE IF EXISTS heroine_scenarios CASCADE;
-CREATE TABLE heroine_scenarios (
+-- 17. 히로인 시나리오 (벡터 검색용) 
+
+CREATE TABLE IF NOT EXISTS heroine_scenarios (
     id SERIAL PRIMARY KEY,
     heroine_id INT NOT NULL,
     memory_progress INT NOT NULL,

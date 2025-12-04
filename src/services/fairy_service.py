@@ -13,16 +13,13 @@ dungeon_graph = dungeon_builder.compile(dungeon_memory)
 async def fairy_dungeon_talk(
     dungeon_player: DungeonPlayerData,
     question: str,
-    targetMonsterIds: List[int],
-    nextRoomId: int,
+    target_monster_ids: List[int],
+    next_room_ids: List[int],
 ) -> str:
     playerId = dungeon_player.playerId
     config = {
         "configurable": {
             "thread_id": playerId,
-            "playerId": playerId,
-            "targetMonsterIds": targetMonsterIds,
-            "nextRoomId": nextRoomId,
         }
     }
     print("여기 왔다")
@@ -30,6 +27,9 @@ async def fairy_dungeon_talk(
         {
             "messages": [add_human_message(content=question)],
             "dungenon_player": dungeon_player,
+            "target_monster_ids": target_monster_ids,
+            "player_id": playerId,
+            "next_room_ids": next_room_ids,
         },
         config=config,
     )
@@ -39,7 +39,6 @@ async def fairy_dungeon_talk(
     result = messages[-1].content
     print(result)
     return result
-
 
 guild_memory = MemorySaver()
 guild_graph = guild_builder.compile(guild_memory)
@@ -74,9 +73,9 @@ async def fairy_guild_talk(
     return result
 
 interaction_graph = interaction_builder.compile()
-def fairy_interaction(dungeon_player: DungeonPlayerData, question: str) -> dict:
+def fairy_interaction(inventory: List[int], question: str) -> dict:
 
-    myInventory = dungeon_player.inventory
+    myInventory = inventory
     response = interaction_graph.invoke(
         {"messages": [add_human_message(question)], "inventory": myInventory}
     )

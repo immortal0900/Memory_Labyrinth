@@ -18,6 +18,7 @@ from typing import List, Optional, Dict, Any
 from langchain_core.messages import HumanMessage
 
 from db.redis_manager import redis_manager
+from db.session_checkpoint_manager import session_checkpoint_manager
 from agents.npc.heroine_agent import heroine_agent
 from agents.npc.sage_agent import sage_agent
 from agents.npc.heroine_heroine_agent import heroine_heroine_agent
@@ -137,34 +138,66 @@ async def background_npc_conversation_loop(player_id: int):
 
 @router.post("/login", response_model=LoginResponse)
 async def login(request: LoginRequest):
-    """게임 로그인시 세션 초기화"""
+    """게임 로그인시 세션 초기화 및 checkpoint 복원"""
     player_id = request.playerId
     scenario_level = request.scenarioLevel
 
     for heroine in request.heroines:
+        checkpoint = session_checkpoint_manager.load_checkpoints(
+            player_id, heroine.heroineId
+        )
+
+        conversation_buffer = []
+        for conv in checkpoint.get("conversations", []):
+            conversation_buffer.append(
+                {"role": "user", "content": conv.get("user", "")}
+            )
+            conversation_buffer.append(
+                {"role": "assistant", "content": conv.get("npc", "")}
+            )
+
         session = {
             "player_id": player_id,
             "npc_id": heroine.heroineId,
             "npc_type": "heroine",
-            "conversation_buffer": [],
+            "conversation_buffer": conversation_buffer[-20:],
             "short_term_summary": "",
+            "summary_list": checkpoint.get("summary_list", []),
+            "turn_count": len(checkpoint.get("conversations", [])),
+            "last_summary_at": None,
             "recent_used_keywords": [],
             "state": {
                 "affection": heroine.affection,
                 "sanity": heroine.sanity,
                 "memoryProgress": heroine.memoryProgress,
-                "emotion": 0,  # neutral
+                "emotion": 0,
             },
+            "last_chat_at": checkpoint.get("last_chat_at"),
         }
         redis_manager.save_session(player_id, heroine.heroineId, session)
+
+    sage_checkpoint = session_checkpoint_manager.load_checkpoints(player_id, 0)
+
+    sage_conversation_buffer = []
+    for conv in sage_checkpoint.get("conversations", []):
+        sage_conversation_buffer.append(
+            {"role": "user", "content": conv.get("user", "")}
+        )
+        sage_conversation_buffer.append(
+            {"role": "assistant", "content": conv.get("npc", "")}
+        )
 
     sage_session = {
         "player_id": player_id,
         "npc_id": 0,
         "npc_type": "sage",
-        "conversation_buffer": [],
+        "conversation_buffer": sage_conversation_buffer[-20:],
         "short_term_summary": "",
-        "state": {"scenarioLevel": scenario_level, "emotion": 0},  # neutral
+        "summary_list": sage_checkpoint.get("summary_list", []),
+        "turn_count": len(sage_checkpoint.get("conversations", [])),
+        "last_summary_at": None,
+        "state": {"scenarioLevel": scenario_level, "emotion": 0},
+        "last_chat_at": sage_checkpoint.get("last_chat_at"),
     }
     redis_manager.save_session(player_id, 0, sage_session)
 
@@ -197,17 +230,20 @@ async def heroine_chat(request: ChatRequest):
         session = heroine_agent._create_initial_session(player_id, heroine_id)
         redis_manager.save_session(player_id, heroine_id, session)
 
+    # 상태 안전하게 가져오기
+    session_state = session.get("state", {})
+
     # LangGraph 상태 구성
     state = {
         "player_id": player_id,
         "npc_id": heroine_id,
         "npc_type": "heroine",
         "messages": [HumanMessage(content=user_message)],
-        "affection": session["state"]["affection"],
-        "sanity": session["state"]["sanity"],
-        "memoryProgress": session["state"]["memoryProgress"],
-        "emotion": session["state"]["emotion"],
-        "conversation_buffer": session["conversation_buffer"],
+        "affection": session_state.get("affection", 0),
+        "sanity": session_state.get("sanity", 100),
+        "memoryProgress": session_state.get("memoryProgress", 0),
+        "emotion": session_state.get("emotion", 0),
+        "conversation_buffer": session.get("conversation_buffer", []),
         "short_term_summary": session.get("short_term_summary", ""),
         "recent_used_keywords": session.get("recent_used_keywords", []),
     }
@@ -251,7 +287,7 @@ async def heroine_chat(request: ChatRequest):
 
 
 @router.post("/heroine/chat/sync", response_model=ChatResponse)
-async def heroine_chat_sync(request: ChatRequest):
+async def heroine_chat_sync(request: ChatRequest, background_tasks: BackgroundTasks):
     """히로인과 대화 (비스트리밍)"""
     player_id = request.playerId
     heroine_id = request.heroineId
@@ -267,17 +303,20 @@ async def heroine_chat_sync(request: ChatRequest):
         session = heroine_agent._create_initial_session(player_id, heroine_id)
         redis_manager.save_session(player_id, heroine_id, session)
 
+    # 상태 안전하게 가져오기
+    session_state = session.get("state", {})
+
     # 상태 구성
     state = {
         "player_id": player_id,
         "npc_id": heroine_id,
         "npc_type": "heroine",
         "messages": [HumanMessage(content=user_message)],
-        "affection": session["state"]["affection"],
-        "sanity": session["state"]["sanity"],
-        "memoryProgress": session["state"]["memoryProgress"],
-        "emotion": session["state"]["emotion"],
-        "conversation_buffer": session["conversation_buffer"],
+        "affection": session_state.get("affection", 0),
+        "sanity": session_state.get("sanity", 100),
+        "memoryProgress": session_state.get("memoryProgress", 0),
+        "emotion": session_state.get("emotion", 0),
+        "conversation_buffer": session.get("conversation_buffer", []),
         "short_term_summary": session.get("short_term_summary", ""),
         "recent_used_keywords": session.get("recent_used_keywords", []),
     }
@@ -285,12 +324,29 @@ async def heroine_chat_sync(request: ChatRequest):
     # 메시지 처리 (LangGraph 전체 파이프라인)
     result = await heroine_agent.process_message(state)
 
+    response_text = result.get("response_text", "")
+    new_state = {
+        "affection": result.get("affection", state["affection"]),
+        "sanity": result.get("sanity", state["sanity"]),
+        "memoryProgress": result.get("memoryProgress", state["memoryProgress"]),
+        "emotion": result.get("emotion", 0),
+    }
+
+    background_tasks.add_task(
+        session_checkpoint_manager.save_checkpoint_background,
+        player_id,
+        heroine_id,
+        user_message,
+        response_text,
+        new_state,
+    )
+
     return ChatResponse(
-        text=result.get("response_text", ""),
-        emotion=result.get("emotion", 0),
-        affection=result.get("affection", session["state"]["affection"]),
-        sanity=result.get("sanity", session["state"]["sanity"]),
-        memoryProgress=result.get("memoryProgress", session["state"]["memoryProgress"]),
+        text=response_text,
+        emotion=new_state["emotion"],
+        affection=new_state["affection"],
+        sanity=new_state["sanity"],
+        memoryProgress=new_state["memoryProgress"],
     )
 
 
@@ -315,15 +371,19 @@ async def sage_chat(request: SageChatRequest):
         session = sage_agent._create_initial_session(player_id, npc_id)
         redis_manager.save_session(player_id, npc_id, session)
 
+    # 상태 안전하게 가져오기
+    session_state = session.get("state", {})
+    scenario_level = session_state.get("scenarioLevel", 1)
+
     # 상태 구성
     state = {
         "player_id": player_id,
         "npc_id": npc_id,
         "npc_type": "sage",
         "messages": [HumanMessage(content=user_message)],
-        "scenarioLevel": session["state"]["scenarioLevel"],
-        "emotion": session["state"]["emotion"],
-        "conversation_buffer": session["conversation_buffer"],
+        "scenarioLevel": scenario_level,
+        "emotion": session_state.get("emotion", 0),
+        "conversation_buffer": session.get("conversation_buffer", []),
         "short_term_summary": session.get("short_term_summary", ""),
     }
 
@@ -348,7 +408,7 @@ async def sage_chat(request: SageChatRequest):
 
         final_data = {
             "type": "final",
-            "scenarioLevel": session["state"]["scenarioLevel"],
+            "scenarioLevel": scenario_level,
             "emotion": 0,  # neutral
             "infoRevealed": False,
         }
@@ -359,7 +419,7 @@ async def sage_chat(request: SageChatRequest):
 
 
 @router.post("/sage/chat/sync", response_model=SageChatResponse)
-async def sage_chat_sync(request: SageChatRequest):
+async def sage_chat_sync(request: SageChatRequest, background_tasks: BackgroundTasks):
     """대현자와 대화 (비스트리밍)"""
     player_id = request.playerId
     user_message = request.text
@@ -370,23 +430,42 @@ async def sage_chat_sync(request: SageChatRequest):
         session = sage_agent._create_initial_session(player_id, npc_id)
         redis_manager.save_session(player_id, npc_id, session)
 
+    # 상태 안전하게 가져오기
+    session_state = session.get("state", {})
+    scenario_level = session_state.get("scenarioLevel", 1)
+
     state = {
         "player_id": player_id,
         "npc_id": npc_id,
         "npc_type": "sage",
         "messages": [HumanMessage(content=user_message)],
-        "scenarioLevel": session["state"]["scenarioLevel"],
-        "emotion": session["state"]["emotion"],
-        "conversation_buffer": session["conversation_buffer"],
+        "scenarioLevel": scenario_level,
+        "emotion": session_state.get("emotion", 0),
+        "conversation_buffer": session.get("conversation_buffer", []),
         "short_term_summary": session.get("short_term_summary", ""),
     }
 
     result = await sage_agent.process_message(state)
 
+    response_text = result.get("response_text", "")
+    new_state = {
+        "scenarioLevel": scenario_level,
+        "emotion": result.get("emotion", 0),
+    }
+
+    background_tasks.add_task(
+        session_checkpoint_manager.save_checkpoint_background,
+        player_id,
+        npc_id,
+        user_message,
+        response_text,
+        new_state,
+    )
+
     return SageChatResponse(
-        text=result.get("response_text", ""),
-        emotion=result.get("emotion", 0),
-        scenarioLevel=session["state"]["scenarioLevel"],
+        text=response_text,
+        emotion=new_state["emotion"],
+        scenarioLevel=new_state["scenarioLevel"],
         infoRevealed=result.get("info_revealed", False),
     )
 

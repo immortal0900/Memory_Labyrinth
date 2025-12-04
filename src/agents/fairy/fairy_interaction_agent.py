@@ -32,7 +32,6 @@ def analyze_intent(state: FairyInteractionState):
     intent_output: FairyInterationIntentOutput = _clarify_intent(last_message)
     return {"intent_types": intent_output.intents}
 
-
 # LLM Call을 한번이라도 줄이기 위해 의도 분석과 함께 병렬 호출 Node
 def create_temp_use_item_id(state: FairyInteractionState):
     last = state["messages"][-1]
@@ -46,7 +45,6 @@ def create_temp_use_item_id(state: FairyInteractionState):
     output: FairyItemUseOutput = parser_llm.invoke(item_use_prompt)
     return {"temp_use_item_id": output.item_id}
 
-
 def create_interation(state: FairyInteractionState):
     intent_types: List[FairyInterationIntentType] = state["intent_types"]
 
@@ -54,17 +52,18 @@ def create_interation(state: FairyInteractionState):
     if FairyInterationIntentType.INVENTORY_ITEM_USE in intent_types:
         item_id = state["temp_use_item_id"]
 
-    is_room_light = None
+    room_light = 0
     if FairyInterationIntentType.LIGHT_ON_ROOM in intent_types:
-        is_room_light = True
+        room_light = 1
+
     if FairyInterationIntentType.LIGHT_OFF_ROOM in intent_types:
-        is_room_light = False
+        room_light = 2
 
     isCheckNextRoom = FairyInterationIntentType.MOVE_NEXT_ROOM in intent_types
-
+    
     return {
         "useItemId": item_id,
-        "roomLight": is_room_light,
+        "roomLight": room_light,
         "isCheckNextRoom": isCheckNextRoom,
     }
 

@@ -172,13 +172,17 @@ class RedisManager:
             "npc_id": npc_id,
             "conversation_buffer": [],  # 최근 대화 목록
             "short_term_summary": "",   # 단기 요약
+            "summary_list": [],         # 요약 목록 (checkpoint용)
+            "turn_count": 0,            # 대화 턴 카운트 (요약 생성 조건용)
+            "last_summary_at": None,    # 마지막 요약 생성 시간
             "state": {
                 "affection": 0,         # 호감도
                 "sanity": 100,          # 정신력
                 "memoryProgress": 0,    # 기억 진척도
                 "emotion": "neutral"    # 현재 감정
             },
-            "last_active_at": datetime.now().isoformat()
+            "last_active_at": datetime.now().isoformat(),
+            "last_chat_at": None        # 마지막 대화 시간 (시간 차이 계산용)
         }
     
     def is_session_expired(self, session_data: Dict[str, Any], hours: int = 1) -> bool:

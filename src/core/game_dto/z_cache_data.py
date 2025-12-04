@@ -103,25 +103,25 @@ items = [
         )
     ),
 
-    ItemData(itemId=24, itemName="나무쌍지갑", itemType=2, rarity=0,
+    ItemData(itemId=20, itemName="나무젓가락", itemType=2, rarity=0,
         weapon=WeaponData(
-            weaponId=24, weaponType=2, weaponName="나무쌍지갑",
+            weaponId=20, weaponType=2, weaponName="나무젓가락",
             rarity=0, attackPower=8, staggerPower=1,
             modifier={"strength": 0.3, "dexterity": 0.55, "intelligence": 0.15}
         )
     ),
 
-    ItemData(itemId=21, itemName="플라스틱쌍지갑", itemType=2, rarity=1,
+    ItemData(itemId=21, itemName=" 플라스틱젓가락", itemType=2, rarity=1,
         weapon=WeaponData(
-            weaponId=21, weaponType=2, weaponName="플라스틱쌍지갑",
+            weaponId=21, weaponType=2, weaponName=" 플라스틱젓가락",
             rarity=1, attackPower=11, staggerPower=1,
             modifier={"strength": 0.3, "dexterity": 0.55, "intelligence": 0.15}
         )
     ),
 
-    ItemData(itemId=22, itemName="쇠쌍지갑", itemType=2, rarity=2,
+    ItemData(itemId=22, itemName="쇠젓가락", itemType=2, rarity=2,
         weapon=WeaponData(
-            weaponId=22, weaponType=2, weaponName="쇠쌍지갑",
+            weaponId=22, weaponType=2, weaponName="쇠젓가락",
             rarity=2, attackPower=13, staggerPower=1,
             modifier={"strength": 0.3, "dexterity": 0.55, "intelligence": 0.15}
         )

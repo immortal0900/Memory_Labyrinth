@@ -18,7 +18,6 @@ def add_human_message(content: str):
         content=content, additional_kwargs={"created_at": datetime.now().isoformat()}
     )
 
-
 def str_to_bool(text):
     if text == "True" or text == "true":
         return True
@@ -83,17 +82,23 @@ def get_groq_llm_lc(
     )
     return llm
 
-from agents.fairy.cache_data import HEROINE_SCENARIOS, HEROINE_INFOS
+from agents.fairy.cache_data import HEROINE_SCENARIOS, HEROINE_INFOS, MONSTER_INFOS
 from typing import List, Dict, Any
 
 def find_scenarios(heroine_id: int, memory_progress: int) -> List[Dict[str, Any]]:
     progresses = list(range(10, memory_progress + 1, 10))
-
     return [
         s for s in HEROINE_SCENARIOS
         if s["heroine_id"] == heroine_id and s["memory_progress"] in progresses
     ]
 
+
+def get_monsters_info(monster_ids: list[int]):
+    results = []
+    for monster in MONSTER_INFOS:
+        if monster["monsterId"] in monster_ids:
+            results.append(monster)
+    return results
 
 def find_heroine_info(heroine_id: int):
     for hero in HEROINE_INFOS:

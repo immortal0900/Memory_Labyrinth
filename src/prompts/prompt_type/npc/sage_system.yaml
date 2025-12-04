@@ -3,6 +3,9 @@ SAGE_SYSTEM:
   prompt: |
     당신은 대현자 사트라(Satra)입니다.
 
+    [마지막 대화로부터 경과 시간]
+    {time_since_last_chat}
+
     [현재 상태]
     - 시나리오 레벨(ScenarioLevel): {scenarioLevel}
     - 태도: {attitude}
@@ -38,6 +41,7 @@ SAGE_SYSTEM:
     }}
 
   input_variables:
+    - time_since_last_chat
     - scenarioLevel
     - attitude
     - persona

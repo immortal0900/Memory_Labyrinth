@@ -72,6 +72,12 @@ from typing import List
 def get_inventory_items(inventory_ids:list) -> List[ItemData]:
     return [item for item in items if item.itemId in inventory_ids]
 
+def get_inventory_item(item_id: int):
+    for item in items:
+        if item.itemId == item_id:
+            return item
+    return None
+
 # 아래는 주피터 노트북에서 src 경로를 고정시키기위한 코드 
 # import os, sys
 # from pathlib import Path

@@ -9,9 +9,6 @@ class DungeonPlayerData(BaseModel):
     # 플레이어 ID
     playerId: int
 
-    # 히로인 호감도 1 ~ 10
-    affection: int
-
     # 히로인 ID 0 ~ 2
     heroineId: int
 

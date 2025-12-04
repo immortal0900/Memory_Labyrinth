@@ -23,6 +23,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 
 from db.redis_manager import redis_manager
 from db.mem0_manager import mem0_manager
+from db.session_checkpoint_manager import session_checkpoint_manager
 from agents.npc.npc_state import NPCState
 
 
@@ -208,6 +209,28 @@ class BaseNPCAgent(ABC):
             formatted.append(f"{role}: {msg['content']}")
         
         return "\n".join(formatted)
+    
+    def get_time_since_last_chat(self, player_id: int, npc_id: int) -> str:
+        """마지막 대화로부터 경과 시간 계산
+        
+        프롬프트에 삽입할 시간 정보를 반환합니다.
+        
+        Args:
+            player_id: 플레이어 ID
+            npc_id: NPC ID
+        
+        Returns:
+            한국어로 변환된 시간 문자열 (예: "2시간 30분 전")
+        """
+        session = redis_manager.load_session(player_id, npc_id)
+        
+        if session:
+            last_chat_at = session.get("last_chat_at")
+            if last_chat_at:
+                return session_checkpoint_manager.calculate_time_diff(last_chat_at)
+        
+        last_chat_at = session_checkpoint_manager.get_last_chat_at(player_id, npc_id)
+        return session_checkpoint_manager.calculate_time_diff(last_chat_at)
     
     # ============================================
     # 추상 메서드 (서브클래스에서 구현 필수)

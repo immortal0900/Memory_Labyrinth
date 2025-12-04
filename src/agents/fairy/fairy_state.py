@@ -1,8 +1,8 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, TypedDict
 from enum import StrEnum
-from core.game_dto.DungeonPlayerData import DungeonPlayerData
 from langgraph.graph import MessagesState
+from core.game_dto.WeaponData import WeaponData
 
 class FairyState(TypedDict):
     player_id:Optional[str]
@@ -11,6 +11,18 @@ class FairyState(TypedDict):
     answer:Optional[str]
 
 # ==== START 던전 =====
+
+class DungeonPlayerState(BaseModel):
+    playerId: int
+    heroineId: int
+    currRoomId: int
+    difficulty: int 
+    hp: int = 250,
+    moveSpeed: float = 1,
+    attackSpeed: float = 1.0,
+    weapon: Optional[WeaponData] = None
+    inventory: List[int] = []
+
 class FairyDungeonIntentType(StrEnum):
     MONSTER_GUIDE = "MONSTER_GUIDE"
     EVENT_GUIDE = "EVENT_GUIDE"
@@ -27,8 +39,10 @@ class FairyDungeonIntentOutput(BaseModel):
 
 class FairyDungeonState(MessagesState):
     intent_types: List[FairyDungeonIntentType] = []
-    dungenon_player: Optional[DungeonPlayerData] = None
-    targetMonsterIds: List[int] = []
+    dungenon_player: Optional[DungeonPlayerState] = None
+    target_monster_ids: List[int] = []
+    player_id:Optional[int] = None
+    next_room_ids: List[int] = []
     is_multi_small_talk: bool = False
 
 class FairyInterationIntentType(StrEnum):
@@ -45,7 +59,8 @@ class FairyInterationIntentOutput(BaseModel):
 
 class FairyInteractionState(MessagesState):
     inventory: List[int] = []
-    roomLight: Optional[bool] = None
+    # 0 은 미행동, 1은 불키기, 2은 불끄기
+    roomLight: int = 0
     isCheckNextRoom: bool = False
     useItemId: Optional[int] = None
     intent_types: List[FairyInterationIntentType]

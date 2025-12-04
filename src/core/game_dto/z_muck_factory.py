@@ -64,20 +64,20 @@ class MockFactory:
             activeSkillLevel=random.randint(1, 4)
         )
 
+    # 디폴트는 레어 쌍검 기준으로 맞춤
     @staticmethod
     def create_weapon():
         return WeaponData(
-            weaponType=random.randint(0, 3),
-            rarity=random.randint(0, 3),
-            attackPower=random.randint(20, 60),
-            modifier={"strength": 0.5, "dexterity": 0.3}
+            weaponId=22, weaponType=2, weaponName="레어 쌍검",
+            rarity=2, attackPower=11, staggerPower=1,
+            modifier={"strength": 0.1, "dexterity": 0.8, "intelligence": 0.1}
         )
 
     @staticmethod
     def create_dungeon_player(player_id: int):
         return DungeonPlayerData(
             playerId=player_id,
-            heroineId=random.randint(0, 2),
+            heroineId=random.randint(1, 3),
             affection=random.randint(1, 10),
             sanity=random.randint(0, 100),
             scenarioLevel=random.randint(1, 10),

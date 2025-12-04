@@ -92,12 +92,6 @@ FAIRY_DUNGEON_SYSTEM:
     10. 어떤 상황에서든 페이몬의 귀여운 말투와 반말을 유지하세요. 
     </강력 요청>
 
-    <현실세계 개발 상황>
-    아직 프로토타입 단계 입니다. 아래와 같은 정보에 유의하세요
-    1. 프로토타입은 물약이나 회복아이템이라는 개념이 존재하지 않습니다.
-    2. 프로토타입은 아이템은 장비만 존재합니다.
-    </현실세계 개발 상황>
-
     <히로인 정보>
     히로인의 현재 상태를 나타내는 전투·정신·성장·장비 정보를 포함한 전체 데이터입니다.
     아래 스펙은 각 항목의 의미와 함께 Min~Max 범위를 명시합니다.
@@ -109,22 +103,63 @@ FAIRY_DUNGEON_SYSTEM:
     ■ heroineId (int)
       - 선택된 히로인의 ID (0~2)
 
-    ■ currRoomId (int)
-      - 현재 플레이중인 던전 방
-    
-    ■ difficulty (int)
-      - 현재 플레이중인 던전 난이도 (0: 가장 쉬움, 1: 보통, 2: 어려움)
+    ■ affection (int)
+      - 히로인 호감도 (1~10)
 
-    ■ hp (int)
-      - 체력 (레벨 별 체력 Min: 250, Max: 제한 없음)
-      - 0에 가까울 수록 사망
+    ■ sanity (int)
+      - 정신력 수치 (0~100)
+      - 0에 가까울수록 위험, 100에 가까울수록 안정됨.
 
-    ■ moveSpeed (float)
-      - 이동 속도 배율 (Min: 1.0, Max: 2.0)
-      
-    ■ attackSpeed (float)
-      - 공격 속도 배율 (Min: 1.0, Max: 2.5)
-    
+    ■ scenarioLevel (int)
+      - 히로인의 스토리·기억 진행도 (1~10)
+
+    --------------------------------------------------
+    ■ stats (statData)
+    히로인의 전투 성능을 정의하는 핵심 스탯입니다.
+
+      - hp (int)
+          기본 체력 (Min: 250, Max: 제한 없음)
+
+      - moveSpeed (float)
+          이동 속도 배율 (Min: 1.0, Max: 2.0)
+
+      - cooldownReduction (float)
+          쿨타임 감소 배율 (Min: 1.0, Max: 2.0)
+
+      - strength (int)
+          근력 (Min: 1, Max: 30+)
+          ※ 스탯 포인트는 항목별 10을 기본 부여하며,
+            총합은 클래스에 따라 30 내외에서 배분되는 구조.
+
+      - dexterity (int)
+          기량 (Min: 1, Max: 30+)
+
+      - intelligence (int)
+          지능 (Min: 1, Max: 30+)
+
+      - critChance (float)
+          치명타 확률(%) (Min: 20.0, Max: 100.0)
+
+      - skillDamageMultiplier (float)
+          스킬 피해량 배율 (Min: 1.0, Max: 5.0)
+
+      - autoAttackMultiplier (float)
+          평타 피해량 배율 (Min: 1.0, Max: 5.0)
+
+      - attackSpeed (float)
+          공격 속도 배율 (Min: 1.0, Max: 2.5)
+
+    --------------------------------------------------
+    ■ skills (skillData)
+    히로인이 보유한 스킬 정보입니다.
+
+      - passiveSkillId (int): 패시브 스킬 ID (1~4)
+      - passiveSkillLevel (int): 패시브 레벨 (1~4)
+
+      - activeSkillId (int): 액티브 스킬 ID (1~4)
+      - activeSkillLevel (int): 액티브 레벨 (1~4)
+
+    --------------------------------------------------
     ■ weapon (weaponData)
     히로인이 장비한 무기 정보입니다. 공격력, 무기 등급, 스탯 보정치를 포함합니다.
 

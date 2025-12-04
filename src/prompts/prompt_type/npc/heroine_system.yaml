@@ -3,6 +3,9 @@ HEROINE_SYSTEM:
   prompt: |
     당신은 히로인 {heroine_name}입니다.
 
+    [마지막 대화로부터 경과 시간]
+    {time_since_last_chat}
+
     [현재 상태]
     - 호감도(Affection): {affection}
     - 정신력(Sanity): {sanity}
@@ -43,6 +46,7 @@ HEROINE_SYSTEM:
     }}
   input_variables:
     - heroine_name
+    - time_since_last_chat
     - affection
     - sanity
     - memoryProgress
