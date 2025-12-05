@@ -30,12 +30,13 @@ class MonsterData:
 
 
 # ===== 몬스터 데이터베이스 =====
+# 프로토타입용: 일반 몬스터 1종, 보스 몬스터 1종만 존재
 MONSTER_DATABASE: Dict[int, MonsterData] = {
-    # 스켈레톤
-    0: MonsterData(
-        monster_id=0,
+    # 일반 몬스터 (Job Monster)
+    1: MonsterData(
+        monster_id=1,
         monster_type=0,  # 일반
-        monster_name="스켈레톤",
+        monster_name="일반 몬스터",
         hp=300,
         speed=350,
         attack=10,
@@ -45,34 +46,19 @@ MONSTER_DATABASE: Dict[int, MonsterData] = {
         weaknesses=None,
         strengths=None,
     ),
-    # 슬라임
-    1: MonsterData(
-        monster_id=1,
-        monster_type=0,  # 일반
-        monster_name="슬라임",
-        hp=250,
-        speed=200,
-        attack=10,
-        attack_speed=1.0,
-        attack_range=100.0,
-        stagger_gage=5,
-        weaknesses=None,
-        strengths=None,
-    ),
-    # TODO: 더 많은 몬스터 추가
-    # 보스 몬스터 예시
-    100: MonsterData(
-        monster_id=100,
+    # 보스 몬스터
+    2: MonsterData(
+        monster_id=2,
         monster_type=2,  # 보스
-        monster_name="던전 보스",
+        monster_name="보스 몬스터",
         hp=1000,
         speed=300,
         attack=50,
         attack_speed=1.5,
         attack_range=150.0,
         stagger_gage=50,
-        weaknesses=[1, 3],  # 예시
-        strengths=[2],  # 예시
+        weaknesses=None,
+        strengths=None,
     ),
 }
 

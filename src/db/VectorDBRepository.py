@@ -8,8 +8,11 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from db.config import CONNECTION_URL, DBCollectionName
 from enums.EmbeddingModel import EmbeddingModel
 
+
 class VectorDBRepository:
-    def __init__(self, collection_name: DBCollectionName, embedding_model: EmbeddingModel = None):
+    def __init__(
+        self, collection_name: DBCollectionName, embedding_model: EmbeddingModel = None
+    ):
         """
         초기화 메서드
         :param collection_name: 작업할 테이블 이름 (DBCollectionName Enum 사용)
@@ -17,10 +20,10 @@ class VectorDBRepository:
         """
         self.collection_name = collection_name
         self.db_url = CONNECTION_URL
-        
+
         # 일반 DB 작업용 엔진 생성
         self.engine = create_engine(self.db_url)
-        
+
         # RAG용 벡터 저장소 (모델이 지정된 경우에만 생성)
         self.store = None
         if embedding_model:
@@ -49,7 +52,6 @@ class VectorDBRepository:
 
         raise ValueError(f"지원하지 않는 임베딩 모델입니다: {model}")
 
-
     def add_documents(self, docs: List[Document]):
         """문서(텍스트)를 벡터로 변환하여 저장합니다."""
         if not self.store:
@@ -58,7 +60,7 @@ class VectorDBRepository:
 
     def search(self, query: str, k=5):
         return self.store.similarity_search(query, k=k)
-    
+
     def resolve_embedding(model: EmbeddingModel):
         """모델 Enum → 실제 Embedding 객체로 변환"""
 
