@@ -146,7 +146,7 @@ class SessionCheckpointManager:
             sql = text(
                 """
                 UPDATE session_checkpoints
-                SET summary_list = summary_list || :summary_item::jsonb
+                SET summary_list = summary_list || CAST(:summary_item AS jsonb)
                 WHERE user_id = :user_id AND npc_id = :npc_id
                 AND id = (
                     SELECT id FROM session_checkpoints

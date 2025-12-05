@@ -289,6 +289,10 @@ async def heroine_chat(request: ChatRequest):
 @router.post("/heroine/chat/sync", response_model=ChatResponse)
 async def heroine_chat_sync(request: ChatRequest, background_tasks: BackgroundTasks):
     """히로인과 대화 (비스트리밍)"""
+    import time
+
+    api_start = time.time()
+
     player_id = request.playerId
     heroine_id = request.heroineId
     user_message = request.text
@@ -298,10 +302,12 @@ async def heroine_chat_sync(request: ChatRequest, background_tasks: BackgroundTa
         redis_manager.stop_npc_conversation(player_id)
 
     # 세션 로드
+    t_session = time.time()
     session = redis_manager.load_session(player_id, heroine_id)
     if session is None:
         session = heroine_agent._create_initial_session(player_id, heroine_id)
         redis_manager.save_session(player_id, heroine_id, session)
+    print(f"[TIMING] Redis 세션 로드: {time.time() - t_session:.3f}s")
 
     # 상태 안전하게 가져오기
     session_state = session.get("state", {})
@@ -322,7 +328,9 @@ async def heroine_chat_sync(request: ChatRequest, background_tasks: BackgroundTa
     }
 
     # 메시지 처리 (LangGraph 전체 파이프라인)
+    t_process = time.time()
     result = await heroine_agent.process_message(state)
+    print(f"[TIMING] LangGraph 파이프라인 총합: {time.time() - t_process:.3f}s")
 
     response_text = result.get("response_text", "")
     new_state = {
@@ -341,6 +349,9 @@ async def heroine_chat_sync(request: ChatRequest, background_tasks: BackgroundTa
         new_state,
     )
 
+    print(
+        f"[TIMING] === API 총 소요시간 (heroine_chat_sync): {time.time() - api_start:.3f}s ==="
+    )
     return ChatResponse(
         text=response_text,
         emotion=new_state["emotion"],
@@ -421,14 +432,20 @@ async def sage_chat(request: SageChatRequest):
 @router.post("/sage/chat/sync", response_model=SageChatResponse)
 async def sage_chat_sync(request: SageChatRequest, background_tasks: BackgroundTasks):
     """대현자와 대화 (비스트리밍)"""
+    import time
+
+    api_start = time.time()
+
     player_id = request.playerId
     user_message = request.text
     npc_id = 0
 
+    t_session = time.time()
     session = redis_manager.load_session(player_id, npc_id)
     if session is None:
         session = sage_agent._create_initial_session(player_id, npc_id)
         redis_manager.save_session(player_id, npc_id, session)
+    print(f"[TIMING] Redis 세션 로드: {time.time() - t_session:.3f}s")
 
     # 상태 안전하게 가져오기
     session_state = session.get("state", {})
@@ -445,7 +462,9 @@ async def sage_chat_sync(request: SageChatRequest, background_tasks: BackgroundT
         "short_term_summary": session.get("short_term_summary", ""),
     }
 
+    t_process = time.time()
     result = await sage_agent.process_message(state)
+    print(f"[TIMING] LangGraph 파이프라인 총합: {time.time() - t_process:.3f}s")
 
     response_text = result.get("response_text", "")
     new_state = {
@@ -462,6 +481,9 @@ async def sage_chat_sync(request: SageChatRequest, background_tasks: BackgroundT
         new_state,
     )
 
+    print(
+        f"[TIMING] === API 총 소요시간 (sage_chat_sync): {time.time() - api_start:.3f}s ==="
+    )
     return SageChatResponse(
         text=response_text,
         emotion=new_state["emotion"],

@@ -301,7 +301,7 @@ class HeroineAgent(BaseNPCAgent):
 
 [분류 기준]
 - general: 일상 대화, 감정 표현, 질문 없는 대화
-- memory_recall: 플레이어와 히로인이 함께 나눈 과거 대화/경험을 물어봄
+- memory_recall: "우리 전에 뭐 얘기했지?", "나 기억해?" 등 플레이어와 히로인이 함께 나눈 과거 대화/경험을 물어봄
 - scenario_inquiry: 히로인의 과거, 기억 상실 전 이야기, 비밀, 정체성에 대해 물어봄
 
 반드시 general, memory_recall, scenario_inquiry 중 하나만 출력하세요."""
@@ -316,11 +316,10 @@ class HeroineAgent(BaseNPCAgent):
         return intent
 
     async def _retrieve_memory(self, state: HeroineState) -> str:
-        """기억 검색 (User-NPC + NPC-NPC 모두)
+        """기억 검색
 
-        1. Mem0에서 User-NPC 대화 기억 검색
-        2. agent_memories에서 NPC-NPC 대화 검색
-        3. agent_memories에서 다른 NPC에 대한 기억 검색
+        1. Mem0에서 플레이어-NPC 대화 기억 검색 (항상)
+        2. 다른 히로인 이름 언급시 NPC-NPC 대화 검색
 
         Args:
             state: 현재 상태
@@ -334,7 +333,7 @@ class HeroineAgent(BaseNPCAgent):
 
         facts_parts = []
 
-        # 1. Mem0에서 User-NPC 대화 기억 검색
+        # 1. Mem0에서 플레이어-NPC 대화 기억 검색
         user_memories = mem0_manager.search_memory(
             player_id, npc_id, user_message, limit=3
         )
@@ -344,32 +343,19 @@ class HeroineAgent(BaseNPCAgent):
                 memory_text = m.get("memory", m.get("text", ""))
                 facts_parts.append(f"- {memory_text}")
 
-        # 2. NPC-NPC 대화 검색
-        other_heroine_ids = [h for h in [1, 2, 3] if h != npc_id]
+        # 2. 다른 히로인 이름 언급시 NPC-NPC 대화 검색
+        other_heroine_names = ["레티아", "루파메스", "로코"]
+        mentioned = any(name in user_message for name in other_heroine_names)
 
-        npc_conversations = heroine_heroine_agent.search_conversations(
-            heroine_id=npc_id, query=user_message, top_k=2
-        )
-
-        if npc_conversations:
-            facts_parts.append("\n[다른 히로인과의 대화 기억]")
-            for conv in npc_conversations:
-                content_preview = conv["content"][:200]
-                facts_parts.append(f"- {content_preview}...")
-
-        # 3. 다른 NPC에 대한 개별 기억 검색
-        for other_id in other_heroine_ids:
-            agent_id = f"npc_{npc_id}_about_{other_id}"
-            npc_memories = agent_memory_manager.search_memories(
-                agent_id=agent_id, query=user_message, top_k=1, memory_type="npc_memory"
+        if mentioned:
+            npc_conversations = heroine_heroine_agent.search_conversations(
+                heroine_id=npc_id, query=user_message, top_k=2
             )
-            if npc_memories:
-                other_persona = self._get_persona(other_id)
-                facts_parts.append(
-                    f"\n[{other_persona.get('name', '다른 히로인')}에 대한 기억]"
-                )
-                for mem in npc_memories:
-                    facts_parts.append(f"- {mem.content}")
+            if npc_conversations:
+                facts_parts.append("\n[다른 히로인과의 대화 기억]")
+                for conv in npc_conversations:
+                    content_preview = conv["content"][:200]
+                    facts_parts.append(f"- {content_preview}...")
 
         return "\n".join(facts_parts) if facts_parts else "관련 기억 없음"
 
@@ -413,15 +399,25 @@ class HeroineAgent(BaseNPCAgent):
         Returns:
             컨텍스트 딕셔너리 (affection_delta, used_liked_keyword, intent, retrieved_facts, unlocked_scenarios)
         """
+        import time
+
+        total_start = time.time()
+
         # 1. 키워드 분석
+        t1 = time.time()
         affection_delta, used_keyword = await self._analyze_keywords(state)
+        print(f"[TIMING] 키워드 분석: {time.time() - t1:.3f}s")
 
         # 2. 의도 분류
+        t2 = time.time()
         intent = await self._classify_intent(state)
+        print(f"[TIMING] 의도 분류: {time.time() - t2:.3f}s")
+
         user_message = state["messages"][-1].content
         print(f"[DEBUG] 의도 분류 결과: {intent}")
 
         # 3. 시나리오 관련 키워드 확인 (의도 분류 보완)
+        """
         scenario_keywords = [
             "고향",
             "과거",
@@ -439,26 +435,31 @@ class HeroineAgent(BaseNPCAgent):
         if has_scenario_keyword and intent != "scenario_inquiry":
             intent = "scenario_inquiry"
             print(f"[DEBUG] 키워드 감지로 의도 변경: scenario_inquiry")
-
+        """
         # 4. 의도에 따른 검색
         retrieved_facts = "없음"
         unlocked_scenarios = "없음"
 
         if intent == "memory_recall":
             # 기억 회상 -> Mem0 + NPC간 기억 검색
+            t3 = time.time()
             retrieved_facts = await self._retrieve_memory(state)
+            print(f"[TIMING] 기억 검색: {time.time() - t3:.3f}s")
             print(
                 f"[DEBUG] 기억 검색 결과: {retrieved_facts[:200] if retrieved_facts else 'None'}..."
             )
         elif intent == "scenario_inquiry":
             # 시나리오 질문 -> 시나리오 DB 검색
+            t3 = time.time()
             unlocked_scenarios = await self._retrieve_scenario(state)
+            print(f"[TIMING] 시나리오 검색: {time.time() - t3:.3f}s")
             print(
                 f"[DEBUG] 시나리오 검색 결과: {unlocked_scenarios[:200] if unlocked_scenarios else 'None'}..."
             )
         else:
             print(f"[DEBUG] general 의도 - 검색 안 함")
 
+        print(f"[TIMING] 컨텍스트 준비 총합: {time.time() - total_start:.3f}s")
         return {
             "affection_delta": affection_delta,
             "used_liked_keyword": used_keyword,
@@ -783,16 +784,25 @@ class HeroineAgent(BaseNPCAgent):
 
     async def _keyword_analyze_node(self, state: HeroineState) -> dict:
         """키워드 분석 노드"""
+        import time
+
+        t = time.time()
         affection_delta, used_keyword = await self._analyze_keywords(state)
+        print(f"[TIMING] 키워드 분석: {time.time() - t:.3f}s")
         return {"affection_delta": affection_delta, "used_liked_keyword": used_keyword}
 
     async def _router_node(self, state: HeroineState) -> dict:
         """의도 분류 노드"""
+        import time
+
+        t = time.time()
         intent = await self._classify_intent(state)
+        print(f"[TIMING] 의도 분류: {time.time() - t:.3f}s")
         user_message = state["messages"][-1].content
         print(f"[DEBUG] 의도 분류 결과: {intent}")
 
         # 시나리오 관련 키워드 확인 (의도 분류 보완)
+        """
         scenario_keywords = [
             "고향",
             "과거",
@@ -811,7 +821,7 @@ class HeroineAgent(BaseNPCAgent):
         if has_scenario_keyword and intent != "scenario_inquiry":
             intent = "scenario_inquiry"
             print(f"[DEBUG] 키워드 감지로 의도 변경: scenario_inquiry")
-
+        """
         return {"intent": intent}
 
     def _route_by_intent(self, state: HeroineState) -> str:
@@ -820,12 +830,20 @@ class HeroineAgent(BaseNPCAgent):
 
     async def _memory_retrieve_node(self, state: HeroineState) -> dict:
         """기억 검색 노드"""
+        import time
+
+        t = time.time()
         facts = await self._retrieve_memory(state)
+        print(f"[TIMING] 기억 검색: {time.time() - t:.3f}s")
         return {"retrieved_facts": facts}
 
     async def _scenario_retrieve_node(self, state: HeroineState) -> dict:
         """시나리오 DB 검색 노드"""
+        import time
+
+        t = time.time()
         scenarios = await self._retrieve_scenario(state)
+        print(f"[TIMING] 시나리오 검색: {time.time() - t:.3f}s")
         print(
             f"[DEBUG] 시나리오 검색 결과: {scenarios[:200] if scenarios else 'None'}..."
         )
@@ -833,6 +851,10 @@ class HeroineAgent(BaseNPCAgent):
 
     async def _generate_node(self, state: HeroineState) -> dict:
         """응답 생성 노드"""
+        import time
+
+        total_start = time.time()
+
         # 컨텍스트 구성
         context = {
             "affection_delta": state.get("affection_delta", 0),
@@ -844,8 +866,13 @@ class HeroineAgent(BaseNPCAgent):
         )
 
         # 프롬프트 생성 및 LLM 호출
+        t1 = time.time()
         prompt = self._build_full_prompt(state, context, for_streaming=False)
+        print(f"[TIMING] 프롬프트 빌드: {time.time() - t1:.3f}s")
+
+        t2 = time.time()
         response = await self.llm.ainvoke(prompt)
+        print(f"[TIMING] LLM 호출: {time.time() - t2:.3f}s")
 
         # JSON 파싱
         try:
@@ -859,6 +886,7 @@ class HeroineAgent(BaseNPCAgent):
             result = {"thought": "", "text": response.content, "emotion": "neutral"}
 
         emotion_str = result.get("emotion", "neutral")
+        print(f"[TIMING] generate 노드 총합: {time.time() - total_start:.3f}s")
         return {
             "response_text": result.get("text", ""),
             "emotion": heroine_emotion_to_int(emotion_str),
@@ -867,6 +895,10 @@ class HeroineAgent(BaseNPCAgent):
 
     async def _post_process_node(self, state: HeroineState) -> dict:
         """후처리 노드 - 상태 업데이트"""
+        import time
+
+        t = time.time()
+
         context = {
             "affection_delta": state.get("affection_delta", 0),
             "used_liked_keyword": state.get("used_liked_keyword"),
@@ -879,6 +911,7 @@ class HeroineAgent(BaseNPCAgent):
             state.get("emotion", 0),
         )
 
+        print(f"[TIMING] 상태 업데이트: {time.time() - t:.3f}s")
         return {
             "affection": result["affection"],
             "sanity": result["sanity"],
@@ -915,24 +948,39 @@ class HeroineAgent(BaseNPCAgent):
         Yields:
             응답 토큰
         """
+        import time
+
+        total_start = time.time()
+
         # 1. 컨텍스트 준비 (기억/시나리오 검색)
         context = await self._prepare_context(state)
 
         # 2. 전체 프롬프트 생성 (비스트리밍과 동일한 컨텍스트)
+        t1 = time.time()
         prompt = self._build_full_prompt(state, context, for_streaming=True)
+        print(f"[TIMING] 프롬프트 빌드: {time.time() - t1:.3f}s")
 
         # 3. 스트리밍으로 응답 생성 (LLM 1번만 호출)
+        t2 = time.time()
+        first_token = True
         full_response = ""
         async for chunk in self.streaming_llm.astream(prompt):
             if chunk.content:
+                if first_token:
+                    print(f"[TIMING] LLM 첫 토큰: {time.time() - t2:.3f}s")
+                    first_token = False
                 full_response += chunk.content
                 yield chunk.content
+        print(f"[TIMING] LLM 전체 응답: {time.time() - t2:.3f}s")
 
         # 4. 상태 업데이트 (LLM 재호출 없이)
         # 스트리밍에서는 emotion 추출 불가, 기본값 사용
+        t3 = time.time()
         await self._update_state_after_response(
             state, context, full_response, 0  # neutral
         )
+        print(f"[TIMING] 상태 업데이트: {time.time() - t3:.3f}s")
+        print(f"[TIMING] === 총 소요시간: {time.time() - total_start:.3f}s ===")
 
 
 # 싱글톤 인스턴스 (앱 전체에서 하나만 사용)

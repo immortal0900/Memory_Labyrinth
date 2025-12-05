@@ -10,6 +10,8 @@ import uvicorn
 
 from api.npc_router import router as npc_router
 from api.fairy_router import router as fairy_router
+from api.dungeon_router import router as dungeon_router
+from db.RDBRepository import RDBRepository
 
 # FastAPI 앱 생성
 app = FastAPI(
@@ -30,6 +32,7 @@ app.add_middleware(
 # 라우터 등록
 app.include_router(npc_router)
 app.include_router(fairy_router)
+app.include_router(dungeon_router)
 
 
 @app.get("/")

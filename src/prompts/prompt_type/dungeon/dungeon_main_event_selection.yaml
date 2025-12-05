@@ -1,0 +1,35 @@
+DUNGEON_MAIN_EVENT_SELECTION:
+  name: dungeon_main_event_selection
+  prompt: |
+    당신은 던전 이벤트 선택 시스템입니다.
+    
+    주어진 조건에 맞는 이벤트를 선택하세요.
+    
+    <조건>
+    - 현재 층: {current_floor}
+    - 히로인 정보: {heroine_data}
+    - 히로인 기억 진척도: {memory_progress}
+    - 사용 가능한 이벤트: {available_events}
+    - 이전에 사용한 이벤트: {used_events}
+    </조건>
+    
+    <선택 기준>
+    1. 중복 방지: 이전에 사용한 이벤트는 가능한 피하세요.
+    2. 난이도 조절: 층수가 높을수록 더 도전적이거나 심리적으로 복잡한 이벤트를 우선하세요.
+    3. 히로인 연계: 히로인의 기억 진척도가 높을수록 개별 이벤트(is_personal=True)를 선택할 가치가 있습니다.
+    4. 다양성: 같은 유형의 이벤트가 연속되지 않도록 하세요.
+    </선택 기준>
+    
+    가장 적합한 이벤트 하나를 선택하고, 그 이유를 간단히 설명하세요.
+    
+    <출력 형식>
+    - selected_event_code: 선택한 이벤트의 event_code
+    - reason: 선택 이유 (1~2문장)
+    </출력 형식>
+  
+  input_variables:
+    - "current_floor"
+    - "heroine_data"
+    - "memory_progress"
+    - "available_events"
+    - "used_events"

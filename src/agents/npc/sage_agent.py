@@ -347,16 +347,25 @@ class SageAgent(BaseNPCAgent):
         Returns:
             컨텍스트 딕셔너리 (intent, unlocked_scenarios)
         """
+        import time
+
+        total_start = time.time()
+
         # 1. 의도 분류
+        t1 = time.time()
         intent = await self._classify_intent(state)
+        print(f"[TIMING] 의도 분류: {time.time() - t1:.3f}s")
 
         # 2. 의도에 따른 검색
         unlocked_scenarios = "없음"
 
         if intent in ["worldview_inquiry", "player_inquiry"]:
             # 세계관 또는 플레이어 질문 -> 시나리오 DB 검색
+            t2 = time.time()
             unlocked_scenarios = await self._retrieve_scenario(state)
+            print(f"[TIMING] 시나리오 검색: {time.time() - t2:.3f}s")
 
+        print(f"[TIMING] 컨텍스트 준비 총합: {time.time() - total_start:.3f}s")
         return {"intent": intent, "unlocked_scenarios": unlocked_scenarios}
 
     def _build_full_prompt(
@@ -637,7 +646,11 @@ class SageAgent(BaseNPCAgent):
 
     async def _router_node(self, state: SageState) -> dict:
         """의도 분류 노드"""
+        import time
+
+        t = time.time()
         intent = await self._classify_intent(state)
+        print(f"[TIMING] 의도 분류: {time.time() - t:.3f}s")
         return {"intent": intent}
 
     def _route_by_intent(self, state: SageState) -> str:
@@ -646,17 +659,30 @@ class SageAgent(BaseNPCAgent):
 
     async def _scenario_retrieve_node(self, state: SageState) -> dict:
         """시나리오 DB 검색 노드"""
+        import time
+
+        t = time.time()
         scenarios = await self._retrieve_scenario(state)
+        print(f"[TIMING] 시나리오 검색: {time.time() - t:.3f}s")
         return {"unlocked_scenarios": scenarios}
 
     async def _generate_node(self, state: SageState) -> dict:
         """응답 생성 노드"""
+        import time
+
+        total_start = time.time()
+
         # 컨텍스트 구성
         context = {"unlocked_scenarios": state.get("unlocked_scenarios", "없음")}
 
         # 프롬프트 생성 및 LLM 호출
+        t1 = time.time()
         prompt = self._build_full_prompt(state, context, for_streaming=False)
+        print(f"[TIMING] 프롬프트 빌드: {time.time() - t1:.3f}s")
+
+        t2 = time.time()
         response = await self.llm.ainvoke(prompt)
+        print(f"[TIMING] LLM 호출: {time.time() - t2:.3f}s")
 
         # JSON 파싱
         try:
@@ -675,6 +701,7 @@ class SageAgent(BaseNPCAgent):
             }
 
         emotion_str = result.get("emotion", "neutral")
+        print(f"[TIMING] generate 노드 총합: {time.time() - total_start:.3f}s")
         return {
             "response_text": result.get("text", ""),
             "emotion": sage_emotion_to_int(emotion_str),
@@ -683,6 +710,10 @@ class SageAgent(BaseNPCAgent):
 
     async def _post_process_node(self, state: SageState) -> dict:
         """후처리 노드 - 상태 업데이트"""
+        import time
+
+        t = time.time()
+
         context = {}
 
         emotion_int = state.get("emotion", 0)
@@ -694,6 +725,7 @@ class SageAgent(BaseNPCAgent):
             state.get("info_revealed", False),
         )
 
+        print(f"[TIMING] 상태 업데이트: {time.time() - t:.3f}s")
         return {"info_revealed": state.get("info_revealed", False)}
 
     # ============================================
@@ -726,24 +758,39 @@ class SageAgent(BaseNPCAgent):
         Yields:
             응답 토큰
         """
+        import time
+
+        total_start = time.time()
+
         # 1. 컨텍스트 준비 (시나리오 검색)
         context = await self._prepare_context(state)
 
         # 2. 전체 프롬프트 생성 (비스트리밍과 동일한 컨텍스트)
+        t1 = time.time()
         prompt = self._build_full_prompt(state, context, for_streaming=True)
+        print(f"[TIMING] 프롬프트 빌드: {time.time() - t1:.3f}s")
 
         # 3. 스트리밍으로 응답 생성 (LLM 1번만 호출)
+        t2 = time.time()
+        first_token = True
         full_response = ""
         async for chunk in self.streaming_llm.astream(prompt):
             if chunk.content:
+                if first_token:
+                    print(f"[TIMING] LLM 첫 토큰: {time.time() - t2:.3f}s")
+                    first_token = False
                 full_response += chunk.content
                 yield chunk.content
+        print(f"[TIMING] LLM 전체 응답: {time.time() - t2:.3f}s")
 
         # 4. 상태 업데이트 (LLM 재호출 없이)
         # 스트리밍에서는 emotion 추출 불가, 기본값 사용
+        t3 = time.time()
         await self._update_state_after_response(
             state, context, full_response, 0, False  # 0=neutral
         )
+        print(f"[TIMING] 상태 업데이트: {time.time() - t3:.3f}s")
+        print(f"[TIMING] === 총 소요시간: {time.time() - total_start:.3f}s ===")
 
 
 # 싱글톤 인스턴스 (앱 전체에서 하나만 사용)
