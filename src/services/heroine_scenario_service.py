@@ -22,6 +22,10 @@ SYNONYM_MAP = {
     "비밀": ["숨기고 있는", "감추고 있는", "말하지 못한"],
 }
 
+# 하이브리드 검색 가중치
+BM25_WEIGHT = 0.4
+VECTOR_WEIGHT = 0.6
+
 
 class HeroineScenarioService:
     """히로인 시나리오 검색 서비스"""
@@ -104,6 +108,269 @@ class HeroineScenarioService:
                         "content": row.content,
                         "memory_progress": row.memory_progress,
                         "similarity": row.similarity,
+                    }
+                )
+
+            return scenarios
+
+    def search_scenarios_hybrid(
+        self, query: str, heroine_id: int, max_memory_progress: int, limit: int = 3
+    ) -> List[dict]:
+        """BM25 + Vector 하이브리드 검색
+
+        ParadeDB pg_search를 사용한 BM25 검색과 벡터 유사도 검색을 결합합니다.
+
+        Args:
+            query: 검색 쿼리
+            heroine_id: 히로인 ID
+            max_memory_progress: 현재 기억 진척도 (이하만 검색)
+            limit: 최대 결과 수
+
+        Returns:
+            검색된 시나리오 목록 (combined_score 기준 정렬)
+        """
+        # 쿼리 확장 (동의어 추가)
+        expanded_query = self._expand_query(query)
+
+        # 확장된 쿼리 임베딩
+        query_embedding = self.embeddings.embed_query(expanded_query)
+
+        # 하이브리드 검색 SQL (BM25 + Vector)
+        sql = text(
+            """
+            WITH bm25_results AS (
+                SELECT id, paradedb.score(id) as bm25_score
+                FROM heroine_scenarios.search(
+                    :query,
+                    limit_rows => 100
+                )
+                WHERE heroine_id = :heroine_id 
+                  AND memory_progress <= :max_progress
+            ),
+            vector_results AS (
+                SELECT id, 
+                       1 - (content_embedding <=> CAST(:embedding AS vector)) as vector_score
+                FROM heroine_scenarios
+                WHERE heroine_id = :heroine_id 
+                  AND memory_progress <= :max_progress
+            )
+            SELECT 
+                h.id, 
+                h.content, 
+                h.memory_progress,
+                h.metadata,
+                COALESCE(b.bm25_score, 0) as bm25_score,
+                v.vector_score,
+                (COALESCE(b.bm25_score, 0) * :bm25_weight + v.vector_score * :vector_weight) as combined_score
+            FROM heroine_scenarios h
+            LEFT JOIN bm25_results b ON h.id = b.id
+            JOIN vector_results v ON h.id = v.id
+            WHERE h.heroine_id = :heroine_id 
+              AND h.memory_progress <= :max_progress
+            ORDER BY combined_score DESC
+            LIMIT :limit
+        """
+        )
+
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                sql,
+                {
+                    "query": expanded_query,
+                    "embedding": str(query_embedding),
+                    "heroine_id": heroine_id,
+                    "max_progress": max_memory_progress,
+                    "bm25_weight": BM25_WEIGHT,
+                    "vector_weight": VECTOR_WEIGHT,
+                    "limit": limit,
+                },
+            )
+
+            scenarios = []
+            for row in result:
+                scenarios.append(
+                    {
+                        "id": row.id,
+                        "content": row.content,
+                        "memory_progress": row.memory_progress,
+                        "metadata": row.metadata,
+                        "bm25_score": row.bm25_score,
+                        "vector_score": row.vector_score,
+                        "combined_score": row.combined_score,
+                    }
+                )
+
+            return scenarios
+
+    def search_scenarios_with_keywords(
+        self, query: str, heroine_id: int, max_memory_progress: int, limit: int = 3
+    ) -> List[dict]:
+        """키워드 메타데이터 기반 검색 (BM25 인덱스 없을 때 대안)
+
+        metadata의 keywords 필드를 JSONB 검색으로 활용합니다.
+
+        Args:
+            query: 검색 쿼리
+            heroine_id: 히로인 ID
+            max_memory_progress: 현재 기억 진척도 (이하만 검색)
+            limit: 최대 결과 수
+
+        Returns:
+            검색된 시나리오 목록
+        """
+        # 쿼리 확장
+        expanded_query = self._expand_query(query)
+        query_embedding = self.embeddings.embed_query(expanded_query)
+
+        # 쿼리에서 키워드 추출 (공백으로 분리)
+        keywords = expanded_query.split()
+
+        # JSONB 키워드 매칭 + 벡터 검색
+        sql = text(
+            """
+            WITH keyword_scores AS (
+                SELECT id,
+                       COALESCE(
+                           (SELECT COUNT(*) 
+                            FROM jsonb_array_elements_text(metadata->'keywords') as kw
+                            WHERE kw = ANY(:keywords)
+                           ), 0
+                       ) as keyword_match_count
+                FROM heroine_scenarios
+                WHERE heroine_id = :heroine_id 
+                  AND memory_progress <= :max_progress
+            )
+            SELECT 
+                h.id, 
+                h.content, 
+                h.memory_progress,
+                h.metadata,
+                ks.keyword_match_count,
+                1 - (h.content_embedding <=> CAST(:embedding AS vector)) as vector_score,
+                (CAST(ks.keyword_match_count AS FLOAT) / 10.0 * :bm25_weight + 
+                 (1 - (h.content_embedding <=> CAST(:embedding AS vector))) * :vector_weight) as combined_score
+            FROM heroine_scenarios h
+            JOIN keyword_scores ks ON h.id = ks.id
+            WHERE h.heroine_id = :heroine_id 
+              AND h.memory_progress <= :max_progress
+            ORDER BY combined_score DESC
+            LIMIT :limit
+        """
+        )
+
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                sql,
+                {
+                    "keywords": keywords,
+                    "embedding": str(query_embedding),
+                    "heroine_id": heroine_id,
+                    "max_progress": max_memory_progress,
+                    "bm25_weight": BM25_WEIGHT,
+                    "vector_weight": VECTOR_WEIGHT,
+                    "limit": limit,
+                },
+            )
+
+            scenarios = []
+            for row in result:
+                scenarios.append(
+                    {
+                        "id": row.id,
+                        "content": row.content,
+                        "memory_progress": row.memory_progress,
+                        "metadata": row.metadata,
+                        "keyword_match_count": row.keyword_match_count,
+                        "vector_score": row.vector_score,
+                        "combined_score": row.combined_score,
+                    }
+                )
+
+            return scenarios
+
+    def search_scenarios_pgroonga(
+        self, query: str, heroine_id: int, max_memory_progress: int, limit: int = 3
+    ) -> List[dict]:
+        """PGroonga + Vector 하이브리드 검색 (Supabase용)
+
+        PGroonga의 다국어 Full Text Search와 벡터 유사도 검색을 결합합니다.
+        참고: https://supabase.com/docs/guides/database/extensions/pgroonga
+
+        Args:
+            query: 검색 쿼리
+            heroine_id: 히로인 ID
+            max_memory_progress: 현재 기억 진척도 (이하만 검색)
+            limit: 최대 결과 수
+
+        Returns:
+            검색된 시나리오 목록 (combined_score 기준 정렬)
+        """
+        # 쿼리 확장 (동의어 추가)
+        expanded_query = self._expand_query(query)
+        query_embedding = self.embeddings.embed_query(expanded_query)
+
+        # PGroonga + Vector 하이브리드 검색
+        # PGroonga는 &@~ 연산자로 full text search 수행
+        sql = text(
+            """
+            WITH pgroonga_results AS (
+                SELECT id,
+                       pgroonga_score(tableoid, ctid) as pgroonga_score
+                FROM heroine_scenarios
+                WHERE content &@~ :query
+                  AND heroine_id = :heroine_id 
+                  AND memory_progress <= :max_progress
+            ),
+            vector_results AS (
+                SELECT id, 
+                       1 - (content_embedding <=> CAST(:embedding AS vector)) as vector_score
+                FROM heroine_scenarios
+                WHERE heroine_id = :heroine_id 
+                  AND memory_progress <= :max_progress
+            )
+            SELECT 
+                h.id, 
+                h.content, 
+                h.memory_progress,
+                h.metadata,
+                COALESCE(p.pgroonga_score, 0) as pgroonga_score,
+                v.vector_score,
+                (COALESCE(p.pgroonga_score, 0) / 10.0 * :bm25_weight + v.vector_score * :vector_weight) as combined_score
+            FROM heroine_scenarios h
+            LEFT JOIN pgroonga_results p ON h.id = p.id
+            JOIN vector_results v ON h.id = v.id
+            WHERE h.heroine_id = :heroine_id 
+              AND h.memory_progress <= :max_progress
+            ORDER BY combined_score DESC
+            LIMIT :limit
+        """
+        )
+
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                sql,
+                {
+                    "query": query,
+                    "embedding": str(query_embedding),
+                    "heroine_id": heroine_id,
+                    "max_progress": max_memory_progress,
+                    "bm25_weight": BM25_WEIGHT,
+                    "vector_weight": VECTOR_WEIGHT,
+                    "limit": limit,
+                },
+            )
+
+            scenarios = []
+            for row in result:
+                scenarios.append(
+                    {
+                        "id": row.id,
+                        "content": row.content,
+                        "memory_progress": row.memory_progress,
+                        "metadata": row.metadata,
+                        "pgroonga_score": row.pgroonga_score,
+                        "vector_score": row.vector_score,
+                        "combined_score": row.combined_score,
                     }
                 )
 

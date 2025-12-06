@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: paradedb/paradedb:latest
     container_name: game_db
     environment:
       POSTGRES_USER: postgres

@@ -3,7 +3,7 @@ from typing import List, Any, Dict, Optional
 from sqlalchemy import create_engine, text
 from db.config import CONNECTION_URL
 from enums.EmbeddingModel import EmbeddingModel
-from db.rdb_entity.DungeonRow import DungeonRow
+
 # 이때 summary_info는 그냥 던전 밸런싱 요약내용을 text로.
 
 
@@ -14,9 +14,10 @@ class RDBRepository:
             self.db_url,
             pool_pre_ping=True,  # 연결 유효성 사전 체크
             pool_recycle=3600,  # 1시간마다 연결 재생성
-            pool_size=20,  # 연결 풀 크기 (증가)
-            max_overflow=30,  # 최대 오버플로우 (증가)
-            echo=False,  # SQL 쿼리 로깅 비활성화 (성능 개선)
+            pool_size=1,  # 연결 풀 크기 (Supabase Session 제한, 최소화)
+            max_overflow=0,  # 오버플로우 없음
+            pool_timeout=30,  # 연결 대기 시간 (초)
+            echo=False,  # SQL 쿼리 로깅 비활성화
         )
 
     def insert_dungeon(self, floor: int, raw_map: dict | str) -> int:
@@ -131,6 +132,13 @@ class RDBRepository:
                 row_players = set(
                     map(str, raw_map.get("playerIds") or raw_map.get("player_ids", []))
                 )
+
+                # raw_map에 없으면 컬럼에서 확인
+                if not row_players:
+                    for i in range(1, 5):
+                        p_id = row._mapping[f"player{i}"]
+                        if p_id:
+                            row_players.add(str(p_id))
 
                 if target.issubset(row_players):
                     return dict(row._mapping)
@@ -305,7 +313,7 @@ class RDBRepository:
 
             return None
         
-    def get_current_dungeon_by_player(self, player_id: int, heroine_id: int) -> Optional[DungeonRow]:
+    def get_current_dungeon_by_player(self, player_id: int, heroine_id: int) -> Dict[str, Any] | None:
         sql = """
         SELECT *
         FROM dungeon
@@ -330,7 +338,4 @@ class RDBRepository:
             if not row:
                 return None
 
-            row_dict = dict(row._mapping)
-            return DungeonRow(**row_dict)
-        
-        
+            return dict(row._mapping)

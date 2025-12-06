@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS session_checkpoints (
 CREATE INDEX IF NOT EXISTS idx_checkpoint_user_npc ON session_checkpoints(user_id, npc_id);
 CREATE INDEX IF NOT EXISTS idx_checkpoint_last_chat ON session_checkpoints(last_chat_at DESC);
 
--- 5. 히로인 시나리오 (벡터 검색용)
+-- 5. 히로인 시나리오 (벡터 검색용 + BM25 검색용)
 CREATE TABLE IF NOT EXISTS heroine_scenarios (
     id SERIAL PRIMARY KEY,
     heroine_id INT NOT NULL,
@@ -50,22 +50,26 @@ CREATE TABLE IF NOT EXISTS heroine_scenarios (
     title VARCHAR(200),
     content TEXT NOT NULL,
     content_embedding VECTOR(1536),
+    metadata JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_heroine_scenarios_filter ON heroine_scenarios(heroine_id, memory_progress);
+CREATE INDEX IF NOT EXISTS idx_heroine_scenarios_metadata ON heroine_scenarios USING GIN(metadata);
 
--- 6. 대현자 시나리오
+-- 6. 대현자 시나리오 (벡터 검색용 + BM25 검색용)
 CREATE TABLE IF NOT EXISTS sage_scenarios (
     id SERIAL PRIMARY KEY,
     scenario_level INT NOT NULL,
     title VARCHAR(200),
     content TEXT NOT NULL,
     content_embedding VECTOR(1536),
+    metadata JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_sage_level ON sage_scenarios(scenario_level);
+CREATE INDEX IF NOT EXISTS idx_sage_scenarios_metadata ON sage_scenarios USING GIN(metadata);
 
 -- 7. 히로인 시나리오 검색 함수
 CREATE OR REPLACE FUNCTION match_heroine_scenarios(
@@ -110,3 +114,33 @@ BEGIN
     LIMIT p_match_count;
 END;
 $$;
+
+-- ============================================
+-- Full Text Search 인덱스
+-- ============================================
+
+-- 9. PGroonga 인덱스 (Supabase용 - 다국어 Full Text Search)
+-- Supabase 대시보드에서 pgroonga 확장 활성화 후 실행
+-- CREATE EXTENSION IF NOT EXISTS pgroonga;
+-- CREATE INDEX ix_heroine_content_pgroonga ON heroine_scenarios USING pgroonga(content);
+-- CREATE INDEX ix_heroine_title_pgroonga ON heroine_scenarios USING pgroonga(title);
+-- CREATE INDEX ix_sage_content_pgroonga ON sage_scenarios USING pgroonga(content);
+-- CREATE INDEX ix_sage_title_pgroonga ON sage_scenarios USING pgroonga(title);
+
+-- 10. ParadeDB BM25 인덱스 (로컬 Docker용)
+-- 주의: 테이블에 데이터가 있어야 인덱스 생성 가능
+-- 데이터 시딩 후 아래 명령어 실행 필요:
+--
+-- CALL paradedb.create_bm25(
+--     index_name => 'heroine_scenarios_bm25',
+--     table_name => 'heroine_scenarios',
+--     key_field => 'id',
+--     text_fields => paradedb.field('content') || paradedb.field('title')
+-- );
+--
+-- CALL paradedb.create_bm25(
+--     index_name => 'sage_scenarios_bm25',
+--     table_name => 'sage_scenarios',
+--     key_field => 'id',
+--     text_fields => paradedb.field('content') || paradedb.field('title')
+-- );

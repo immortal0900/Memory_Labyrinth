@@ -76,12 +76,18 @@ def selected_main_event_node(state: DungeonEventState) -> DungeonEventState:
     # 랜덤 선택
     selected_event = random.choice(available_events)
 
+    # 시나리오 텍스트 치환 (히로인 이름 등)
+    scenario_text = selected_event['scenario_text']
+    heroine_name = state["heroine_data"].get("name", "그녀")
+    if "{heroine_name}" in scenario_text:
+        scenario_text = scenario_text.format(heroine_name=heroine_name)
+
     # 선택된 이벤트를 구조화된 dict로 반환
     event_data = {
         "title": selected_event['title'],
         "event_code": selected_event['event_code'],
         "is_personal": selected_event['is_personal'],
-        "scenario_text": selected_event['scenario_text']
+        "scenario_text": scenario_text
     }
 
     print(f"[selected_main_event_node] 선택된 이벤트: {selected_event['title']}")
