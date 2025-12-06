@@ -25,7 +25,7 @@ from db.rdb_entity.DungeonRow import DungeonRow
 from agents.fairy.dynamic_prompt import dungeon_spec_prompt
 
 intent_llm = get_groq_llm_lc(model=LLM.LLAMA_3_1_8B_INSTANT, max_token=43)
-action_llm = get_groq_llm_lc(max_token=80)
+action_llm = get_groq_llm_lc(max_token=80,temperature=0)
 small_talk_llm = init_chat_model(model=LLM.GROK_4_FAST_NON_REASONING)
 rdb_repository = RDBRepository()
 
@@ -113,7 +113,7 @@ async def fairy_action(state: FairyDungeonState):
     intent_types = state.get("intent_types")
     dungenon_player = state["dungenon_player"]
     target_monster_ids = state.get("target_monster_ids", [])
-    currRoomId = state.get("currRoomId")
+    currRoomId = dungenon_player.currRoomId
     dungeon_row = rdb_repository.get_current_dungeon_by_player(
         dungenon_player.playerId, dungenon_player.heroineId
     )
