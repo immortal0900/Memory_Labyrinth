@@ -43,7 +43,6 @@ class FairyDungeonState(MessagesState):
     target_monster_ids: List[int] = []
     player_id:Optional[int] = None
     next_room_ids: List[int] = []
-    is_multi_small_talk: bool = False
 
 class FairyInterationIntentType(StrEnum):
     INVENTORY_ITEM_USE = "INVENTORY_ITEM_USE"

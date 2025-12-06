@@ -18,7 +18,6 @@ from core.common import get_inventory_items,get_inventory_item
 
 router = APIRouter(prefix="/api/fairy", tags=["Fairy"])
 
-
 class DungeonPlayerDto(BaseModel):
     playerId: int
     heroineId: int

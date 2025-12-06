@@ -93,7 +93,7 @@ def find_scenarios(heroine_id: int, memory_progress: int) -> List[Dict[str, Any]
     ]
 
 
-def get_monsters_info(monster_ids: list[int]):
+def find_monsters_info(monster_ids: list[int]):
     results = []
     for monster in MONSTER_INFOS:
         if monster["monsterId"] in monster_ids:
