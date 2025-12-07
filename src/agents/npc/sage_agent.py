@@ -131,7 +131,7 @@ class SageAgent(BaseNPCAgent):
             print(chunk, end="")
     """
 
-    def __init__(self, model_name: str = LLM.GROK_4_1_FAST_REASONING):
+    def __init__(self, model_name: str = LLM.GROK_4_FAST_NON_REASONING):
         """초기화
 
         Args:
@@ -406,7 +406,16 @@ class SageAgent(BaseNPCAgent):
         npc_id = state["npc_id"]
         time_since_last_chat = self.get_time_since_last_chat(state["player_id"], npc_id)
 
+        # 세계관 컨텍스트 가져오기
+        world_context = PERSONA_DATA.get("world_context", {})
+
         prompt = f"""당신은 대현자 사트라(Satra)입니다.
+
+[세계관 컨텍스트 - 당신이 알고 있는 기본 정보]
+- 길드: {world_context.get('guild', '셀레파이스 길드')}
+- 멘토: {world_context.get('mentor', '기억을 되찾게 해줄 수 있는 특별한 존재')}
+- 내 역할: {world_context.get('my_role', '멘토에게 세계관 정보와 조언을 제공')}
+- 히로인들: {world_context.get('heroines', '레티아, 루파메스, 로코 - 암네시아로 기억을 잃은 히로인들')}
 
 [마지막 대화로부터 경과 시간]
 {time_since_last_chat}
@@ -424,13 +433,22 @@ class SageAgent(BaseNPCAgent):
 - 금지 정보 질문시 회피: "{evasion_response}"
 
 [페르소나 규칙]
-- 해금되지 않은 정보는 절대 말하지 않습니다.
+- [세계관 컨텍스트]는 당신이 항상 알고 있는 정보입니다. 길드, 멘토, 히로인들에 대해 물어보면 이 정보를 바탕으로 답하세요.
+- [해금된 세계관 정보]는 시나리오 레벨에 따라 공개할 수 있는 정보입니다.
+- 해금되지 않은 정보는 절대 말하지 않습니다. 회피 응답을 사용하세요.
 - 기본적으로 하대하며 기품 있는 어조를 유지합니다.
 - 감정을 크게 드러내지 않고 항상 알 수 없는 미소를 띱니다.
 - 거짓말은 하지 않지만, 말하지 않을 수는 있습니다.
+- text는 반드시 30자 이내로 짧게 답합니다.
+- `멘토`는 현재 당신에게 말을 거는 플레이어입니다.
+- [최근 대화 기록]에서는 대화했던 맥락만 파악하고 [현재 레벨 태도]와 [페르소나]에 맞게 대답하세요.
+- [최근 대화 기록]보다 [현재 레벨 태도]와 [페르소나]가 더 중요합니다.
 
 [해금된 세계관 정보]
 {context.get('unlocked_scenarios', '없음')}
+
+[최근 대화 요약]
+{state.get('short_term_summary', '없음')}
 
 [최근 대화 기록]
 {self.format_conversation_history(state.get('conversation_buffer', []))}

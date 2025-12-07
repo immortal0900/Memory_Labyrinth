@@ -121,7 +121,7 @@ class HeroineAgent(BaseNPCAgent):
             print(chunk, end="")
     """
 
-    def __init__(self, model_name: str = LLM.GROK_4_1_FAST_REASONING):
+    def __init__(self, model_name: str = LLM.GROK_4_FAST_NON_REASONING):
         """초기화
 
         Args:
@@ -302,7 +302,7 @@ class HeroineAgent(BaseNPCAgent):
 [분류 기준]
 - general: 일상 대화, 감정 표현, 질문 없는 대화
 - memory_recall: "우리 전에 뭐 얘기했지?", "나 기억해?" 등 플레이어와 히로인이 함께 나눈 과거 대화/경험을 물어봄
-- scenario_inquiry: 히로인의 과거, 기억 상실 전 이야기, 비밀, 정체성에 대해 물어봄
+- scenario_inquiry: 히로인의 과거, 기억 상실 전 이야기, 비밀, 정체성에 대해 물어봄. "최근에 돌아온 기억", "새로 기억난 거", "떠오른 기억" 같은 질문도 포함
 
 반드시 general, memory_recall, scenario_inquiry 중 하나만 출력하세요."""
 
@@ -359,10 +359,32 @@ class HeroineAgent(BaseNPCAgent):
 
         return "\n".join(facts_parts) if facts_parts else "관련 기억 없음"
 
+    def _is_recent_memory_question(self, message: str) -> bool:
+        """최근 기억 관련 질문인지 확인
+
+        Args:
+            message: 사용자 메시지
+
+        Returns:
+            최근 기억 질문 여부
+        """
+        recent_memory_keywords = [
+            "최근",
+            "돌아온 기억",
+            "새로 기억",
+            "떠오른 기억",
+            "방금 기억",
+            "이제 기억",
+            "생각난",
+            "떠올랐",
+        ]
+        return any(keyword in message for keyword in recent_memory_keywords)
+
     async def _retrieve_scenario(self, state: HeroineState) -> str:
         """시나리오 DB 검색
 
         현재 기억진척도 이하로 해금된 시나리오를 검색합니다.
+        "최근에 돌아온 기억" 같은 질문이면 가장 최근 해금된 시나리오를 반환합니다.
 
         Args:
             state: 현재 상태
@@ -374,6 +396,20 @@ class HeroineAgent(BaseNPCAgent):
         npc_id = state["npc_id"]
         memory_progress = state.get("memoryProgress", 0)
 
+        # 최근 기억 질문이면 가장 최근 해금된 시나리오 반환
+        if self._is_recent_memory_question(user_message):
+            latest_scenario = heroine_scenario_service.get_latest_unlocked_scenario(
+                heroine_id=npc_id,
+                max_memory_progress=memory_progress,
+            )
+            if latest_scenario:
+                print(
+                    f"[DEBUG] 최근 기억 질문 감지 - 최신 시나리오 반환: {latest_scenario.get('title', 'N/A')}"
+                )
+                return latest_scenario["content"]
+            return "해금된 시나리오 없음"
+
+        # 일반 시나리오 질문은 벡터 검색
         scenarios = heroine_scenario_service.search_scenarios(
             query=user_message,
             heroine_id=npc_id,
@@ -513,7 +549,17 @@ class HeroineAgent(BaseNPCAgent):
 
         time_since_last_chat = self.get_time_since_last_chat(state["player_id"], npc_id)
 
+        # 세계관 컨텍스트 가져오기
+        world_context = PERSONA_DATA.get("world_context", {})
+
         prompt = f"""당신은 히로인 {persona.get('name', '알 수 없음')}입니다.
+
+[세계관 컨텍스트 - 당신이 알고 있는 기본 정보]
+- 길드: {world_context.get('guild', '셀레파이스 길드')}
+- 멘토: {world_context.get('mentor', '기억을 되찾게 해줄 수 있는 특별한 존재')}
+- 내 상황: {world_context.get('amnesia', '암네시아로 기억을 잃음')}
+- 던전: {world_context.get('dungeon', '기억의 파편을 얻을 수 있는 곳')}
+- 현재: {world_context.get('current_situation', '길드에서 멘토와 함께 생활 중')}
 
 [마지막 대화로부터 경과 시간]
 {time_since_last_chat}
@@ -527,11 +573,16 @@ class HeroineAgent(BaseNPCAgent):
 {self._format_persona(persona, affection, sanity)}
 
 [페르소나 규칙]
+- [세계관 컨텍스트]는 당신이 현재 알고 있는 정보입니다. 이 정보를 통해 당신은 이곳에 왜 있는지 플레이어가 누군지 알 수 있습니다.
+- [해금된 시나리오]는 당신의 과거 기억입니다. 과거/어린시절/고향 등을 물어볼 때만 참조하세요.
+- [해금된 시나리오]가 "없음"이고 과거 기억을 물어볼 때만 "잘 기억이 안 나..." 라고 답합니다.
 - 해금되지 않은 기억(memoryProgress > {memory_progress})은 절대 말하지 않습니다.
-- [해금된 시나리오]에 내용이 있으면 이를 바탕으로 자세히 답변하세요.
-- [해금된 시나리오]가 "없음"일 때만 "잘 기억이 안 나..." 라고 답합니다.
 - Sanity가 0이면 매우 우울한 상태로 대화합니다.
 - 캐릭터의 말투와 성격을 일관되게 유지합니다.
+- text는 반드시 30자 이내로 짧게 답합니다.
+- `멘토`는 현재 당신에게 말을 거는 플레이어입니다.
+- [최근 대화 기록]에서는 대화했던 맥락만 파악하고 [현재 호감도 레벨]과 [페르소나]에 맞게 대답하세요.
+- [최근 대화 기록]보다 [현재 호감도 레벨]과 [페르소나]가 더 중요합니다.
 
 [호감도 변화 정보]
 {affection_hint}
@@ -541,6 +592,9 @@ class HeroineAgent(BaseNPCAgent):
 
 [해금된 시나리오]
 {context.get('unlocked_scenarios', '없음')}
+
+[최근 대화 요약]
+{state.get('short_term_summary', '없음')}
 
 [최근 대화 기록]
 {self.format_conversation_history(state.get('conversation_buffer', []))}
@@ -869,7 +923,7 @@ class HeroineAgent(BaseNPCAgent):
         t1 = time.time()
         prompt = self._build_full_prompt(state, context, for_streaming=False)
         print(f"[TIMING] 프롬프트 빌드: {time.time() - t1:.3f}s")
-        
+
         print(f"[PROMPT]\n{prompt}\n{'='*50}")
 
         t2 = time.time()

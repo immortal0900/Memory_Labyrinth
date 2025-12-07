@@ -418,6 +418,42 @@ class HeroineScenarioService:
 
             return [dict(row._mapping) for row in result]
 
+    def get_latest_unlocked_scenario(
+        self, heroine_id: int, max_memory_progress: int
+    ) -> Optional[dict]:
+        """가장 최근에 해금된 시나리오 조회
+
+        현재 기억진척도 이하에서 가장 높은 memory_progress를 가진 시나리오를 반환합니다.
+        "최근에 돌아온 기억" 같은 질문에 사용됩니다.
+
+        Args:
+            heroine_id: 히로인 ID
+            max_memory_progress: 현재 기억 진척도 (이하만 검색)
+
+        Returns:
+            가장 최근 해금된 시나리오 또는 None
+        """
+        sql = text(
+            """
+            SELECT id, title, content, memory_progress
+            FROM heroine_scenarios
+            WHERE heroine_id = :heroine_id
+              AND memory_progress <= :max_progress
+            ORDER BY memory_progress DESC
+            LIMIT 1
+        """
+        )
+
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                sql, {"heroine_id": heroine_id, "max_progress": max_memory_progress}
+            )
+            row = result.fetchone()
+
+            if row:
+                return dict(row._mapping)
+            return None
+
 
 # 싱글톤 인스턴스
 heroine_scenario_service = HeroineScenarioService()
