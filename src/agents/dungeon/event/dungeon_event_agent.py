@@ -84,6 +84,7 @@ def selected_main_event_node(state: DungeonEventState) -> DungeonEventState:
 
     # 선택된 이벤트를 구조화된 dict로 반환
     event_data = {
+        "event_id": selected_event.get('event_id', 0),
         "title": selected_event['title'],
         "event_code": selected_event['event_code'],
         "is_personal": selected_event['is_personal'],
