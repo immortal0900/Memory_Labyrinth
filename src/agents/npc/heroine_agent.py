@@ -42,7 +42,7 @@ from db.agent_memory import agent_memory_manager
 from db.session_checkpoint_manager import session_checkpoint_manager
 from services.heroine_scenario_service import heroine_scenario_service
 from agents.npc.heroine_heroine_agent import heroine_heroine_agent
-
+from enums.LLM import LLM
 
 # ============================================
 # 페르소나 데이터 로드
@@ -121,7 +121,7 @@ class HeroineAgent(BaseNPCAgent):
             print(chunk, end="")
     """
 
-    def __init__(self, model_name: str = "gpt-4o-mini"):
+    def __init__(self, model_name: str = LLM.GROK_4_1_FAST_REASONING):
         """초기화
 
         Args:
@@ -869,6 +869,8 @@ class HeroineAgent(BaseNPCAgent):
         t1 = time.time()
         prompt = self._build_full_prompt(state, context, for_streaming=False)
         print(f"[TIMING] 프롬프트 빌드: {time.time() - t1:.3f}s")
+        
+        print(f"[PROMPT]\n{prompt}\n{'='*50}")
 
         t2 = time.time()
         response = await self.llm.ainvoke(prompt)

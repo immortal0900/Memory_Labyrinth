@@ -1,6 +1,16 @@
 from pydantic import BaseModel
 from typing import Optional, Any, Dict, List
 
+class DungeonEvent(BaseModel):
+    room_id: int
+    event_type: int
+    event_title: str
+    event_code: str
+    scenario_text: str
+    scenario_narrative: str
+    choices: List[Dict[str, Any]]
+    expected_outcome: str
+    
 class DungeonRow(BaseModel):
     raw_map: Optional[Dict[str, Any]] = None
     balanced_map: Optional[Dict[str, Any]] = None
@@ -17,10 +27,11 @@ class DungeonRow(BaseModel):
     heroine3: Optional[str] = None
     heroine4: Optional[str] = None
 
-    event: Optional[Dict[str, Any]] = None
+    event: Optional[DungeonEvent] = None
 
     # 선택: floor 컬럼이 있다면 추가
     floor: Optional[int] = None
 
     class Config:
         orm_mode = True
+

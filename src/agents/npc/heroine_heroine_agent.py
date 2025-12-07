@@ -24,7 +24,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, AsyncIterator, Optional, Dict, Any, Tuple
 from langchain.chat_models import init_chat_model
-
+from enums.LLM import LLM
 from agents.npc.emotion_mapper import heroine_emotion_to_int
 from db.agent_memory import agent_memory_manager
 
@@ -103,7 +103,7 @@ class HeroineHeroineAgent:
             print(chunk, end="")
     """
 
-    def __init__(self, model_name: str = "gpt-4o-mini"):
+    def __init__(self, model_name: str = LLM.GROK_4_1_FAST_REASONING):
         """초기화
 
         Args:

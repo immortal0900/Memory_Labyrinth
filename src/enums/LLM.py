@@ -32,6 +32,7 @@ class LLM(StrEnum):
     GROK_4_1_FAST_REASONING = "grok-4-1-fast-reasoning"
     GROK_4_FAST_REASONING = "grok-4-fast-reasoning"
     GROK_4_FAST_NON_REASONING = "grok-4-fast-non-reasoning"
+    GROK_4 = "grok-4"
 
     LLAMA_3_3_70B_VERSATILE = "llama-3.3-70b-versatile"
     LLAMA_3_1_8B_INSTANT = "llama-3.1-8b-instant"

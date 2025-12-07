@@ -103,38 +103,6 @@ items = [
         )
     ),
 
-    ItemData(itemId=20, itemName="나무젓가락", itemType=2, rarity=0,
-        weapon=WeaponData(
-            weaponId=20, weaponType=2, weaponName="나무젓가락",
-            rarity=0, attackPower=8, staggerPower=1,
-            modifier={"strength": 0.3, "dexterity": 0.55, "intelligence": 0.15}
-        )
-    ),
-
-    ItemData(itemId=21, itemName=" 플라스틱젓가락", itemType=2, rarity=1,
-        weapon=WeaponData(
-            weaponId=21, weaponType=2, weaponName=" 플라스틱젓가락",
-            rarity=1, attackPower=11, staggerPower=1,
-            modifier={"strength": 0.3, "dexterity": 0.55, "intelligence": 0.15}
-        )
-    ),
-
-    ItemData(itemId=22, itemName="쇠젓가락", itemType=2, rarity=2,
-        weapon=WeaponData(
-            weaponId=22, weaponType=2, weaponName="쇠젓가락",
-            rarity=2, attackPower=13, staggerPower=1,
-            modifier={"strength": 0.3, "dexterity": 0.55, "intelligence": 0.15}
-        )
-    ),
-
-    ItemData(itemId=23, itemName="젓가락", itemType=2, rarity=3,
-        weapon=WeaponData(
-            weaponId=23, weaponType=2, weaponName="젓가락",
-            rarity=3, attackPower=17, staggerPower=1,
-            modifier={"strength": 0.3, "dexterity": 0.55, "intelligence": 0.15}
-        )
-    ),
-
     # -----------------------
     # 대검 (weaponType=3)
     # -----------------------

@@ -12,7 +12,6 @@ import random, asyncio
 from agents.fairy.util import (
     add_ai_message,
     add_human_message,
-    str_to_bool,
     get_groq_llm_lc,
     find_monsters_info,
 )
@@ -23,19 +22,31 @@ from typing import List
 from db.RDBRepository import RDBRepository
 from db.rdb_entity.DungeonRow import DungeonRow
 from agents.fairy.dynamic_prompt import dungeon_spec_prompt
+from agents.fairy.util import (
+    contains_hanja,
+    replace_hanja_naively,
+    get_human_few_shot_prompts,
+)
 
 intent_llm = get_groq_llm_lc(model=LLM.LLAMA_3_1_8B_INSTANT, max_token=43)
-action_llm = get_groq_llm_lc(max_token=80)
+action_llm = get_groq_llm_lc(max_token=80, temperature=0)
 small_talk_llm = init_chat_model(model=LLM.GROK_4_FAST_NON_REASONING)
 rdb_repository = RDBRepository()
+
 
 async def get_monsters_info(target_monster_ids: List[int]):
     return find_monsters_info(target_monster_ids)
 
 
 async def get_event_info(dungeon_row: DungeonRow, curr_room_id: int):
-    curr_room_id
-    return dungeon_row.event
+    event = dungeon_row.event
+    if event is None: 
+        return "이벤트가 생성되지 않았습니다. 페이몬은 \"응? 확인된 이벤트는 아직 없어!\"라고 장난스럽게 답해주세요."
+
+    if event.room_id != curr_room_id:
+        return "이벤트방에 입장하지 않아서 정보를 확인할 수 없습니다. 페이몬은 \"아직은 아무일 없어보여! 무슨 사건이 일어날 때 말해!\" 라는식으로 장난스럽게 답해주세요."
+
+    return event
 
 
 async def dungeon_navigator(dungeon_row: DungeonRow, curr_room_id: int):
@@ -113,10 +124,11 @@ async def fairy_action(state: FairyDungeonState):
     intent_types = state.get("intent_types")
     dungenon_player = state["dungenon_player"]
     target_monster_ids = state.get("target_monster_ids", [])
-    currRoomId = state.get("currRoomId")
+    currRoomId = dungenon_player.currRoomId
     dungeon_row = rdb_repository.get_current_dungeon_by_player(
         dungenon_player.playerId, dungenon_player.heroineId
     )
+    print("던전 로우",dungeon_row)
     messages = state["messages"]
     INTENT_HANDLERS = {
         FairyDungeonIntentType.MONSTER_GUIDE: lambda: get_monsters_info(
@@ -164,14 +176,17 @@ async def fairy_action(state: FairyDungeonState):
     system_prompt = PromptManager(FairyPromptType.FAIRY_DUNGEON_SYSTEM).get_prompt()
 
     question = messages[-1].content
+
+    fewshots = get_human_few_shot_prompts(intent_types)
     human_prompt = PromptManager(FairyPromptType.FAIRY_DUNGEON_HUMAN).get_prompt(
         dungenon_player=pretty_dungenon_player,
         use_intents=[rt.value if hasattr(rt, "value") else rt for rt in intent_types],
+        ability_examples=fewshots,
         info=prompt_info,
         question=question,
     )
 
-    print("check_prompt::", human_prompt)
+    # print("check_prompt::", human_prompt)
 
     if intent_types[0] == FairyDungeonIntentType.SMALLTALK and len(intent_types) == 1:
         ai_answer = small_talk_llm.invoke(
@@ -186,6 +201,8 @@ async def fairy_action(state: FairyDungeonState):
                 HumanMessage(content=human_prompt),
             ]
         )
+        if contains_hanja(ai_answer.content):
+            ai_answer.content = replace_hanja_naively(ai_answer.content)
     return {
         "messages": [
             add_ai_message(content=ai_answer.content, intent_types=intent_types)
@@ -199,8 +216,6 @@ graph_builder = StateGraph(FairyDungeonState)
 
 graph_builder.add_node("analyze_intent", analyze_intent)
 graph_builder.add_node("fairy_action", fairy_action)
-# graph_builder.add_node("multi_small_talk", multi_small_talk_node)
-
 graph_builder.add_edge(START, "analyze_intent")
 
 graph_builder.add_conditional_edges(

@@ -36,7 +36,7 @@ from db.redis_manager import redis_manager
 from db.mem0_manager import mem0_manager
 from db.session_checkpoint_manager import session_checkpoint_manager
 from services.sage_scenario_service import sage_scenario_service
-
+from enums.LLM import LLM
 
 # ============================================
 # 페르소나 데이터 로드
@@ -131,7 +131,7 @@ class SageAgent(BaseNPCAgent):
             print(chunk, end="")
     """
 
-    def __init__(self, model_name: str = "gpt-4o-mini"):
+    def __init__(self, model_name: str = LLM.GROK_4_1_FAST_REASONING):
         """초기화
 
         Args:
@@ -679,6 +679,8 @@ class SageAgent(BaseNPCAgent):
         t1 = time.time()
         prompt = self._build_full_prompt(state, context, for_streaming=False)
         print(f"[TIMING] 프롬프트 빌드: {time.time() - t1:.3f}s")
+
+        print(f"[PROMPT]\n{prompt}\n{'='*50}")
 
         t2 = time.time()
         response = await self.llm.ainvoke(prompt)

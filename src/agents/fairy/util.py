@@ -105,3 +105,36 @@ def find_heroine_info(heroine_id: int):
         if hero["heroine_id"] == heroine_id:
             return hero
     return None
+
+def contains_hanja(text: str) -> bool:
+    # CJK Unified Ideographs 범위 (대부분의 한자/칸지)
+    return any('\u4e00' <= ch <= '\u9fff' for ch in text)
+
+def replace_hanja_naively(text: str) -> str:
+    # 일단 한자 자체는 제거하거나, 특수 토큰으로 바꿀 수 있음
+    # 여기서는 일단 제거 예시
+    return ''.join(ch for ch in text if not ('\u4e00' <= ch <= '\u9fff'))
+
+from agents.fairy.dynamic_prompt import FAIRY_DUNGEON_FEW_SHOTS
+from typing import Iterable
+from agents.fairy.fairy_state import FairyDungeonIntentType
+def get_human_few_shot_prompts(use_intents: Iterable[FairyDungeonIntentType]) -> str:
+    """
+    use_intents 리스트에 들어 있는 능력(MONSTER_GUIDE 등)에 해당하는
+    예시 블록만 골라서 하나의 문자열로 합쳐서 반환한다.
+    """
+    blocks: list[str] = []
+    
+    for ability in use_intents:
+        text = FAIRY_DUNGEON_FEW_SHOTS.get(ability)
+        if not text:
+            continue
+
+        header = f"### [{ability.value} - Answer Example]"
+        formatted = f"{header}\n{text.strip()}"
+        blocks.append(formatted)
+
+    if not blocks:
+        return ""
+
+    return "\n\n".join(blocks)

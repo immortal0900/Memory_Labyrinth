@@ -1,70 +1,3 @@
-temp_heroine_info = """
-# 플레이어블 캐릭터 — 레티아 (Retia Luke)
-
-## ⭐ 주요 특징 (키워드)
-- 올라운더(쌍검)
-- 슬렌더
-- 리더 기질
-
----
-
-## 📌 기본 정보
-- **이름:** 레티아 루크 (Retia Luke)
-- **종족:** 휴먼
-- **나이:** 21세
-- **신장:** 163cm
-- **이전 소속:**
-  - 세일럼 — 위치즈 부대
-  - 세일럼 — 루크 가문
-
----
-
-## 🗡 스킬
-### ● 패시브
-- 모든 무기에 보정치 +
-
-### ● 액티브
-- 일정 시간 동안 행동속도 증가
-
----
-
-## 🧩 과거의 기억
-- 세일럼 귀족 루크 가문 출신.
-- 어려서부터 가문의 명예를 위해 다양한 교육을 받으며 자람.
-- 학창시절 문무겸비로 인기가 많았으나, 타인과 어울리지 못하는 고통을 겪음.
-- 귀가 중 굶어 죽어가던 망각자 소녀를 구해주고 친구가 됨.
-- 그 소녀의 자유로운 삶을 부러워함.
-- 그러나 가족에게 들켜 소녀는 가문에 의해 살해당함.
-- 충격으로 암네시아 발현 → 가문에게 버려짐.
-- 방황하다 세일럼 망각자 부대 "위치즈"에 편입.
-- 던전에 강제 투입되었으나 혼자 살아남음.
-- 던전 방황 중 주인공의 정령에게 안내받아 셀레파이스로 탈출 성공.
-
----
-
-## 💬 성격
-- 원칙·규율 중시, 군인처럼 딱딱함.
-- 감정표현이 서툼.
-- 기억이 돌아올수록 부드러워지고 웃음이 많아짐.
-
----
-
-## ⚠ 트라우마
-- 세일럼 귀족 사회
-- 망각자 소녀
-- 타인의 죽음
-- 비밀스러운 행동이 들키는 상황
-
----
-
-## ❤️ 좋아하는 것
-- 자유
-- 타인에게 음식을 나눠주는 행동
-- 평범한 일상
-- 엉뚱한 사람
-"""
-
-
 reverse_questions = [
     "응? 무슨 말이야?",
     "페이몬이 잘 못 들었나?",
@@ -902,6 +835,7 @@ HEROINE_INFOS = [
     },
 ]
 
+
 GAME_SYSTEM_INFO = """
 # 게임 시스템 개요
 
@@ -996,9 +930,9 @@ GAME_SYSTEM_INFO = """
 | Right Mouse Button  | 회피                           |
 | Keyboard Spacebar   | 회피                           |
 | Keyboard Left Shift | 달리기 (토글)                  |
-| Keyboard Q          | 타게팅                         |
+| Keyboard Q          | 타게팅                          |
 | Keyboard E          | 무기 스킬                      |
-| Keyboard R          | 직업 고유 스킬/킷              |
+| Keyboard R          | 직업 고유 스킬               |
 | Keyboard F          | 상호작용 (이벤트/아이템 획득) |
 | Keyboard Tab        | 인벤토리                       |
 
@@ -1023,3 +957,125 @@ GAME_SYSTEM_INFO = """
 하나의 순환 구조로 맞물린 **서브컬쳐형 로그라이크 RPG**의 형태가 완성됨.
 
 """
+
+# GAME_SYSTEM_INFO = """
+# # Overview of the Game System
+
+# This document summarizes the major gameplay mechanisms, including the dungeon-exploration loop, character controls,  
+# and interaction systems with Heroines and Sage NPCs.
+
+# ---
+
+# # 1. Core Game Loop
+
+# The game progresses through the following cyclical structure:
+
+# ## 1-1. Dungeon Exploration
+# - The player explores **roguelike-style dungeons**.
+# - During combat, the player uses skills, upgrades weapons and equipment, and engages in farming.
+
+# ## 1-2. Gaining EXP and Memory Shards
+# - Various resources and experience are collected during exploration.
+# - Combat results and player choices accumulate to generate **Memory Shards**.
+
+# ## 1-3. Counseling & Conversation (Consumes Memory Shards)
+# - Accumulated Memory Shards are used to counsel and converse with Heroines.
+# - This unlocks story progress and deepens relationships.
+
+# ## 1-4. Heroine Affection & Ability Growth
+# - Through counseling/conversation, the Heroine’s **Affection** increases.
+# - Upon reaching certain affection levels, skills/stats improve and unique traits are unlocked.
+
+# ## 1-5. Returning to Dungeon Exploration With a Strengthened Heroine
+# - The strengthened Heroine joins the player for further dungeon challenges.
+# - Through repetition, both character progression and narrative expand together.
+
+# ### ▶ Core Cycle Summary
+# **Dungeon Exploration → EXP & Memory Acquisition → Counseling/Conversation → Affection & Ability Growth → Dungeon Challenge Again**
+
+# ---
+
+# # 2. Guild and NPC Interaction Systems
+
+# ## 2-1. Guild System (Subculture-style Hub)
+# - The player interacts with various NPCs in natural language within the guild.
+# - The guild is not just a story hub; it is the core space for progression, unlocks, and relationship building.
+
+# ---
+
+# ## 2-2. Heroine Conversation (Counseling) System
+
+# ### ● Natural-Language Dialogue
+# - All conversations occur via **free-form natural language**, not predefined choices.
+# - Interacting within the guild initiates a counseling session with a specific Heroine.
+
+# ### ● Role
+# - Touching on sensitive past events (e.g., PTSD-related topics) may harm the relationship.
+# - Memory Shards are consumed to raise affection and help recover the Heroine’s past.
+# - Successful counseling provides tangible growth such as stat/skill upgrades.
+
+# ### ● Lost Memory Unlock Structure
+# - Each heroine has 3–4 core memories.
+# - They unlock at affection levels 2, 5, 8, and 10.
+# - Memories are presented as scenario-style sequences and can be revisited.
+
+# ---
+
+# ## 2-3. Sage Q&A (Lore Information) System
+
+# ### ● Natural-Language Q&A
+# - Interacting with the Sage NPC in the guild initiates a Q&A session.
+# - Players freely ask questions, and the Sage provides world/lore information.
+
+# ### ● Information Level System
+# - Important lore is initially vague or withheld.
+# - As the player progresses through dungeons, the **Sage Level** increases, revealing deeper information.
+# - There are 10 levels of information accessibility.
+
+# ### ● Examples
+# - True identity of the Sage: Required Level 4  
+# - True nature of the dungeon: Required Level 2  
+
+# ---
+
+# # 3. Character Controls
+
+# Below are the basic control methods for the player character.
+
+# | Key                  | Description                        |
+# |----------------------|------------------------------------|
+# | Keyboard W           | Move forward                       |
+# | Keyboard S           | Move backward                      |
+# | Keyboard A           | Move left                          |
+# | Keyboard D           | Move right                         |
+# | Left Mouse Button    | Basic attack                       |
+# | Right Mouse Button   | Dodge                              |
+# | Keyboard Spacebar    | Dodge                              |
+# | Keyboard Left Shift  | Run (toggle)                       |
+# | Keyboard Q           | Targeting                          |
+# | Keyboard E           | Weapon Skill                       |
+# | Keyboard R           | Class Skill                        |
+# | Keyboard F           | Interaction (events/items)         |
+# | Keyboard Tab         | Inventory                          |
+
+# ---
+
+# # 4. Natural Flow Between Systems
+
+# ### ● Character Controls  
+# → Provide the action and responsiveness needed for dungeon exploration.  
+
+# ### ● Dungeon Exploration  
+# → Grants resources (EXP / Memory Shards).  
+
+# ### ● Heroine Counseling & Sage Q&A  
+# → Consumes resources to unlock narrative, skills, and stats.  
+# → Enhances world understanding to access deeper content.  
+
+# ### ● Returning to Dungeon With a Strengthened Heroine  
+# → Improves combat efficiency and enables higher difficulty challenges.  
+
+# ### Ultimately, **Combat (Action)**, **Narrative (Dialogue)**, and **Growth (Unlocks)**  
+# interlock to form a **subculture-style roguelike RPG**.
+
+# """
