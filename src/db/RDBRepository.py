@@ -340,4 +340,8 @@ class RDBRepository:
                 return None
 
             row_dict = dict(row._mapping)
+            event_value = row_dict.get("event")
+            if isinstance(event_value, list):
+                row_dict["event"] = event_value[0] if event_value else None
+
             return DungeonRow(**row_dict)
