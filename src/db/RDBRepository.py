@@ -4,21 +4,33 @@ from sqlalchemy import create_engine, text
 from db.config import CONNECTION_URL
 from enums.EmbeddingModel import EmbeddingModel
 from db.rdb_entity.DungeonRow import DungeonRow
+
 # 이때 summary_info는 그냥 던전 밸런싱 요약내용을 text로.
+
+
+# 전역 엔진 인스턴스 (싱글톤 패턴)
+_engine = None
+
+
+def get_engine():
+    global _engine
+    if _engine is None:
+        _engine = create_engine(
+            CONNECTION_URL,
+            pool_pre_ping=True,  # 연결 유효성 사전 체크
+            pool_recycle=3600,  # 1시간마다 연결 재생성
+            pool_size=2,  # 연결 풀 크기 최소화
+            max_overflow=0,  # 오버플로우 방지
+            pool_timeout=10,  # 연결 대기 시간 단축
+            echo=False,  # SQL 쿼리 로깅 비활성화
+        )
+    return _engine
 
 
 class RDBRepository:
     def __init__(self):
         self.db_url = CONNECTION_URL
-        self.engine = create_engine(
-            self.db_url,
-            pool_pre_ping=True,  # 연결 유효성 사전 체크
-            pool_recycle=3600,  # 1시간마다 연결 재생성
-            pool_size=1,  # 연결 풀 크기 (Supabase Session 제한, 최소화)
-            max_overflow=0,  # 오버플로우 없음
-            pool_timeout=30,  # 연결 대기 시간 (초)
-            echo=False,  # SQL 쿼리 로깅 비활성화
-        )
+        self.engine = get_engine()
 
     def insert_dungeon(self, floor: int, raw_map: dict | str) -> int:
         """
@@ -294,7 +306,16 @@ class RDBRepository:
                     map(str, raw_map.get("playerIds") or raw_map.get("player_ids", []))
                 )
 
-                if target.issubset(row_players):
+                # raw_map에 없으면 컬럼에서 확인 (get_unfinished_dungeons와 동일 로직)
+                if not row_players:
+                    for i in range(1, 5):
+                        p_id = row._mapping[f"player{i}"]
+                        if p_id:
+                            row_players.add(str(p_id))
+
+                # 부분집합(issubset) 대신 교집합(intersection) 확인으로 변경
+                # 요청한 플레이어 중 한 명이라도 던전에 포함되어 있으면 해당 던전으로 간주
+                if not target.isdisjoint(row_players):
                     dungeon_id = row._mapping["id"]
 
                     # 현재 던전을 완료 처리
@@ -312,9 +333,10 @@ class RDBRepository:
                     return updated_dict
 
             return None
-    
-    
-    def get_current_dungeon_by_player(self, player_id: int, heroine_id: int) -> DungeonRow | None:
+
+    def get_current_dungeon_by_player(
+        self, player_id: int, heroine_id: int
+    ) -> DungeonRow | None:
         sql = """
         SELECT *
         FROM dungeon
@@ -329,10 +351,7 @@ class RDBRepository:
         LIMIT 1
         """
 
-        params = {
-            "player_id": str(player_id),
-            "heroine_id": str(heroine_id)
-        }
+        params = {"player_id": str(player_id), "heroine_id": str(heroine_id)}
 
         with self.engine.connect() as conn:
             row = conn.execute(text(sql), params).fetchone()

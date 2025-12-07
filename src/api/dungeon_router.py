@@ -148,7 +148,7 @@ async def entrance(request: EntranceRequest):
         service = get_dungeon_service()
 
         # raw_map을 dict로 변환
-        raw_map = request.rawMap.dict()
+        raw_map = request.rawMap.model_dump()
 
         # raw_map 정규화 (camelCase -> snake_case)
         from services.dungeon_service import _normalize_room_keys

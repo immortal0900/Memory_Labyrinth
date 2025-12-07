@@ -156,22 +156,29 @@ class DungeonService:
 
         first_player_id = player_ids[0] if player_ids else 0
 
-        # DB Cleanup: Player 0 (테스트 계정)의 이전 던전 세션 종료 처리
-        if first_player_id == 0:
-            try:
-                from sqlalchemy import text
+        # DB Cleanup: 참가하는 모든 플레이어의 이전 (Host로 참여한) 던전 세션 종료 처리
+        try:
+            from sqlalchemy import text
 
+            # player_ids가 유효한지 확인
+            cleanup_targets = player_ids if player_ids else []
+            if first_player_id != 0 and first_player_id not in cleanup_targets:
+                cleanup_targets.append(first_player_id)
+
+            if cleanup_targets:
                 with self.repo.engine.begin() as conn:
-                    conn.execute(
-                        text(
-                            "UPDATE dungeon SET is_finished = true WHERE player_id = 0 AND is_finished = false"
+                    for pid in cleanup_targets:
+                        conn.execute(
+                            text(
+                                "UPDATE dungeon SET is_finishing = true WHERE player1 = :player_id AND is_finishing = false"
+                            ),
+                            {"player_id": str(pid)},
                         )
-                    )
                 print(
-                    f"[Entrance] Player {first_player_id}의 이전 던전 세션을 모두 종료 처리했습니다."
+                    f"[Entrance] 플레이어들({cleanup_targets})의 이전 던전 세션을 모두 종료 처리했습니다."
                 )
-            except Exception as e:
-                print(f"[Entrance] DB Cleanup 실패: {e}")
+        except Exception as e:
+            print(f"[Entrance] DB Cleanup 실패: {e}")
 
         # 2층, 3층 placeholder
         placeholder_raw_map = {
@@ -294,12 +301,17 @@ class DungeonService:
         )
         balanced_map_value = raw_map_json if floor == 1 else None
 
+        # floor 1일 때 raw_map 기반 summary_info 생성
+        summary_info_value = ""
+        if floor == 1:
+            summary_info_value = self._generate_raw_map_summary(raw_map_dict)
+
         params = {
             "floor": floor,
             "raw_map": raw_map_json,
             "balanced_map": balanced_map_value,
             "is_finishing": False,
-            "summary_info": "",
+            "summary_info": summary_info_value,
             "player1": player_with_heroine[0][0],
             "player2": player_with_heroine[1][0],
             "player3": player_with_heroine[2][0],
@@ -347,6 +359,45 @@ class DungeonService:
     # ============================================================
     # 2-1. Summary Info 생성 헬퍼
     # ============================================================
+    def _generate_raw_map_summary(self, raw_map: Dict[str, Any]) -> str:
+        """
+        Raw Map 정보로부터 간단한 요약 정보 생성 (1층용)
+        """
+        rooms = raw_map.get("rooms", [])
+        rooms_count = len(rooms)
+
+        room_types = {}
+        total_monsters = 0
+        event_room_ids = []
+
+        for room in rooms:
+            r_type = room.get("room_type", "unknown")
+            room_types[r_type] = room_types.get(r_type, 0) + 1
+
+            monsters = room.get("monsters", [])
+            total_monsters += len(monsters)
+
+            # 이벤트 방 확인
+            if r_type == "event" or room.get("event_type", 0) != 0:
+                event_room_ids.append(room.get("room_id"))
+
+        type_summary = ", ".join([f"{k}: {v}" for k, v in room_types.items()])
+
+        event_summary = "없음"
+        if event_room_ids:
+            event_summary = (
+                f"{len(event_room_ids)}곳 (Room {', '.join(map(str, event_room_ids))})"
+            )
+
+        summary = (
+            f"던전 1층 진입.\n"
+            f"- 총 방 개수: {rooms_count}\n"
+            f"- 방 구성: {type_summary}\n"
+            f"- 감지된 몬스터 수: {total_monsters}\n"
+            f"- 감지된 이벤트 지점: {event_summary}\n"
+        )
+        return summary
+
     def _generate_summary_info(
         self, balanced_map: Dict[str, Any], agent_result: Dict[str, Any]
     ) -> str:
