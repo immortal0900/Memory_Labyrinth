@@ -82,7 +82,8 @@ class Mem0Manager:
                             "collection_name": "npc_memories",
                             "embedding_model_dims": 1536,
                         },
-                    }
+                    },
+                    "disable_telemetry": True,
                 }
 
                 try:
