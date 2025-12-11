@@ -99,7 +99,7 @@ class AgentMemoryManager:
             embedding_model: OpenAI 임베딩 모델명
         """
         # DB 연결
-        self.engine = create_engine(CONNECTION_URL)
+        self.engine = create_engine(CONNECTION_URL, pool_pre_ping=True)
         
         # 임베딩 모델 (텍스트를 벡터로 변환)
         self.embeddings = OpenAIEmbeddings(model=embedding_model)

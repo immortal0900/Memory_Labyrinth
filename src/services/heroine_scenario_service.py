@@ -31,7 +31,7 @@ class HeroineScenarioService:
     """히로인 시나리오 검색 서비스"""
 
     def __init__(self):
-        self.engine = create_engine(CONNECTION_URL)
+        self.engine = create_engine(CONNECTION_URL, pool_pre_ping=True)
         self.embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
     def _expand_query(self, query: str) -> str:

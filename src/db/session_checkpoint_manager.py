@@ -26,7 +26,7 @@ class SessionCheckpointManager:
 
     def __init__(self):
         """초기화"""
-        self.engine = create_engine(CONNECTION_URL)
+        self.engine = create_engine(CONNECTION_URL, pool_pre_ping=True)
         self.llm = init_chat_model(model="gpt-4o-mini", temperature=0.3)
 
     def save_checkpoint_background(
