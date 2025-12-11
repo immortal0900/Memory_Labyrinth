@@ -60,9 +60,12 @@ def create_temp_use_item_id(state: FairyInteractionState):
     item_use_prompt = PromptManager(FairyPromptType.FAIRY_ITEM_USE).get_prompt(
         inventory_items=my_items, question=last_message
     )
-
+    try: 
+        item_id = int(llm.invoke(item_use_prompt).content)
+    except Exception as e:
+        item_id = None
     # parser_llm = llm.with_structured_output(FairyItemUseOutput)
-    output = FairyItemUseOutput(item_id=int(llm.invoke(item_use_prompt).content))  # for type hinting
+    output = FairyItemUseOutput(item_id=item_id)  # for type hinting
     latency = time.perf_counter() - start
     return {"temp_use_item_id": output.item_id,
             "latency_create_temp_use_item_id": latency}
