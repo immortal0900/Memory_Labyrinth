@@ -8,6 +8,7 @@ from services.dungeon_service import get_dungeon_service
 # Router 생성
 router = APIRouter(prefix="/api/dungeon", tags=["dungeon"])
 
+
 # =============================================================================
 # Pydantic Models (요청/응답 데이터 구조)
 # =============================================================================
@@ -142,6 +143,23 @@ class EventSelectResponse(BaseModel):
     isUnexpected: bool = False
 
 
+class NextFloorRequest(BaseModel):
+    """다음 층 입장 요청"""
+
+    rawMap: RawMapRequest  # 다음 층 raw_map
+    heroineData: Optional[Dict[str, Any]] = None
+    usedEvents: Optional[List[Any]] = None
+
+
+class NextFloorResponse(BaseModel):
+    """다음 층 입장 응답"""
+
+    success: bool
+    message: str
+    floorId: Optional[int] = None
+    events: Optional[List[EventResponse]] = None
+
+
 # =============================================================================
 # API Endpoints
 # =============================================================================
@@ -189,7 +207,7 @@ async def entrance(request: EntranceRequest):
                                 for c in evt.get("choices", [])
                                 if isinstance(c, dict)
                             ],
-                            floor=evt.get("floor", 1)
+                            floor=evt.get("floor", 1),
                         )
                     )
             elif isinstance(events_data, dict):
@@ -211,7 +229,7 @@ async def entrance(request: EntranceRequest):
                             for c in evt.get("choices", [])
                             if isinstance(c, dict)
                         ],
-                        floor=evt.get("floor", 1)
+                        floor=evt.get("floor", 1),
                     )
                 )
 
@@ -295,6 +313,7 @@ async def clear_floor(request: ClearRequest):
 
         finished_floor = result["finished_dungeon"]["floor"]
 
+        # balanced_map 반환 제거, 완료 처리만 응답
         return ClearResponse(
             success=True,
             message=f"{finished_floor}층 완료",
@@ -338,3 +357,85 @@ async def select_event(request: EventSelectRequest):
 
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"이벤트 선택 처리 실패: {str(e)}")
+
+
+@router.post("/nextfloor", response_model=NextFloorResponse)
+async def nextfloor(request: NextFloorRequest):
+    """
+    다음 층 입장 시 raw_map과 heroineData를 받아 이벤트 생성 및 DB 저장
+    """
+    try:
+        service = get_dungeon_service()
+
+        # raw_map dict 변환
+        raw_map = (
+            request.rawMap.model_dump()
+            if hasattr(request.rawMap, "model_dump")
+            else dict(request.rawMap)
+        )
+
+        # DB에 다음 층 던전 및 이벤트 생성
+        result = service.entrance(
+            player_ids=raw_map.get("player_ids") or raw_map.get("playerIds", []),
+            heroine_ids=raw_map.get("heroine_ids") or raw_map.get("heroineIds", []),
+            raw_maps=[raw_map],
+            heroine_data=request.heroineData,
+            used_events=request.usedEvents or [],
+        )
+
+        events_list = []
+        if result.get("events"):
+            events_data = result["events"]
+            if isinstance(events_data, list):
+                for evt in events_data:
+                    events_list.append(
+                        EventResponse(
+                            roomId=evt.get("room_id", 0),
+                            eventType=evt.get("event_type", 0),
+                            eventTitle=evt.get("event_title", ""),
+                            eventCode=evt.get("event_code", ""),
+                            scenarioText=evt.get("scenario_text", ""),
+                            scenarioNarrative=evt.get("scenario_narrative", ""),
+                            choices=[
+                                EventChoice(
+                                    action=c.get("action", ""),
+                                    rewardId=c.get("reward_id"),
+                                    penaltyId=c.get("penalty_id"),
+                                )
+                                for c in evt.get("choices", [])
+                                if isinstance(c, dict)
+                            ],
+                            floor=evt.get("floor", 1),
+                        )
+                    )
+            elif isinstance(events_data, dict):
+                evt = events_data
+                events_list.append(
+                    EventResponse(
+                        roomId=evt.get("room_id", 0),
+                        eventType=evt.get("event_type", 0),
+                        eventTitle=evt.get("event_title", ""),
+                        eventCode=evt.get("event_code", ""),
+                        scenarioText=evt.get("scenario_text", ""),
+                        scenarioNarrative=evt.get("scenario_narrative", ""),
+                        choices=[
+                            EventChoice(
+                                action=c.get("action", ""),
+                                rewardId=c.get("reward_id"),
+                                penaltyId=c.get("penalty_id"),
+                            )
+                            for c in evt.get("choices", [])
+                            if isinstance(c, dict)
+                        ],
+                        floor=evt.get("floor", 1),
+                    )
+                )
+
+        return NextFloorResponse(
+            success=True,
+            message="다음 층 입장 및 이벤트 생성 성공",
+            floorId=result.get("floor_ids", [None])[0],
+            events=events_list if events_list else None,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"다음 층 입장 실패: {str(e)}")
