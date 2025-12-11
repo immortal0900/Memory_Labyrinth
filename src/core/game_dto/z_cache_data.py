@@ -3,7 +3,7 @@
 from core.game_dto.ItemData import ItemData
 from core.game_dto.WeaponData import WeaponData
 
-items = [
+cache_items = [
     ItemData(itemId=0, itemName="일반 한손검", itemType=1, rarity=0,
         weapon=WeaponData(
             weaponId=0, weaponType=1, weaponName="일반 한손검",
@@ -121,7 +121,6 @@ items = [
             modifier={"strength": 0.75, "dexterity": 0.2, "intelligence": 0.05}
         )
     ),
-
     ItemData(itemId=42, itemName="레어 대검", itemType=3, rarity=2,
         weapon=WeaponData(
             weaponId=42, weaponType=3, weaponName="레어 대검",
@@ -235,5 +234,5 @@ items = [
             rarity=3, attackPower=28, staggerPower=6,
             modifier={"strength": 0.85, "dexterity": 0.15, "intelligence": 0}
         )
-    ),
+    ), 
 ]

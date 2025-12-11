@@ -8,7 +8,7 @@ from langgraph.types import interrupt
 from agents.fairy.cache_data import reverse_questions, GAME_SYSTEM_INFO
 from prompts.promptmanager import PromptManager
 from prompts.prompt_type.fairy.FairyPromptType import FairyPromptType
-import random, asyncio
+import random, asyncio, time
 from agents.fairy.util import (
     add_ai_message,
     add_human_message,
@@ -28,13 +28,13 @@ from agents.fairy.util import (
     get_human_few_shot_prompts,
     describe_dungeon_row
 )
-
+from agents.fairy.dungeon.fairy_dungeon_model_logics import FairyDungeonIntentModel
 intent_llm = get_groq_llm_lc(model=LLM.LLAMA_3_1_8B_INSTANT, max_token=43)
 # action_llm = get_groq_llm_lc(max_token=80, temperature=0)
 action_llm = init_chat_model(model=LLM.GROK_4_FAST_NON_REASONING, max_tokens = 80, temperature=0)
 small_talk_llm = init_chat_model(model=LLM.GROK_4_FAST_NON_REASONING, max_tokens = 120)
 rdb_repository = RDBRepository()
-
+intent_model = FairyDungeonIntentModel()
 
 async def get_monsters_info(target_monster_ids: List[int]):
     return find_monsters_info(target_monster_ids)
@@ -84,15 +84,19 @@ async def get_system_info():
 
 
 async def _clarify_intent(query) -> FairyDungeonIntentOutput:
-    intent_prompt = PromptManager(FairyPromptType.FAIRY_DUNGEON_INTENT).get_prompt()
-    messages = [SystemMessage(content=intent_prompt), HumanMessage(content=query)]
-    parser_llm = intent_llm.with_structured_output(FairyDungeonIntentOutput)
-    intent_output: FairyDungeonIntentOutput = await parser_llm.ainvoke(messages)
+    raw_labels, _ = intent_model.predict(query)
+    enum_list = FairyDungeonIntentModel.parse_intents_to_enum(raw_labels)    
+    # intent_prompt = PromptManager(FairyPromptType.FAIRY_DUNGEON_INTENT).get_prompt()
+    # messages = [SystemMessage(content=intent_prompt), HumanMessage(content=query)]
+    # parser_llm = intent_llm.with_structured_output(FairyDungeonIntentOutput)
+    # intent_output: FairyDungeonIntentOutput = await parser_llm.ainvoke(messages)
+    intent_output: FairyDungeonIntentOutput = FairyDungeonIntentOutput(intents=enum_list)
     print("전체 의도::", intent_output)
     return intent_output
 
 
 async def analyze_intent(state: FairyDungeonState):
+    start = time.perf_counter()
     last = state["messages"][-1]
     last_message = last.content
     clarify_intent_type: FairyDungeonIntentOutput = await _clarify_intent(last_message)
@@ -110,9 +114,10 @@ async def analyze_intent(state: FairyDungeonState):
             "intent_types": clarify_intent_type.intents,
             "is_multi_small_talk": False,
         }
-
+    latency = time.perf_counter() - start
     return {
         "intent_types": clarify_intent_type.intents,
+        "latency_analyze_intent": latency
     }
 
 
@@ -124,6 +129,7 @@ def check_condition(state: FairyDungeonState):
 
 
 async def fairy_action(state: FairyDungeonState):
+    start = time.perf_counter()
     intent_types = state.get("intent_types")
     dungenon_player = state["dungenon_player"]
     target_monster_ids = state.get("target_monster_ids", [])
@@ -207,10 +213,13 @@ async def fairy_action(state: FairyDungeonState):
         )
         if contains_hanja(ai_answer.content):
             ai_answer.content = replace_hanja_naively(ai_answer.content)
+
+    latency = time.perf_counter() - start
     return {
         "messages": [
             add_ai_message(content=ai_answer.content, intent_types=intent_types)
-        ]
+        ],
+        "latency_fairy_action": latency
     }
 
 

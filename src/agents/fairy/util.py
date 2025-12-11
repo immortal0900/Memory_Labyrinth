@@ -140,9 +140,11 @@ def get_human_few_shot_prompts(use_intents: Iterable[FairyDungeonIntentType]) ->
     return "\n\n".join(blocks)
 
 
+
+
+
+
 from typing import Any, Dict
-
-
 def describe_dungeon_row(
     curr_room_id: int,
     balanced_map: Dict[str, Any],
@@ -154,6 +156,7 @@ def describe_dungeon_row(
         "empty": "아무것도 없는 빈 방",
         "monster": "전투가 일어나는 방",
         "event": "특별한 일이 일어나는 이벤트 방",
+        "treasure": "보물이 있는 방",
         "boss": "보스가 기다리고 있는 방",
     }
 
@@ -161,11 +164,12 @@ def describe_dungeon_row(
         "empty": "빈 방",
         "monster": "전투 방",
         "event": "이벤트 방",
+        "treasure": "보물 방",
         "boss": "보스 방",
     }
 
     room_type = curr.get("room_type", "unknown")
-    room_type_ko = room_type_map.get(room_type, "정체를 알 수 없는 이상한 방")
+    room_type_ko = room_type_map.get(room_type, "정체를 알 수 없는 방")
 
     neighbor_ids = curr.get("neighbors", []) or []
     neighbor_rooms = [r for r in rooms if r.get("room_id") in neighbor_ids]
@@ -224,7 +228,7 @@ def describe_dungeon_row(
         "아래 정보는 각 방이 어떤 종류이며, 어떤 종류의 방들과 연결되어 있는지를 요약한 것입니다."
     )
     # 같은 타입의 방이 여러 개 있을 수 있으니, "어떤/또 다른"으로 구분
-    seen_count: Dict[str, int] = {"empty": 0, "monster": 0, "event": 0, "boss": 0}
+    seen_count: Dict[str, int] = {"empty": 0, "monster": 0, "event": 0,"treasure": 0, "boss": 0}
 
     for room in rooms:
         r_type = room.get("room_type", "unknown")
@@ -268,3 +272,15 @@ def describe_dungeon_row(
         dungeon_lines.append(line)
 
     return "\n".join(dungeon_lines)
+
+
+import time
+
+def measure_latency(func):
+    def wrapper(*args, **kwargs):
+        start = time.perf_counter()
+        result = func(*args, **kwargs)
+        end = time.perf_counter()
+        latency = (end - start)
+        return result, latency
+    return wrapper

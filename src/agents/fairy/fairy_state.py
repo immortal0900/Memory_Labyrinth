@@ -4,14 +4,7 @@ from enum import StrEnum
 from langgraph.graph import MessagesState
 from core.game_dto.WeaponData import WeaponData
 
-class FairyState(TypedDict):
-    player_id:Optional[str]
-    hiroine_id:Optional[str]
-    question:Optional[str]
-    answer:Optional[str]
-
 # ==== START 던전 =====
-
 class DungeonPlayerState(BaseModel):
     playerId: int
     heroineId: int
@@ -43,6 +36,8 @@ class FairyDungeonState(MessagesState):
     target_monster_ids: List[int] = []
     player_id:Optional[int] = None
     next_room_ids: List[int] = []
+    latency_analyze_intent: float = 0.0
+    latency_fairy_action:float = 0.0
 
 class FairyInterationIntentType(StrEnum):
     INVENTORY_ITEM_USE = "INVENTORY_ITEM_USE"
@@ -62,8 +57,12 @@ class FairyInteractionState(MessagesState):
     roomLight: int = 0
     isCheckNextRoom: bool = False
     useItemId: Optional[int] = None
+    is_item_use: bool = False
     intent_types: List[FairyInterationIntentType]
     temp_use_item_id: Optional[int] = None
+    latency_analyze_intent: float = 0.0
+    latency_create_temp_use_item_id:float = 0.0
+    latency_check_use_item:float = 0.0 
 
 class FairyItemUseOutput(BaseModel):
     item_id: Optional[int] = Field(description="사용하려는 item의 id", default=None)

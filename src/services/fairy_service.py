@@ -1,8 +1,8 @@
 from typing import List
 
-from agents.fairy.fairy_guild_agent import graph_builder as guild_builder
-from agents.fairy.fairy_dungeon_agent import graph_builder as dungeon_builder
-from agents.fairy.fairy_interaction_agent import graph_builder as interaction_builder
+from agents.fairy.guild.fairy_guild_agent import graph_builder as guild_builder
+from agents.fairy.dungeon.fairy_dungeon_agent import graph_builder as dungeon_builder
+from agents.fairy.interaction.fairy_interaction_agent import graph_builder as interaction_builder
 from langgraph.checkpoint.memory import MemorySaver
 from agents.fairy.util import add_human_message
 
@@ -22,7 +22,6 @@ async def fairy_dungeon_talk(
             "thread_id": playerId,
         }
     }
-    print("여기 왔다")
     response = await dungeon_graph.ainvoke(
         {
             "messages": [add_human_message(content=question)],

@@ -29,6 +29,9 @@ def get_cur_timestamp():
 """사용예시:
 read_json(get_data_path() / "data"/"test.json") 
 write_json("data/test.json", json_data)
+
+read_jsonl(get_data_path() / "data"/"test.json") 
+write_jsonl("data/test.json", json_data)
 """
 import json
 def read_json(path):
@@ -39,6 +42,14 @@ def write_json(path, data):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
         
+def write_jsonl(path, data):
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(data, ensure_ascii=False) + "\n")
+
+def read_jsonl(path):
+    with open(path, "r", encoding="utf-8") as f:
+        return [json.loads(line) for line in f]
+    
 
 """사용 예시: 
 find_files(get_data_path(), patterns=("*.pdf", "*.xml"))
@@ -66,14 +77,14 @@ def get_best_device():
         return torch.device("cpu")
     
 
-from core.game_dto.z_cache_data import items
+from core.game_dto.z_cache_data import cache_items
 from core.game_dto.ItemData import ItemData
 from typing import List
 def get_inventory_items(inventory_ids:list) -> List[ItemData]:
-    return [item for item in items if item.itemId in inventory_ids]
+    return [item for item in cache_items if item.itemId in inventory_ids]
 
 def get_inventory_item(item_id: int):
-    for item in items:
+    for item in cache_items:
         if item.itemId == item_id:
             return item
     return None
