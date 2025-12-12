@@ -86,6 +86,13 @@ class HeroineConversationRequest(BaseModel):
     turnCount: Optional[int] = 10
 
 
+class ConversationInterruptRequest(BaseModel):
+    conversationId: str
+    interruptedTurn: int
+    heroine1Id: int
+    heroine2Id: int
+
+
 class GuildRequest(BaseModel):
     playerId: int
 
@@ -544,6 +551,25 @@ async def get_heroine_conversations(
         heroine1_id=heroine1_id, heroine2_id=heroine2_id, limit=limit
     )
     return {"conversations": conversations}
+
+
+@router.post("/heroine-conversation/interrupt")
+async def interrupt_heroine_conversation(request: ConversationInterruptRequest):
+    """NPC-NPC 대화 인터럽트 처리
+    
+    유저가 NPC 대화 중간에 끊고 들어왔을 때 호출합니다.
+    interruptedTurn 이후의 대화는 NPC가 모르는 것으로 처리됩니다.
+    
+    예: 10턴 대화 중 3턴에서 끊기면 interruptedTurn=3
+    → 1,2,3턴 대화만 유지, 4턴 이후는 삭제
+    """
+    result = heroine_heroine_agent.interrupt_conversation(
+        conversation_id=request.conversationId,
+        interrupted_turn=request.interruptedTurn,
+        heroine1_id=request.heroine1Id,
+        heroine2_id=request.heroine2Id
+    )
+    return result
 
 
 # ============================================

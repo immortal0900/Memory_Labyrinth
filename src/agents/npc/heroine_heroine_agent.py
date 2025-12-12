@@ -599,6 +599,56 @@ JSON 배열로 출력하세요:
 
         return conversations
 
+    def interrupt_conversation(
+        self,
+        conversation_id: str,
+        interrupted_turn: int,
+        heroine1_id: int,
+        heroine2_id: int
+    ) -> Dict[str, Any]:
+        """NPC-NPC 대화 인터럽트 처리
+        
+        유저가 NPC 대화 중간에 끊고 들어왔을 때 호출됩니다.
+        interrupted_turn 이후의 대화는 NPC가 모르는 것으로 처리됩니다.
+        
+        Args:
+            conversation_id: 대화 ID (agent_memories.id)
+            interrupted_turn: 유저가 끊은 턴 (이 턴까지만 유효)
+            heroine1_id: 첫 번째 히로인 ID
+            heroine2_id: 두 번째 히로인 ID
+        
+        Returns:
+            처리 결과 딕셔너리
+        """
+        # 1. 대화 자르기
+        conversation_updated = agent_memory_manager.truncate_conversation(
+            conversation_id=conversation_id,
+            interrupted_turn=interrupted_turn
+        )
+        
+        if not conversation_updated:
+            return {
+                "success": False,
+                "message": "대화를 찾을 수 없습니다",
+                "conversation_id": conversation_id
+            }
+        
+        # 2. 연결된 NPC 기억도 업데이트
+        memory_count = agent_memory_manager.truncate_npc_memories_by_conversation(
+            conversation_id=conversation_id,
+            npc1_id=heroine1_id,
+            npc2_id=heroine2_id,
+            interrupted_turn=interrupted_turn
+        )
+        
+        return {
+            "success": True,
+            "message": f"{interrupted_turn}턴까지의 대화만 유지됩니다",
+            "conversation_id": conversation_id,
+            "interrupted_turn": interrupted_turn,
+            "updated_memories": memory_count
+        }
+
     def search_conversations(
         self, heroine_id: int, query: str, top_k: int = 5
     ) -> List[Dict[str, Any]]:

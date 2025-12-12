@@ -477,6 +477,84 @@ data: [DONE]
 
 ---
 
+### POST /api/npc/heroine-conversation/interrupt
+
+NPC-NPC 대화 인터럽트 처리. **유저가 NPC 대화 중간에 끊고 들어왔을 때** 호출합니다.
+
+`interruptedTurn` 이후의 대화는 NPC가 모르는 것으로 처리됩니다.
+
+#### Request
+
+```json
+{
+    "conversationId": "uuid-string",
+    "interruptedTurn": 3,
+    "heroine1Id": 1,
+    "heroine2Id": 2
+}
+```
+
+**Request 필드:**
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| conversationId | string | O | 대화 ID (UUID) |
+| interruptedTurn | int | O | 유저가 끊은 턴 (이 턴까지만 유효) |
+| heroine1Id | int | O | 첫 번째 히로인 ID |
+| heroine2Id | int | O | 두 번째 히로인 ID |
+
+#### Response (성공)
+
+```json
+{
+    "success": true,
+    "message": "3턴까지의 대화만 유지됩니다",
+    "conversation_id": "uuid-string",
+    "interrupted_turn": 3,
+    "updated_memories": 2
+}
+```
+
+**Response 필드 (성공):**
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| success | bool | 성공 여부 (true) |
+| message | string | 결과 메시지 |
+| conversation_id | string | 대화 ID |
+| interrupted_turn | int | 끊긴 턴 번호 |
+| updated_memories | int | 업데이트된 양방향 NPC 기억 수 |
+
+#### Response (실패)
+
+```json
+{
+    "success": false,
+    "message": "대화를 찾을 수 없습니다",
+    "conversation_id": "uuid-string"
+}
+```
+
+**Response 필드 (실패):**
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| success | bool | 성공 여부 (false) |
+| message | string | 에러 메시지 |
+| conversation_id | string | 대화 ID |
+
+#### 사용 예시
+
+```
+10턴 대화 중 3턴에서 유저가 끊고 들어온 경우:
+- interruptedTurn = 3
+- 1, 2, 3턴 대화만 유지
+- 4턴 이후는 DB에서 삭제
+- NPC는 4턴 이후 대화 내용을 모름
+```
+
+---
+
 ## 5. 길드 시스템
 
 User가 길드에 있는 동안 NPC들이 자동으로 대화합니다.
@@ -658,6 +736,8 @@ Request->ProcessRequest();
 
 ## 7. 호출 흐름도
 
+### 7-1. 기본 흐름
+
 ```
 [게임 시작]
     |
@@ -693,6 +773,48 @@ POST /api/npc/sage/chat  또는  /chat/sync
 POST /api/npc/guild/leave
     |
     +---> 백그라운드 NPC 대화 중단
+```
+
+### 7-2. NPC-NPC 대화 인터럽트 흐름
+
+유저가 NPC-NPC 대화 중간에 끊고 들어왔을 때의 흐름입니다.
+
+```
+[언리얼] NPC 대화 요청
+    |
+    v
+POST /api/npc/heroine-conversation/generate
+    |
+    v
+[서버] 10턴 대화 생성 + DB 저장
+    |
+    v
+Response: { "id": "uuid-xxx", "conversation": [...] }
+    |
+    v
+[언리얼] id(uuid) 저장, 대화를 유저에게 순차 출력
+    |
+    v
+[유저] 3턴째에서 NPC 대화 끊고 히로인에게 말 검
+    |
+    v
+[언리얼] 끊긴 턴(3) 확인
+    |
+    v
+POST /api/npc/heroine-conversation/interrupt
+    {
+        "conversationId": "uuid-xxx",  // 저장해둔 id
+        "interruptedTurn": 3,          // 끊긴 턴
+        "heroine1Id": 1,
+        "heroine2Id": 2
+    }
+    |
+    v
+[서버] DB에서 4턴 이후 대화 삭제
+    |
+    v
+[결과] NPC는 1,2,3턴 대화만 기억함
+       유저가 "뭐 얘기했어?" 물어도 4턴 이후는 모름
 ```
 
 ---
@@ -889,6 +1011,7 @@ NPC별 세션 정보를 조회합니다. (디버그용)
 | 히로인간 대화 생성 | POST | /api/npc/heroine-conversation/generate | heroine1Id, heroine2Id, situation?, turnCount? | id, content, conversation[] |
 | 히로인간 대화 스트리밍 | POST | /api/npc/heroine-conversation/stream | heroine1Id, heroine2Id, situation?, turnCount? | SSE 스트림 |
 | 히로인간 대화 조회 | GET | /api/npc/heroine-conversation | heroine1_id?, heroine2_id?, limit? | conversations[] |
+| 히로인간 대화 인터럽트 | POST | /api/npc/heroine-conversation/interrupt | conversationId, interruptedTurn, heroine1Id, heroine2Id | success, message, interrupted_turn |
 | 길드 진입 | POST | /api/npc/guild/enter | playerId | success, message |
 | 길드 퇴장 | POST | /api/npc/guild/leave | playerId | success, message, activeConversation |
 | 길드 상태 조회 | GET | /api/npc/guild/status/{player_id} | - | in_guild, active_conversation |

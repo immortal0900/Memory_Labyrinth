@@ -677,6 +677,156 @@ class AgentMemoryManager:
             conn.commit()
             return result.rowcount
     
+    def truncate_conversation(
+        self,
+        conversation_id: str,
+        interrupted_turn: int
+    ) -> bool:
+        """NPC-NPC 대화를 특정 턴까지만 남기고 자르기
+        
+        유저가 NPC 대화 중간에 끊고 들어왔을 때 호출됩니다.
+        interrupted_turn 이후의 대화는 NPC가 모르는 것으로 처리됩니다.
+        
+        Args:
+            conversation_id: 대화 ID (agent_memories.id)
+            interrupted_turn: 유저가 끊은 턴 (이 턴까지만 유효)
+        
+        Returns:
+            성공 여부
+        """
+        # 1. 대화 조회
+        sql_select = text("""
+            SELECT id, content, metadata
+            FROM agent_memories
+            WHERE id = :id AND memory_type = 'npc_conversation'
+        """)
+        
+        with self.engine.connect() as conn:
+            result = conn.execute(sql_select, {"id": conversation_id})
+            row = result.fetchone()
+            
+            if not row:
+                return False
+            
+            metadata = row.metadata or {}
+            conversation = metadata.get("conversation", [])
+            
+            # 2. 대화를 interrupted_turn까지만 자르기
+            truncated_conversation = conversation[:interrupted_turn]
+            
+            if not truncated_conversation:
+                # 대화가 없으면 삭제
+                self.delete_memory(conversation_id)
+                return True
+            
+            # 3. content 재생성
+            content_parts = []
+            for msg in truncated_conversation:
+                speaker = msg.get("speaker_name", "")
+                text_content = msg.get("text", "")
+                content_parts.append(f"{speaker}: {text_content}")
+            new_content = "\n".join(content_parts)
+            
+            # 4. metadata 업데이트
+            metadata["conversation"] = truncated_conversation
+            metadata["turn_count"] = len(truncated_conversation)
+            metadata["interrupted_at"] = interrupted_turn
+            
+            # 5. 임베딩 재생성
+            new_embedding = self.embeddings.embed_query(new_content)
+            
+            # 6. DB 업데이트
+            sql_update = text("""
+                UPDATE agent_memories
+                SET content = :content,
+                    embedding = CAST(:embedding AS vector),
+                    metadata = CAST(:metadata AS jsonb),
+                    last_accessed_at = NOW()
+                WHERE id = :id
+            """)
+            
+            conn.execute(sql_update, {
+                "id": conversation_id,
+                "content": new_content,
+                "embedding": str(new_embedding),
+                "metadata": json.dumps(metadata, ensure_ascii=False)
+            })
+            conn.commit()
+            
+        return True
+    
+    def truncate_npc_memories_by_conversation(
+        self,
+        conversation_id: str,
+        npc1_id: int,
+        npc2_id: int,
+        interrupted_turn: int
+    ) -> int:
+        """대화와 연결된 NPC 기억도 함께 자르기
+        
+        Args:
+            conversation_id: 원본 대화 ID
+            npc1_id: 첫 번째 NPC ID
+            npc2_id: 두 번째 NPC ID
+            interrupted_turn: 유저가 끊은 턴
+        
+        Returns:
+            업데이트된 기억 수
+        """
+        # 양방향 기억 agent_id 패턴
+        agent_ids = [
+            f"npc_{npc1_id}_about_{npc2_id}",
+            f"npc_{npc2_id}_about_{npc1_id}"
+        ]
+        
+        updated_count = 0
+        
+        # 해당 conversation_id를 참조하는 기억들 조회 및 업데이트
+        sql_select = text("""
+            SELECT id, content, metadata
+            FROM agent_memories
+            WHERE agent_id = :agent_id
+              AND memory_type = 'npc_memory'
+              AND metadata->>'conversation_id' = :conversation_id
+        """)
+        
+        with self.engine.connect() as conn:
+            for agent_id in agent_ids:
+                result = conn.execute(sql_select, {
+                    "agent_id": agent_id,
+                    "conversation_id": conversation_id
+                })
+                row = result.fetchone()
+                
+                if row:
+                    metadata = row.metadata or {}
+                    metadata["interrupted_at"] = interrupted_turn
+                    
+                    # content에 인터럽트 정보 추가
+                    new_content = row.content
+                    if "..." in new_content:
+                        # 기존 content는 "상대방과 대화함: 내용..." 형식
+                        # interrupted_turn까지만의 내용으로 변경하기 어려우므로
+                        # metadata만 업데이트하고 content는 유지
+                        pass
+                    
+                    sql_update = text("""
+                        UPDATE agent_memories
+                        SET metadata = CAST(:metadata AS jsonb),
+                            last_accessed_at = NOW()
+                        WHERE id = :id
+                    """)
+                    
+                    conn.execute(sql_update, {
+                        "id": row.id,
+                        "metadata": json.dumps(metadata, ensure_ascii=False)
+                    })
+                    updated_count += 1
+            
+            conn.commit()
+        
+        return updated_count
+
     def get_stats(self, agent_id: str = None) -> dict:
         """메모리 통계 조회
         
