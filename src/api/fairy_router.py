@@ -183,10 +183,3 @@ async def talk_guild(request: TalkGuildRequest):
         playerId, question, heroine_id, affection, memory_progress, sanity
     )
     return TalkResponse(response_text=result_text)
-
-
-from tests.fairy.BGM3_temp import get_collection
-@router.post("/test")
-async def test_bgm3():
-    get_collection()
-    return True
