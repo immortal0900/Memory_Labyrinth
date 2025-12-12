@@ -84,14 +84,15 @@ async def get_system_info():
 
 
 async def _clarify_intent(query) -> FairyDungeonIntentOutput:
-    raw_labels, _ = intent_model.predict(query)
-    enum_list = FairyDungeonIntentModel.parse_intents_to_enum(raw_labels)    
-    # intent_prompt = PromptManager(FairyPromptType.FAIRY_DUNGEON_INTENT).get_prompt()
-    # messages = [SystemMessage(content=intent_prompt), HumanMessage(content=query)]
-    # parser_llm = intent_llm.with_structured_output(FairyDungeonIntentOutput)
-    # intent_output: FairyDungeonIntentOutput = await parser_llm.ainvoke(messages)
-    intent_output: FairyDungeonIntentOutput = FairyDungeonIntentOutput(intents=enum_list)
-    print("전체 의도::", intent_output)
+
+    intent_prompt = PromptManager(FairyPromptType.FAIRY_DUNGEON_INTENT).get_prompt()
+    messages = [SystemMessage(content=intent_prompt), HumanMessage(content=query)]
+    parser_llm = intent_llm.with_structured_output(FairyDungeonIntentOutput)
+    intent_output: FairyDungeonIntentOutput = await parser_llm.ainvoke(messages)
+    # raw_labels, _ = intent_model.predict(query)
+    # enum_list = FairyDungeonIntentModel.parse_intents_to_enum(raw_labels)    
+    # intent_output: FairyDungeonIntentOutput = FairyDungeonIntentOutput(intents=enum_list)
+    # print("전체 의도::", intent_output)
     return intent_output
 
 

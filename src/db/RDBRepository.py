@@ -30,6 +30,7 @@ def get_engine():
 class RDBRepository:
     def __init__(self):
         self.db_url = CONNECTION_URL
+        self.engine = get_engine()
     def insert_dungeon(self, floor: int, raw_map: dict | str) -> int:
         """
         던전 생성
