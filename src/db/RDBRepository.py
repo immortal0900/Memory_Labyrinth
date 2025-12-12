@@ -19,7 +19,7 @@ def get_engine():
             CONNECTION_URL,
             pool_pre_ping=True,  # 연결 유효성 사전 체크
             pool_recycle=3600,  # 1시간마다 연결 재생성
-            pool_size=2,  # 연결 풀 크기 최소화
+            pool_size=10,  # 최대 연결 수
             max_overflow=0,  # 오버플로우 방지
             pool_timeout=10,  # 연결 대기 시간 단축
             echo=False,  # SQL 쿼리 로깅 비활성화
@@ -30,8 +30,6 @@ def get_engine():
 class RDBRepository:
     def __init__(self):
         self.db_url = CONNECTION_URL
-        self.engine = get_engine()
-
     def insert_dungeon(self, floor: int, raw_map: dict | str) -> int:
         """
         던전 생성

@@ -22,7 +22,7 @@ class VectorDBRepository:
         self.db_url = CONNECTION_URL
 
         # 일반 DB 작업용 엔진 생성
-        self.engine = create_engine(self.db_url)
+        self.engine = create_engine(self.db_url, pool_pre_ping=True)
 
         # RAG용 벡터 저장소 (모델이 지정된 경우에만 생성)
         self.store = None
