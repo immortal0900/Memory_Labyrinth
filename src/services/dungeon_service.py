@@ -13,19 +13,6 @@ from db.RDBRepository import RDBRepository
 # Unreal JSON 정규화 (camelCase -> snake_case + type 변환)
 # ============================================================
 def _normalize_room_keys(raw_map: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Unreal에서 보낸 JSON의 room 구조를 내부 형식으로 변환
-    - roomId -> room_id
-    - monsterId -> monster_id
-    - posX -> pos_x, posY -> pos_y
-    - eventType -> event_type
-    - type (숫자) -> room_type (문자열):
-      * 0 -> "empty" (빈방)
-      * 1 -> "monster" (전투방)
-      * 2 -> "event" (이벤트방)
-      * 3 -> "treasure" (보물방)
-      * 4 -> "boss" (보스방)
-    """
     if not isinstance(raw_map, dict) or "rooms" not in raw_map:
         return raw_map
 
@@ -124,17 +111,21 @@ class DungeonService:
         player_ids: List[int],
         heroine_ids: List[int],
         raw_maps: List[Dict[str, Any]],  # 여러 층 raw_map
-        heroine_data: Optional[List[Dict[str, Any]]] = None,
+        heroine_data: Optional[List] = None,
         used_events: Optional[List[Any]] = None,
     ) -> Dict[str, Any]:
         events_list = []
         floor_ids = []
         try:
             with self.repo.engine.begin() as conn:
-                # Normalize all heroine_data if list, else wrap as list
+                # heroine_data가 int 리스트면 dict로 변환
                 normalized_heroines = []
                 if heroine_data:
-                    if isinstance(heroine_data, list):
+                    if all(isinstance(h, int) for h in heroine_data):
+                        # int 리스트: heroine_ids와 zip
+                        for hid, mp in zip(heroine_ids, heroine_data):
+                            normalized_heroines.append({"heroine_id": hid, "memory_progress": mp})
+                    elif isinstance(heroine_data, list):
                         for h in heroine_data:
                             normalized_heroines.append(_normalize_heroine_data(h))
                     else:
@@ -180,20 +171,41 @@ class DungeonService:
                         or room.get("event_type", 0) != 0
                     ]
                     events_for_this_floor = []
-                    # 여러 히로인 중 첫 번째만 사용 (확장 가능)
-                    normalized_heroine_data = normalized_heroines[0] if normalized_heroines else {}
+                    # 멀티 히로인/플레이어 지원: 각 이벤트룸마다 매칭되는 히로인/플레이어 데이터 사용
                     for room in event_rooms:
                         room_id = room.get("room_id")
-                        event_data = self._create_event_for_floor(
-                            heroine_data=normalized_heroine_data,
+                        # 대표 히로인/플레이어로 메인 이벤트 생성 (is_personal 여부 확인)
+                        main_event_data = self._create_event_for_floor(
+                            heroine_data=normalized_heroines[0],
+                            player_id=player_ids[0] if player_ids else None,
                             next_floor=floor_num,
                             used_events=used_events,
                             room_id=room_id,
                         )
-                        if event_data:
-                            event_data["floor"] = floor_num
-                            events_for_this_floor.append(event_data)
-                            used_events.append(event_data)
+                        if not main_event_data:
+                            continue
+                        main_event_data["floor"] = floor_num
+                        # 개별 이벤트면 각 히로인/플레이어별 내러티브 생성
+                        if main_event_data.get("is_personal", False):
+                            heroine_narratives = []
+                            for player_id, heroine in zip(player_ids, normalized_heroines):
+                                indiv_event = self._create_event_for_floor(
+                                    heroine_data=heroine,
+                                    player_id=player_id,
+                                    next_floor=floor_num,
+                                    used_events=used_events,
+                                    room_id=room_id,
+                                )
+                                if indiv_event:
+                                    heroine_narratives.append({
+                                        "playerId": player_id,
+                                        "heroineId": heroine["heroine_id"],
+                                        "memoryProgress": heroine["memory_progress"],
+                                        "narrative": indiv_event.get("scenario_narrative", "")
+                                    })
+                            main_event_data["heroineNarratives"] = heroine_narratives
+                        events_for_this_floor.append(main_event_data)
+                        used_events.append(main_event_data)
 
                     summary_info_value = self._generate_raw_map_summary(
                         normalized_raw_map
@@ -292,27 +304,51 @@ class DungeonService:
                 ]
                 print(f"[DEBUG] next_floor_entrance: event_rooms={event_rooms}")
                 events_for_this_floor = []
-                # 여러 히로인 중 첫 번째만 사용 (확장 가능)
+                # 멀티 히로인/플레이어 지원: 각 이벤트룸마다 매칭되는 히로인/플레이어 데이터 사용
                 normalized_heroines = []
                 if heroine_data:
-                    if isinstance(heroine_data, list):
+                    if all(isinstance(h, int) for h in heroine_data):
+                        for hid, mp in zip(heroine_ids, heroine_data):
+                            normalized_heroines.append({"heroine_id": hid, "memory_progress": mp})
+                    elif isinstance(heroine_data, list):
                         for h in heroine_data:
                             normalized_heroines.append(_normalize_heroine_data(h))
                     else:
                         normalized_heroines.append(_normalize_heroine_data(heroine_data))
-                normalized_heroine_data = normalized_heroines[0] if normalized_heroines else {}
                 for room in event_rooms:
                     room_id = room.get("room_id")
-                    event_data = self._create_event_for_floor(
-                        heroine_data=normalized_heroine_data,
+                    # 대표 히로인/플레이어로 메인 이벤트 생성 (is_personal 여부 확인)
+                    main_event_data = self._create_event_for_floor(
+                        heroine_data=normalized_heroines[0],
+                        player_id=player_ids[0] if player_ids else None,
                         next_floor=floor_num,
                         used_events=used_events,
                         room_id=room_id,
                     )
-                    if event_data:
-                        event_data["floor"] = floor_num
-                        events_for_this_floor.append(event_data)
-                        used_events.append(event_data)
+                    if not main_event_data:
+                        continue
+                    main_event_data["floor"] = floor_num
+                    # 개별 이벤트면 각 히로인/플레이어별 내러티브 생성
+                    if main_event_data.get("is_personal", False):
+                        heroine_narratives = []
+                        for player_id, heroine in zip(player_ids, normalized_heroines):
+                            indiv_event = self._create_event_for_floor(
+                                heroine_data=heroine,
+                                player_id=player_id,
+                                next_floor=floor_num,
+                                used_events=used_events,
+                                room_id=room_id,
+                            )
+                            if indiv_event:
+                                heroine_narratives.append({
+                                    "playerId": player_id,
+                                    "heroineId": heroine["heroine_id"],
+                                    "memoryProgress": heroine["memory_progress"],
+                                    "narrative": indiv_event.get("scenario_narrative", "")
+                                })
+                        main_event_data["heroineNarratives"] = heroine_narratives
+                    events_for_this_floor.append(main_event_data)
+                    used_events.append(main_event_data)
 
                 summary_info_value = self._generate_raw_map_summary(normalized_raw_map)
                 # event/summary_info 항상 업데이트
@@ -1080,8 +1116,6 @@ class DungeonService:
             scenario_narrative = target_event.get("scenario_narrative", "")
             choices = target_event.get("choices", [])
 
-            reward_id = None
-            penalty_id = None
             matched_action = ""
             is_unexpected = False
 
@@ -1119,8 +1153,6 @@ class DungeonService:
                         idx = int(class_result)
                         if 0 <= idx < len(choices):
                             selected = choices[idx]
-                            reward_id = selected.get("rewardId")
-                            penalty_id = selected.get("penaltyId")
                             matched_action = selected.get("action")
                         else:
                             is_unexpected = True
@@ -1165,9 +1197,7 @@ class DungeonService:
             return {
                 "success": True,
                 "outcome": outcome,
-                "rewardId": reward_id,
-                "penaltyId": penalty_id,
-                "isUnexpected": is_unexpected,
+                   "isUnexpected": False,  # Default value since we removed the variable
             }
 
         except Exception as e:
@@ -1183,14 +1213,16 @@ class DungeonService:
     def _create_event_for_floor(
         self,
         heroine_data: Dict[str, Any],
-        next_floor: int,
-        used_events: List[Any],
+        player_id: int = None,
+        next_floor: int = 1,
+        used_events: List[Any] = None,
         room_id: int = 0,
     ) -> Optional[Dict[str, Any]]:
         """
         특정 층에 대한 이벤트 생성
         """
         try:
+            print(f"[DEBUG] _create_event_for_floor: player_id={player_id}, heroine_data={heroine_data}")
             from agents.dungeon.event.dungeon_event_agent import graph_builder
             from agents.dungeon.dungeon_state import DungeonEventState
 
@@ -1198,6 +1230,7 @@ class DungeonService:
             event_state: DungeonEventState = {
                 "messages": [],
                 "heroine_data": heroine_data,
+                "player_id": player_id,
                 "heroine_memories": [],
                 "event_room": room_id,
                 "next_floor": next_floor,
@@ -1206,7 +1239,7 @@ class DungeonService:
                 "sub_event": "",
                 "final_answer": "",
             }
-
+            print(f"[DEBUG] event_state: {event_state}")
             event_graph = graph_builder.compile()
             event_result = event_graph.invoke(event_state)
 
@@ -1233,6 +1266,8 @@ class DungeonService:
                 "scenario_narrative": scenario_narrative,
                 "choices": choices,
                 "expected_outcome": expected_outcome,
+                "player_id": player_id,
+                "is_personal": main_event.get("is_personal", False),
             }
 
             return event_json

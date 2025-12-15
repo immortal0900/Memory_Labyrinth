@@ -1,196 +1,75 @@
-"""
-던전 이벤트에서 사용 가능한 보상/패널티 목록
-실제 게임 DTO(StatData, ItemData, RoomData 등)를 기반으로 구현 가능한 것들만 정의
-"""
 
-# =============================================================================
-# 보상 (Rewards)
-# =============================================================================
-REWARDS = {
-    # 스탯 증가 (StatData 기반)
-    "hp_increase_all": {
-        "type": "stat_buff",
-        "description": "모든 플레이어의 최대 체력이 50 증가한다",
-        "effect": {"stat": "hp", "value": 50, "target": "all"},
-    },
-    "strength_increase_all": {
-        "type": "stat_buff",
-        "description": "모든 플레이어의 근력이 5 증가한다",
-        "effect": {"stat": "strength", "value": 5, "target": "all"},
-    },
-    "dexterity_increase_all": {
-        "type": "stat_buff",
-        "description": "모든 플레이어의 기량이 5 증가한다",
-        "effect": {"stat": "dexterity", "value": 5, "target": "all"},
-    },
-    "move_speed_increase_all": {
-        "type": "stat_buff",
-        "description": "모든 플레이어의 이동속도가 10% 증가한다 (moveSpeed +0.1)",
-        "effect": {"stat": "moveSpeed", "value": 0.1, "target": "all"},
-    },
-    "crit_chance_increase_all": {
-        "type": "stat_buff",
-        "description": "모든 플레이어의 치명타 확률이 10% 증가한다",
-        "effect": {"stat": "critChance", "value": 10.0, "target": "all"},
-    },
-    "attack_speed_increase_all": {
-        "type": "stat_buff",
-        "description": "모든 플레이어의 공격 속도가 15% 증가한다 (attackSpeed +0.15)",
-        "effect": {"stat": "attackSpeed", "value": 0.15, "target": "all"},
-    },
-    "cooldown_reduction_all": {
-        "type": "stat_buff",
-        "description": "모든 플레이어의 쿨타임이 10% 감소한다 (cooldownReduction +0.1)",
-        "effect": {"stat": "cooldownReduction", "value": 0.1, "target": "all"},
-    },
-    "skill_damage_increase_all": {
-        "type": "stat_buff",
-        "description": "모든 플레이어의 스킬 데미지가 20% 증가한다 (skillDamageMultiplier +0.2)",
-        "effect": {"stat": "skillDamageMultiplier", "value": 0.2, "target": "all"},
-    },
-    # 체력 회복
-    "hp_recovery_all": {
-        "type": "recovery",
-        "description": "모든 플레이어의 체력이 100 회복된다",
-        "effect": {"stat": "hp", "value": 100, "target": "all"},
-    },
-    # 아이템 보상 (ItemData 기반 - 레어도 지정)
-    "item_reward_common": {
-        "type": "item",
-        "description": "모든 플레이어가 커먼(rarity=0) 아이템을 1개 획득한다",
-        "effect": {"action": "add_item", "rarity": 0, "count": 1, "target": "all"},
-    },
-    "item_reward_uncommon": {
-        "type": "item",
-        "description": "모든 플레이어가 언커먼(rarity=1) 아이템을 1개 획득한다",
-        "effect": {"action": "add_item", "rarity": 1, "count": 1, "target": "all"},
-    },
-    "item_reward_rare": {
-        "type": "item",
-        "description": "모든 플레이어가 레어(rarity=2) 아이템을 1개 획득한다",
-        "effect": {"action": "add_item", "rarity": 2, "count": 1, "target": "all"},
-    },
-}
+# 몬스터 스폰 보상 예시
+SPAWN_MONSTER_REWARDS = [
+    {"id": "spawn_slime_1", "type": "spawn_monster", "monster_id": 1, "count": 1, "description": "이벤트방에 슬라임 1마리 등장"},
+    {"id": "spawn_goblin_2", "type": "spawn_monster", "monster_id": 2, "count": 2, "description": "이벤트방에 고블린 2마리 등장"},
+]
 
-# =============================================================================
-# 패널티 (Penalties)
-# =============================================================================
-PENALTIES = {
-    # 스탯 감소 (StatData 기반)
-    "hp_decrease_all": {
-        "type": "stat_debuff",
-        "description": "모든 플레이어의 최대 체력이 30 감소한다",
-        "effect": {"stat": "hp", "value": -30, "target": "all"},
-    },
-    "strength_decrease_all": {
-        "type": "stat_debuff",
-        "description": "모든 플레이어의 근력이 3 감소한다",
-        "effect": {"stat": "strength", "value": -3, "target": "all"},
-    },
-    "dexterity_decrease_all": {
-        "type": "stat_debuff",
-        "description": "모든 플레이어의 기량이 3 감소한다",
-        "effect": {"stat": "dexterity", "value": -3, "target": "all"},
-    },
-    "move_speed_decrease_all": {
-        "type": "stat_debuff",
-        "description": "모든 플레이어의 이동속도가 10% 감소한다 (moveSpeed -0.1)",
-        "effect": {"stat": "moveSpeed", "value": -0.1, "target": "all"},
-    },
-    "crit_chance_decrease_all": {
-        "type": "stat_debuff",
-        "description": "모든 플레이어의 치명타 확률이 10% 감소한다",
-        "effect": {"stat": "critChance", "value": -10.0, "target": "all"},
-    },
-    "attack_speed_decrease_all": {
-        "type": "stat_debuff",
-        "description": "모든 플레이어의 공격 속도가 15% 감소한다 (attackSpeed -0.15)",
-        "effect": {"stat": "attackSpeed", "value": -0.15, "target": "all"},
-    },
-    # 즉시 데미지
-    "instant_damage_low": {
-        "type": "damage",
-        "description": "모든 플레이어가 50의 고정 피해를 입는다",
-        "effect": {"damage_type": "fixed", "value": 50, "target": "all"},
-    },
-    "instant_damage_medium": {
-        "type": "damage",
-        "description": "모든 플레이어가 100의 고정 피해를 입는다",
-        "effect": {"damage_type": "fixed", "value": 100, "target": "all"},
-    },
-    "instant_damage_high": {
-        "type": "damage",
-        "description": "모든 플레이어가 150의 고정 피해를 입는다",
-        "effect": {"damage_type": "fixed", "value": 150, "target": "all"},
-    },
-    # 디버프 (지속 효과)
-    "slow_debuff": {
-        "type": "debuff",
-        "description": "모든 플레이어에게 '감속' 디버프가 적용된다 (2분간 이동속도 20% 감소)",
-        "effect": {
-            "debuff_id": "slow",
-            "duration": 120,
-            "stat": "moveSpeed",
-            "value": -0.2,
-            "target": "all",
-        },
-    },
-    "weakness_debuff": {
-        "type": "debuff",
-        "description": "모든 플레이어에게 '허약' 디버프가 적용된다 (3분간 근력 5 감소)",
-        "effect": {
-            "debuff_id": "weakness",
-            "duration": 180,
-            "stat": "strength",
-            "value": -5,
-            "target": "all",
-        },
-    },
-    "curse_debuff": {
-        "type": "debuff",
-        "description": "모든 플레이어에게 '저주' 디버프가 적용된다 (3분간 모든 스킬 데미지 20% 감소)",
-        "effect": {
-            "debuff_id": "curse",
-            "duration": 180,
-            "stat": "skillDamageMultiplier",
-            "value": -0.2,
-            "target": "all",
-        },
-    },
-}
+# 아이템 드랍 보상 예시
+DROP_ITEM_REWARDS = [
+    {"id": "drop_weapon_101", "type": "drop_item", "item_id": 101, "count": 1, "item_type": "weapon", "description": "무기 아이템 1개 드랍"},
+    {"id": "drop_accessory_201", "type": "drop_item", "item_id": 201, "count": 1, "item_type": "accessory", "description": "장신구 아이템 1개 드랍"},
+]
 
-# =============================================================================
-# 중립 결과 (Neutral - 정보/힌트만 제공)
-# =============================================================================
-NEUTRAL_OUTCOMES = {
-    "hint_only": {
-        "type": "information",
-        "description": "유용한 정보나 힌트를 획득하지만, 즉각적인 보상이나 패널티는 없다",
-        "effect": {"action": "add_hint", "target": "player"},
-    },
-    "nothing": {
-        "type": "none",
-        "description": "아무 일도 일어나지 않는다",
-        "effect": None,
-    },
-}
+# statData와 로코 성장치(체력+10, 근력+3, 기량+1) 기준으로 밸런스 있게 value 설정
+CHANGE_STAT_REWARDS = [
+    # 체력: 기본 200, 성장치 +10 → 보상은 +10, +20, 패널티는 -10, -20 등
+    {"id": "hp_up_10", "type": "change_stat", "stat": "hp", "value": 10, "duration": 0, "target": "all", "description": "모든 플레이어 최대 체력 +10"},
+    {"id": "hp_up_20", "type": "change_stat", "stat": "hp", "value": 20, "duration": 0, "target": "all", "description": "모든 플레이어 최대 체력 +20"},
+    {"id": "hp_heal_50", "type": "change_stat", "stat": "hp", "value": 50, "duration": 0, "target": "all", "description": "모든 플레이어 체력 50 회복"},
+    # 근력: 성장치 +3 → 보상은 +3, +6, 패널티는 -3, -6 등
+    {"id": "str_up_3", "type": "change_stat", "stat": "strength", "value": 3, "duration": 0, "target": "all", "description": "모든 플레이어 근력 +3"},
+    {"id": "str_up_6", "type": "change_stat", "stat": "strength", "value": 6, "duration": 0, "target": "all", "description": "모든 플레이어 근력 +6"},
+    # 기량: 성장치 +1 → 보상은 +1, +2, 패널티는 -1, -2 등
+    {"id": "dex_up_1", "type": "change_stat", "stat": "dexterity", "value": 1, "duration": 0, "target": "all", "description": "모든 플레이어 기량 +1"},
+    {"id": "dex_up_2", "type": "change_stat", "stat": "dexterity", "value": 2, "duration": 0, "target": "all", "description": "모든 플레이어 기량 +2"},
+    # 기타 주요 스탯(표 참고, 적정 범위 내 value)
+    {"id": "move_up_10p", "type": "change_stat", "stat": "moveSpeed", "value": 0.1, "duration": 0, "target": "all", "description": "모든 플레이어 이동속도 +10%"},
+    {"id": "crit_up_10p", "type": "change_stat", "stat": "critChance", "value": 10.0, "duration": 0, "target": "all", "description": "모든 플레이어 치명타 확률 +10%"},
+    {"id": "atkspd_up_10p", "type": "change_stat", "stat": "attackSpeed", "value": 0.1, "duration": 0, "target": "all", "description": "모든 플레이어 공격속도 +10%"},
+    {"id": "cd_down_10p", "type": "change_stat", "stat": "cooldownReduction", "value": 0.1, "duration": 0, "target": "all", "description": "모든 플레이어 쿨타임 -10%"},
+    {"id": "skilldmg_up_10p", "type": "change_stat", "stat": "skillDamageMultiplier", "value": 0.1, "duration": 0, "target": "all", "description": "모든 플레이어 스킬 데미지 +10%"},
+]
 
+# 패널티도 동일하게 구조화 (공통 적용)
+SPAWN_MONSTER_PENALTIES = [
+    {"id": "spawn_skeleton_1", "type": "spawn_monster", "monster_id": 3, "count": 1, "description": "스켈레톤 1마리 등장(패널티)"},
+]
+DROP_ITEM_PENALTIES = [
+    {"id": "drop_cursed_301", "type": "drop_item", "item_id": 301, "count": 1, "item_type": "cursed", "description": "저주 아이템 드랍(패널티)"},
+]
+CHANGE_STAT_PENALTIES = [
+    {"id": "hp_down_10", "type": "change_stat", "stat": "hp", "value": -10, "duration": 0, "target": "all", "description": "모든 플레이어 최대 체력 -10(패널티)"},
+    {"id": "hp_down_20", "type": "change_stat", "stat": "hp", "value": -20, "duration": 0, "target": "all", "description": "모든 플레이어 최대 체력 -20(패널티)"},
+    {"id": "str_down_3", "type": "change_stat", "stat": "strength", "value": -3, "duration": 0, "target": "all", "description": "모든 플레이어 근력 -3(패널티)"},
+    {"id": "str_down_6", "type": "change_stat", "stat": "strength", "value": -6, "duration": 0, "target": "all", "description": "모든 플레이어 근력 -6(패널티)"},
+    {"id": "dex_down_1", "type": "change_stat", "stat": "dexterity", "value": -1, "duration": 0, "target": "all", "description": "모든 플레이어 기량 -1(패널티)"},
+    {"id": "dex_down_2", "type": "change_stat", "stat": "dexterity", "value": -2, "duration": 0, "target": "all", "description": "모든 플레이어 기량 -2(패널티)"},
+    {"id": "move_down_10p", "type": "change_stat", "stat": "moveSpeed", "value": -0.1, "duration": 0, "target": "all", "description": "모든 플레이어 이동속도 -10%(패널티)"},
+    {"id": "crit_down_10p", "type": "change_stat", "stat": "critChance", "value": -10.0, "duration": 0, "target": "all", "description": "모든 플레이어 치명타 확률 -10%(패널티)"},
+    {"id": "atkspd_down_10p", "type": "change_stat", "stat": "attackSpeed", "value": -0.1, "duration": 0, "target": "all", "description": "모든 플레이어 공격속도 -10%(패널티)"},
+    {"id": "cd_up_10p", "type": "change_stat", "stat": "cooldownReduction", "value": -0.1, "duration": 0, "target": "all", "description": "모든 플레이어 쿨타임 +10%(패널티)"},
+    {"id": "skilldmg_down_10p", "type": "change_stat", "stat": "skillDamageMultiplier", "value": -0.1, "duration": 0, "target": "all", "description": "모든 플레이어 스킬 데미지 -10%(패널티)"},
+]
 
-def get_reward(reward_id: str):
-    """보상 정보 가져오기"""
-    return REWARDS.get(reward_id)
+# def get_all_reward_ids():
+#     """모든 보상 ID 리스트"""
+#     return list(SPAWN_MONSTER_REWARDS.keys()) + list(DROP_ITEM_REWARDS.keys()) + list(CHANGE_STAT_REWARDS.keys())
 
+# def get_all_penalty_ids():
+#     """모든 패널티 ID 리스트"""
+#     return list(SPAWN_MONSTER_PENALTIES.keys()) + list(DROP_ITEM_PENALTIES.keys()) + list(CHANGE_STAT_PENALTIES.keys())
 
-def get_penalty(penalty_id: str):
-    """패널티 정보 가져오기"""
-    return PENALTIES.get(penalty_id)
+def get_reward_dict(reward_id: str):
+    """보상 id로 반환용 dict"""
+    for r in SPAWN_MONSTER_REWARDS + DROP_ITEM_REWARDS + CHANGE_STAT_REWARDS:
+        if r["id"] == reward_id:
+            return {k: v for k, v in r.items() if k not in ("id", "description")}
+    return None
 
-
-def get_all_reward_ids():
-    """모든 보상 ID 리스트"""
-    return list(REWARDS.keys())
-
-
-def get_all_penalty_ids():
-    """모든 패널티 ID 리스트"""
-    return list(PENALTIES.keys())
+def get_penalty_dict(penalty_id: str):
+    """패널티 id로 반환용 dict"""
+    for p in SPAWN_MONSTER_PENALTIES + DROP_ITEM_PENALTIES + CHANGE_STAT_PENALTIES:
+        if p["id"] == penalty_id:
+            return {k: v for k, v in p.items() if k not in ("id", "description")}
+    return None

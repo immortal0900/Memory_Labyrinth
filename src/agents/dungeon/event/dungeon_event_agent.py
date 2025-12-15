@@ -19,11 +19,13 @@ def heroine_memories_node(state: DungeonEventState) -> DungeonEventState:
     """
     from agents.dungeon.event.heroine_scenarios import HEROINE_SCENARIOS
 
-    heroine_id = state["heroine_data"]["heroine_id"]
-    memory_progress = state["heroine_data"]["memory_progress"]
+    heroine_id = state["heroine_data"].get("heroine_id")
+    memory_progress = state["heroine_data"].get("memory_progress")
+    player_id = state.get("player_id") if "player_id" in state else None
 
     # 타입 통일 (문자열 → 정수)
     heroine_id = int(heroine_id) if isinstance(heroine_id, str) else heroine_id
+    player_id = int(player_id) if player_id is not None and isinstance(player_id, str) else player_id
 
     # 해당 히로인의 해금된 기억들을 필터링 (memory_progress 이하)
     heroine_memories = [
@@ -33,7 +35,7 @@ def heroine_memories_node(state: DungeonEventState) -> DungeonEventState:
         and scenario["memory_progress"] <= memory_progress
     ]
 
-    print(f"[heroine_memories_node] 히로인 ID: {heroine_id}")
+    print(f"[heroine_memories_node] 플레이어 ID: {player_id} | 히로인 ID: {heroine_id}")
     print(f"[heroine_memories_node] 기억 진척도: {memory_progress}")
     print(f"[heroine_memories_node] 해금된 기억 개수: {len(heroine_memories)}")
 
@@ -118,17 +120,24 @@ def create_sub_event_node(state: DungeonEventState) -> DungeonEventState:
     parser_llm = llm.with_structured_output(DungeonEventParser)
     response = parser_llm.invoke(prompts)
 
-    # 서브 이벤트를 구조화된 dict로 변환
+
+    # 보상/패널티 dict 변환 유틸리티 import
+    from agents.dungeon.event.event_rewards_penalties import get_reward_dict, get_penalty_dict
+
+    # 클라 요구사항: reward/penalty는 id가 아니라 dict(필수 필드만, id/description 제외)
+    choices = []
+    for choice in response.event_choices:
+        reward = get_reward_dict(choice.reward_id) if choice.reward_id else None
+        penalty = get_penalty_dict(choice.penalty_id) if choice.penalty_id else None
+        choices.append({
+            "action": choice.action,
+            "reward": reward,
+            "penalty": penalty
+        })
+
     sub_event_data = {
         "narrative": response.sub_event_narrative,
-        "choices": [
-            {
-                "action": choice.action,
-                "reward_id": choice.reward_id,
-                "penalty_id": choice.penalty_id
-            }
-            for choice in response.event_choices
-        ],
+        "choices": choices,
         "expected_outcome": response.expected_outcome
     }
 
