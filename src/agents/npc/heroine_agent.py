@@ -38,10 +38,9 @@ from agents.npc.base_npc_agent import (
 from agents.npc.emotion_mapper import heroine_emotion_to_int
 from db.redis_manager import redis_manager
 from db.user_memory_manager import user_memory_manager
-from db.agent_memory import agent_memory_manager
+from db.npc_npc_memory_manager import npc_npc_memory_manager
 from db.session_checkpoint_manager import session_checkpoint_manager
 from services.heroine_scenario_service import heroine_scenario_service
-from agents.npc.heroine_heroine_agent import heroine_heroine_agent
 from enums.LLM import LLM
 
 # ============================================
@@ -343,19 +342,29 @@ class HeroineAgent(BaseNPCAgent):
                 memory_text = m.get("memory", m.get("text", ""))
                 facts_parts.append(f"- {memory_text}")
 
-        # 2. 다른 히로인 이름 언급시 NPC-NPC 대화 검색
-        other_heroine_names = ["레티아", "루파메스", "로코"]
-        mentioned = any(name in user_message for name in other_heroine_names)
+        # 2. 다른 히로인 이름 언급시 NPC-NPC 장기기억 검색
+        other_id = None
+        if "사트라" in user_message or "대현자" in user_message:
+            other_id = 0
+        elif "레티아" in user_message:
+            other_id = 1
+        elif "루파메스" in user_message:
+            other_id = 2
+        elif "로코" in user_message:
+            other_id = 3
 
-        if mentioned:
-            npc_conversations = heroine_heroine_agent.search_conversations(
-                heroine_id=npc_id, query=user_message, top_k=2
+        if other_id is not None and int(other_id) != int(npc_id):
+            npc_memories = npc_npc_memory_manager.search_memories(
+                user_id=int(player_id),
+                npc1_id=int(npc_id),
+                npc2_id=int(other_id),
+                query=user_message,
+                limit=3,
             )
-            if npc_conversations:
+            if npc_memories:
                 facts_parts.append("\n[다른 히로인과의 대화 기억]")
-                for conv in npc_conversations:
-                    content_preview = conv["content"][:200]
-                    facts_parts.append(f"- {content_preview}...")
+                for m in npc_memories:
+                    facts_parts.append(f"- {m.get('content', '')}")
 
         return "\n".join(facts_parts) if facts_parts else "관련 기억 없음"
 

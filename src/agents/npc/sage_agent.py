@@ -551,7 +551,9 @@ class SageAgent(BaseNPCAgent):
         # User Memory에 대화 저장 (백그라운드)
         user_msg = state["messages"][-1].content
         asyncio.create_task(
-            self._save_to_user_memory_background(player_id, npc_id, user_msg, response_text)
+            self._save_to_user_memory_background(
+                player_id, npc_id, user_msg, response_text
+            )
         )
 
         return {

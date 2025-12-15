@@ -67,6 +67,31 @@ class SageScenarioService:
 
             return scenarios
 
+    def get_latest_unlocked_scenario(self, max_scenario_level: int) -> dict:
+        """가장 최근에 해금된 대현자 시나리오 1개 조회
+
+        Args:
+            max_scenario_level: 현재 시나리오 레벨 (이하만 허용)
+
+        Returns:
+            시나리오 dict 또는 None
+        """
+        sql = text(
+            """
+            SELECT id, title, content, scenario_level
+            FROM sage_scenarios
+            WHERE scenario_level <= :max_level
+            ORDER BY scenario_level DESC
+            LIMIT 1
+        """
+        )
+
+        with self.engine.connect() as conn:
+            row = conn.execute(sql, {"max_level": max_scenario_level}).fetchone()
+            if row:
+                return dict(row._mapping)
+            return None
+
     def search_scenarios_hybrid(
         self, query: str, max_scenario_level: int, limit: int = 3
     ) -> List[dict]:

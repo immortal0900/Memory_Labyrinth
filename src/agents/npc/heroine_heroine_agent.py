@@ -5,8 +5,8 @@
 
 주요 기능:
 1. 두 히로인간의 자연스러운 대화 생성
-2. 대화 내용을 agent_memories 테이블에 저장 (npc_conversation)
-3. 양방향 기억 저장 (npc_memory: A가 B에 대해, B가 A에 대해)
+2. 대화 내용을 npc_npc_checkpoints 테이블에 저장 (대화 전체)
+3. 대화 내용을 npc_npc_memories 테이블에 저장 (턴 단위 장기기억)
 
 스트리밍/비스트리밍 동일 응답:
 - 둘 다 동일한 프롬프트 사용
@@ -14,8 +14,8 @@
 - 출력 형식만 다름 (스트리밍: 텍스트, 비스트리밍: JSON)
 
 저장 위치:
-- agent_memories 테이블 (npc_conversation): 대화 전체
-- agent_memories 테이블 (npc_memory): 각 히로인의 관점에서 상대방에 대한 기억
+- npc_npc_checkpoints: 대화 전체 기록
+- npc_npc_memories: 장기기억(핵심/턴 단위)
 """
 
 import json
@@ -26,7 +26,10 @@ from typing import List, AsyncIterator, Optional, Dict, Any, Tuple
 from langchain.chat_models import init_chat_model
 from enums.LLM import LLM
 from agents.npc.emotion_mapper import heroine_emotion_to_int
-from db.agent_memory import agent_memory_manager
+from db.redis_manager import redis_manager
+from db.npc_npc_memory_manager import npc_npc_memory_manager
+from services.sage_scenario_service import sage_scenario_service
+from services.heroine_scenario_service import heroine_scenario_service
 
 
 # ============================================
@@ -76,14 +79,21 @@ def _get_default_persona() -> Dict[str, Any]:
             "personality": {"base": "순수하고 어린아이 같음"},
             "speech_style": {"honorific": True},
         },
+        "satra": {
+            "name": "사트라",
+            "personality": {"base": "기품 있고 신비로운 대현자"},
+            "speech_style": {"honorific": False},
+        },
     }
 
 
 # 페르소나 데이터 로드 (모듈 로드시 1회)
 PERSONA_DATA = load_persona_data()
 
-# 히로인 ID -> 페르소나 키 매핑
-HEROINE_KEY_MAP = {1: "letia", 2: "lupames", 3: "roco"}  # 레티아  # 루파메스  # 로코
+# NPC ID -> 페르소나 키 매핑
+# - 0: 대현자(사트라)
+# - 1~3: 히로인
+HEROINE_KEY_MAP = {0: "satra", 1: "letia", 2: "lupames", 3: "roco"}
 
 
 class HeroineHeroineAgent:
@@ -96,10 +106,10 @@ class HeroineHeroineAgent:
         agent = HeroineHeroineAgent()
 
         # 비스트리밍 (JSON 배열 반환)
-        result = await agent.generate_and_save_conversation(1, 2)
+        result = await agent.generate_and_save_conversation(user_id=10001, heroine1_id=1, heroine2_id=2)
 
         # 스트리밍 (텍스트 스트림 + DB 저장)
-        async for chunk in agent.generate_conversation_stream(1, 2):
+        async for chunk in agent.generate_conversation_stream(user_id=10001, heroine1_id=1, heroine2_id=2):
             print(chunk, end="")
     """
 
@@ -120,10 +130,10 @@ class HeroineHeroineAgent:
     # ============================================
 
     def _get_persona(self, heroine_id: int) -> Dict[str, Any]:
-        """히로인 페르소나 가져오기
+        """NPC 페르소나 가져오기
 
         Args:
-            heroine_id: 히로인 ID (1=레티아, 2=루파메스, 3=로코)
+            heroine_id: NPC ID (0=사트라, 1=레티아, 2=루파메스, 3=로코)
 
         Returns:
             페르소나 딕셔너리
@@ -143,6 +153,9 @@ class HeroineHeroineAgent:
         Returns:
             관계 설명 문자열
         """
+        if heroine1_id == 0 or heroine2_id == 0:
+            return "대현자와 대화하는 관계"
+
         relationships = {
             (
                 1,
@@ -171,7 +184,6 @@ class HeroineHeroineAgent:
             "훈련장에서 훈련을 마친 후",
             "밤에 길드 옥상에서 별을 보는 중",
             "비가 와서 실내에 갇힌 상황",
-            "새로운 의뢰를 기다리는 중",
             "멘토가 잠시 자리를 비운 사이",
         ]
 
@@ -199,6 +211,11 @@ class HeroineHeroineAgent:
         situation: str,
         turn_count: int,
         for_streaming: bool = False,
+        memory_progress_1: int = 0,
+        memory_progress_2: int = 0,
+        recent_turns: Optional[List[Dict[str, Any]]] = None,
+        unlocked_1_text: str = "없음",
+        unlocked_2_text: str = "없음",
     ) -> str:
         """대화 생성 프롬프트 (스트리밍/비스트리밍 공통)
 
@@ -214,6 +231,9 @@ class HeroineHeroineAgent:
         Returns:
             프롬프트 문자열
         """
+        if recent_turns is None:
+            recent_turns = []
+
         persona1 = self._get_persona(heroine1_id)
         persona2 = self._get_persona(heroine2_id)
 
@@ -234,6 +254,28 @@ class HeroineHeroineAgent:
         name1 = persona1.get("name", "히로인1")
         name2 = persona2.get("name", "히로인2")
 
+        # memoryProgress에 따른 아주 단순한 규칙 텍스트
+        unlocked_rule = "해금되지 않은 과거/비밀은 말하지 않는다."
+        min_progress = (
+            memory_progress_1
+            if memory_progress_1 < memory_progress_2
+            else memory_progress_2
+        )
+        if min_progress < 30:
+            unlocked_rule = "과거/비밀 이야기는 피하고, 현재 상황 중심으로만 말한다."
+        if 30 <= min_progress < 70:
+            unlocked_rule = "깊은 비밀은 피하되, 가벼운 과거 이야기는 할 수 있다."
+
+        # 최근 대화 포맷 (간단)
+        turn_lines = []
+        for t in recent_turns:
+            speaker_name = t.get("speaker_name", "")
+            text_value = t.get("text", "")
+            if speaker_name and text_value:
+                turn_lines.append(f"{speaker_name}: {text_value}")
+        # 토큰 최소화: 최근 6줄만
+        recent_text = "\n".join(turn_lines[-6:]) if turn_lines else "없음"
+
         # 출력 형식 (스트리밍은 텍스트, 비스트리밍은 JSON)
         if for_streaming:
             output_format = f"""[출력 형식]
@@ -250,10 +292,23 @@ JSON 배열로 출력하세요:
     ...
 ]"""
 
-        prompt = f"""두 히로인 사이의 자연스러운 대화를 생성해주세요.
+        prompt = f"""두 NPC 사이의 자연스러운 대화를 생성해주세요.
 
 [상황]
 {situation}
+
+[현재 상태]
+- {name1} memoryProgress: {memory_progress_1}
+- {name2} memoryProgress: {memory_progress_2}
+
+[전용 정보 - {name1}만 사용]
+{unlocked_1_text}
+
+[전용 정보 - {name2}만 사용]
+{unlocked_2_text}
+
+[최근 대화(세션)]
+{recent_text}
 
 [히로인 1: {name1}]
 - 성격: {persona1.get('personality', {}).get('base', '')}
@@ -268,6 +323,8 @@ JSON 배열로 출력하세요:
 [규칙]
 - 각 히로인의 성격과 말투를 일관되게 유지
 - 서로의 관계를 반영한 자연스러운 대화
+- {unlocked_rule}
+- 전용 정보는 해당 화자만 참고 (예: {name1}의 대사에는 "{name1}만 사용" 섹션만, {name2}도 동일)
 - 총 {turn_count}번의 대화 턴 (각 히로인이 번갈아 말함)
 
 {output_format}"""
@@ -337,6 +394,7 @@ JSON 배열로 출력하세요:
 
     def _save_conversation_to_db(
         self,
+        user_id: int,
         heroine1_id: int,
         heroine2_id: int,
         conversation: List[Dict[str, Any]],
@@ -346,8 +404,8 @@ JSON 배열로 출력하세요:
         """대화를 DB에 저장
 
         저장 내용:
-        1. npc_conversation: 대화 전체 (agent_id = "conv_{작은ID}_{큰ID}")
-        2. npc_memory: 각 히로인의 관점에서 상대방에 대한 기억
+        1. npc_npc_checkpoints: 대화 전체 기록
+        2. npc_npc_memories: 턴 단위 장기기억
 
         Args:
             heroine1_id: 첫 번째 히로인 ID
@@ -359,52 +417,41 @@ JSON 배열로 출력하세요:
         Returns:
             저장된 대화 ID
         """
-        # 대화 내용을 하나의 텍스트로 변환
-        content_parts = []
-        for msg in conversation:
-            content_parts.append(f"{msg['speaker_name']}: {msg['text']}")
-        content_text = "\n".join(content_parts)
+        # 1) 체크포인트 저장
+        checkpoint_id = npc_npc_memory_manager.save_checkpoint(
+            user_id=int(user_id),
+            npc1_id=heroine1_id,
+            npc2_id=heroine2_id,
+            situation=situation,
+            conversation=conversation,
+        )
 
-        if not content_text:
-            return None
+        # 2) 턴 단위 장기기억 저장 (최소 구현)
+        npc_npc_memory_manager.save_turn_memories(
+            user_id=int(user_id),
+            npc1_id=heroine1_id,
+            npc2_id=heroine2_id,
+            checkpoint_id=checkpoint_id,
+            situation=situation,
+            conversation=conversation,
+        )
 
-        # 메타데이터 구성
-        metadata = {
+        # 3) Redis에 NPC-NPC 세션 저장 (최근 대화/인터럽트용)
+        session_data = {
+            "user_id": int(user_id),
+            "npc1_id": heroine1_id,
+            "npc2_id": heroine2_id,
+            "conversation_id": checkpoint_id,
             "situation": situation,
+            "conversation_buffer": conversation,
             "turn_count": len(conversation),
-            "speakers": [heroine1_id, heroine2_id],
-            "emotions": [msg.get("emotion", "neutral") for msg in conversation],
-            "conversation": conversation,  # 전체 대화를 JSON으로 저장
+            "interrupted_turn": None,
         }
-
-        # 1. NPC간 대화 저장 (npc_conversation 타입)
-        # agent_id = "conv_{작은ID}_{큰ID}" 형식
-        conv_id = agent_memory_manager.add_npc_conversation(
-            npc1_id=heroine1_id,
-            npc2_id=heroine2_id,
-            content=content_text,
-            importance=importance_score,
-            metadata=metadata,
+        redis_manager.save_npc_npc_session(
+            int(user_id), heroine1_id, heroine2_id, session_data
         )
 
-        # 2. 양방향 기억 저장 (npc_memory 타입)
-        # 각 히로인의 관점에서 상대방과의 대화를 기억
-        persona1 = self._get_persona(heroine1_id)
-        persona2 = self._get_persona(heroine2_id)
-
-        content_preview = content_text[:200]
-
-        agent_memory_manager.add_mutual_npc_memory(
-            npc1_id=heroine1_id,
-            npc2_id=heroine2_id,
-            content=content_text,
-            npc1_perspective=f"{persona2.get('name', '상대방')}와 대화함: {content_preview}...",
-            npc2_perspective=f"{persona1.get('name', '상대방')}와 대화함: {content_preview}...",
-            importance=importance_score,
-            metadata={"conversation_id": conv_id, "situation": situation},
-        )
-
-        return conv_id
+        return checkpoint_id
 
     # ============================================
     # 대화 생성 메서드
@@ -412,6 +459,7 @@ JSON 배열로 출력하세요:
 
     async def generate_conversation(
         self,
+        user_id: Optional[int],
         heroine1_id: int,
         heroine2_id: int,
         situation: str = None,
@@ -430,16 +478,95 @@ JSON 배열로 출력하세요:
         Returns:
             대화 리스트 (각 항목: speaker_id, speaker_name, text, emotion)
         """
+        import time
+
+        total_start = time.time()
+
         if situation is None:
+            t = time.time()
             situation = await self.generate_situation()
+            print(f"[TIMING] NPC-NPC 상황 생성: {time.time() - t:.3f}s")
 
+        memory_progress_1 = 0
+        memory_progress_2 = 0
+        recent_turns: List[Dict[str, Any]] = []
+        unlocked_1_text = "없음"
+        unlocked_2_text = "없음"
+
+        if user_id is not None:
+            t = time.time()
+            session1 = redis_manager.load_session(int(user_id), heroine1_id) or {}
+            session2 = redis_manager.load_session(int(user_id), heroine2_id) or {}
+            state1 = session1.get("state", {}) if isinstance(session1, dict) else {}
+            state2 = session2.get("state", {}) if isinstance(session2, dict) else {}
+            print(f"[TIMING] NPC-NPC Redis 세션 로드: {time.time() - t:.3f}s")
+
+            # 히로인: memoryProgress로 "가장 최근 해금 시나리오 1개" 무조건 주입
+            # 사트라(0): scenarioLevel로 "가장 최근 해금 세계관 1개" 무조건 주입
+            t = time.time()
+            if heroine1_id == 0:
+                scenario_level = int(state1.get("scenarioLevel", 1) or 1)
+                memory_progress_1 = scenario_level * 10
+                latest = sage_scenario_service.get_latest_unlocked_scenario(
+                    scenario_level
+                )
+                if latest and latest.get("content"):
+                    unlocked_1_text = str(latest.get("content"))
+            else:
+                memory_progress_1 = int(state1.get("memoryProgress", 0) or 0)
+                latest = heroine_scenario_service.get_latest_unlocked_scenario(
+                    heroine_id=heroine1_id, max_memory_progress=memory_progress_1
+                )
+                if latest and latest.get("content"):
+                    unlocked_1_text = str(latest.get("content"))
+
+            if heroine2_id == 0:
+                scenario_level = int(state2.get("scenarioLevel", 1) or 1)
+                memory_progress_2 = scenario_level * 10
+                latest = sage_scenario_service.get_latest_unlocked_scenario(
+                    scenario_level
+                )
+                if latest and latest.get("content"):
+                    unlocked_2_text = str(latest.get("content"))
+            else:
+                memory_progress_2 = int(state2.get("memoryProgress", 0) or 0)
+                latest = heroine_scenario_service.get_latest_unlocked_scenario(
+                    heroine_id=heroine2_id, max_memory_progress=memory_progress_2
+                )
+                if latest and latest.get("content"):
+                    unlocked_2_text = str(latest.get("content"))
+            print(f"[TIMING] NPC-NPC 최신 해금 1개 조회: {time.time() - t:.3f}s")
+
+            t = time.time()
+            npc_npc_session = redis_manager.load_npc_npc_session(
+                int(user_id), heroine1_id, heroine2_id
+            )
+            if npc_npc_session:
+                recent_turns = npc_npc_session.get("conversation_buffer", [])[-10:]
+            print(f"[TIMING] NPC-NPC Redis pair 세션 로드: {time.time() - t:.3f}s")
+
+        t = time.time()
         prompt = self._build_conversation_prompt(
-            heroine1_id, heroine2_id, situation, turn_count, for_streaming=False
+            heroine1_id,
+            heroine2_id,
+            situation,
+            turn_count,
+            for_streaming=False,
+            memory_progress_1=memory_progress_1,
+            memory_progress_2=memory_progress_2,
+            recent_turns=recent_turns,
+            unlocked_1_text=unlocked_1_text,
+            unlocked_2_text=unlocked_2_text,
         )
+        print(f"[TIMING] NPC-NPC 프롬프트 빌드: {time.time() - t:.3f}s")
+        print(f"[PROMPT][NPC-NPC]\n{prompt}\n{'='*50}")
 
+        t = time.time()
         response = await self.llm.ainvoke(prompt)
+        print(f"[TIMING] NPC-NPC LLM 호출: {time.time() - t:.3f}s")
 
         # JSON 파싱
+        t = time.time()
         try:
             content = response.content
             if "```json" in content:
@@ -462,11 +589,16 @@ JSON 배열로 출력하세요:
                     "emotion": 0,  # neutral
                 }
             ]
+        print(f"[TIMING] NPC-NPC JSON 파싱: {time.time() - t:.3f}s")
+        print(
+            f"[TIMING] NPC-NPC generate_conversation 총합: {time.time() - total_start:.3f}s"
+        )
 
         return conversation
 
     async def generate_and_save_conversation(
         self,
+        user_id: int,
         heroine1_id: int,
         heroine2_id: int,
         situation: str = None,
@@ -490,12 +622,17 @@ JSON 배열로 출력하세요:
 
         # 대화 생성
         conversation = await self.generate_conversation(
-            heroine1_id, heroine2_id, situation, turn_count
+            int(user_id), heroine1_id, heroine2_id, situation, turn_count
         )
 
         # DB에 저장
         conv_id = self._save_conversation_to_db(
-            heroine1_id, heroine2_id, conversation, situation, importance_score
+            int(user_id),
+            heroine1_id,
+            heroine2_id,
+            conversation,
+            situation,
+            importance_score,
         )
 
         # 대화 내용 텍스트
@@ -516,6 +653,7 @@ JSON 배열로 출력하세요:
 
     async def generate_conversation_stream(
         self,
+        user_id: int,
         heroine1_id: int,
         heroine2_id: int,
         situation: str = None,
@@ -536,37 +674,124 @@ JSON 배열로 출력하세요:
         Yields:
             대화 토큰
         """
-        if situation is None:
-            situation = await self.generate_situation()
+        import time
 
-        prompt = self._build_conversation_prompt(
-            heroine1_id, heroine2_id, situation, turn_count, for_streaming=True
+        total_start = time.time()
+
+        if situation is None:
+            t = time.time()
+            situation = await self.generate_situation()
+            print(f"[TIMING] NPC-NPC(스트림) 상황 생성: {time.time() - t:.3f}s")
+
+        memory_progress_1 = 0
+        memory_progress_2 = 0
+        recent_turns: List[Dict[str, Any]] = []
+        unlocked_1_text = "없음"
+        unlocked_2_text = "없음"
+
+        t = time.time()
+        session1 = redis_manager.load_session(int(user_id), heroine1_id) or {}
+        session2 = redis_manager.load_session(int(user_id), heroine2_id) or {}
+        state1 = session1.get("state", {}) if isinstance(session1, dict) else {}
+        state2 = session2.get("state", {}) if isinstance(session2, dict) else {}
+        print(f"[TIMING] NPC-NPC(스트림) Redis 세션 로드: {time.time() - t:.3f}s")
+
+        t = time.time()
+        if heroine1_id == 0:
+            scenario_level = int(state1.get("scenarioLevel", 1) or 1)
+            memory_progress_1 = scenario_level * 10
+            latest = sage_scenario_service.get_latest_unlocked_scenario(scenario_level)
+            if latest and latest.get("content"):
+                unlocked_1_text = str(latest.get("content"))
+        else:
+            memory_progress_1 = int(state1.get("memoryProgress", 0) or 0)
+            latest = heroine_scenario_service.get_latest_unlocked_scenario(
+                heroine_id=heroine1_id, max_memory_progress=memory_progress_1
+            )
+            if latest and latest.get("content"):
+                unlocked_1_text = str(latest.get("content"))
+
+        if heroine2_id == 0:
+            scenario_level = int(state2.get("scenarioLevel", 1) or 1)
+            memory_progress_2 = scenario_level * 10
+            latest = sage_scenario_service.get_latest_unlocked_scenario(scenario_level)
+            if latest and latest.get("content"):
+                unlocked_2_text = str(latest.get("content"))
+        else:
+            memory_progress_2 = int(state2.get("memoryProgress", 0) or 0)
+            latest = heroine_scenario_service.get_latest_unlocked_scenario(
+                heroine_id=heroine2_id, max_memory_progress=memory_progress_2
+            )
+            if latest and latest.get("content"):
+                unlocked_2_text = str(latest.get("content"))
+        print(f"[TIMING] NPC-NPC(스트림) 최신 해금 1개 조회: {time.time() - t:.3f}s")
+
+        t = time.time()
+        npc_npc_session = redis_manager.load_npc_npc_session(
+            int(user_id), heroine1_id, heroine2_id
         )
+        if npc_npc_session:
+            recent_turns = npc_npc_session.get("conversation_buffer", [])[-10:]
+        print(f"[TIMING] NPC-NPC(스트림) Redis pair 세션 로드: {time.time() - t:.3f}s")
+
+        t = time.time()
+        prompt = self._build_conversation_prompt(
+            heroine1_id,
+            heroine2_id,
+            situation,
+            turn_count,
+            for_streaming=True,
+            memory_progress_1=memory_progress_1,
+            memory_progress_2=memory_progress_2,
+            recent_turns=recent_turns,
+            unlocked_1_text=unlocked_1_text,
+            unlocked_2_text=unlocked_2_text,
+        )
+        print(f"[TIMING] NPC-NPC(스트림) 프롬프트 빌드: {time.time() - t:.3f}s")
+        print(f"[PROMPT][NPC-NPC][STREAM]\n{prompt}\n{'='*50}")
 
         # 스트리밍으로 응답 생성
+        t = time.time()
         full_response = ""
         async for chunk in self.streaming_llm.astream(prompt):
             if chunk.content:
                 full_response += chunk.content
                 yield chunk.content
+        print(f"[TIMING] NPC-NPC(스트림) LLM 스트리밍: {time.time() - t:.3f}s")
 
         # 응답을 JSON으로 파싱
+        t = time.time()
         conversation = self._parse_streaming_response(
             full_response, heroine1_id, heroine2_id
         )
+        print(f"[TIMING] NPC-NPC(스트림) 파싱: {time.time() - t:.3f}s")
 
         # DB에 저장 (비스트리밍과 동일하게)
         if conversation:
+            t = time.time()
             self._save_conversation_to_db(
-                heroine1_id, heroine2_id, conversation, situation, importance_score
+                int(user_id),
+                heroine1_id,
+                heroine2_id,
+                conversation,
+                situation,
+                importance_score,
             )
+            print(f"[TIMING] NPC-NPC(스트림) 저장: {time.time() - t:.3f}s")
+        print(
+            f"[TIMING] NPC-NPC generate_conversation_stream 총합: {time.time() - total_start:.3f}s"
+        )
 
     # ============================================
     # 조회 메서드
     # ============================================
 
     def get_conversations(
-        self, heroine1_id: int = None, heroine2_id: int = None, limit: int = 10
+        self,
+        user_id: int,
+        heroine1_id: int = None,
+        heroine2_id: int = None,
+        limit: int = 10,
     ) -> List[Dict[str, Any]]:
         """저장된 대화 조회 (최신순)
 
@@ -578,111 +803,65 @@ JSON 배열로 출력하세요:
         Returns:
             대화 목록
         """
-        memories = agent_memory_manager.get_npc_conversations(
-            npc1_id=heroine1_id, npc2_id=heroine2_id, limit=limit
+        return npc_npc_memory_manager.get_checkpoints(
+            user_id=int(user_id),
+            npc1_id=heroine1_id,
+            npc2_id=heroine2_id,
+            limit=limit,
         )
-
-        conversations = []
-        for mem in memories:
-            conversations.append(
-                {
-                    "id": mem.id,
-                    "agent_id": mem.agent_id,
-                    "content": mem.content,
-                    "importance_score": mem.importance_score,
-                    "metadata": mem.metadata,
-                    "created_at": (
-                        mem.created_at.isoformat() if mem.created_at else None
-                    ),
-                }
-            )
-
-        return conversations
 
     def interrupt_conversation(
         self,
+        user_id: int,
         conversation_id: str,
         interrupted_turn: int,
         heroine1_id: int,
-        heroine2_id: int
+        heroine2_id: int,
     ) -> Dict[str, Any]:
         """NPC-NPC 대화 인터럽트 처리
-        
+
         유저가 NPC 대화 중간에 끊고 들어왔을 때 호출됩니다.
         interrupted_turn 이후의 대화는 NPC가 모르는 것으로 처리됩니다.
-        
+
         Args:
             conversation_id: 대화 ID (agent_memories.id)
             interrupted_turn: 유저가 끊은 턴 (이 턴까지만 유효)
             heroine1_id: 첫 번째 히로인 ID
             heroine2_id: 두 번째 히로인 ID
-        
+
         Returns:
             처리 결과 딕셔너리
         """
-        # 1. 대화 자르기
-        conversation_updated = agent_memory_manager.truncate_conversation(
-            conversation_id=conversation_id,
-            interrupted_turn=interrupted_turn
+        # 1) 체크포인트 자르기
+        checkpoint = npc_npc_memory_manager.truncate_checkpoint(
+            checkpoint_id=conversation_id,
+            interrupted_turn=interrupted_turn,
         )
-        
-        if not conversation_updated:
+        if checkpoint is None:
             return {
                 "success": False,
                 "message": "대화를 찾을 수 없습니다",
-                "conversation_id": conversation_id
+                "conversation_id": conversation_id,
             }
-        
-        # 2. 연결된 NPC 기억도 업데이트
-        memory_count = agent_memory_manager.truncate_npc_memories_by_conversation(
-            conversation_id=conversation_id,
-            npc1_id=heroine1_id,
-            npc2_id=heroine2_id,
-            interrupted_turn=interrupted_turn
+
+        # 2) 장기기억 무효화
+        memory_count = npc_npc_memory_manager.invalidate_memories_after_turn(
+            checkpoint_id=conversation_id,
+            interrupted_turn=interrupted_turn,
         )
-        
+
+        # 3) Redis 세션도 자르기
+        redis_manager.truncate_npc_npc_session(
+            int(user_id), heroine1_id, heroine2_id, interrupted_turn
+        )
+
         return {
             "success": True,
             "message": f"{interrupted_turn}턴까지의 대화만 유지됩니다",
             "conversation_id": conversation_id,
             "interrupted_turn": interrupted_turn,
-            "updated_memories": memory_count
+            "updated_memories": memory_count,
         }
-
-    def search_conversations(
-        self, heroine_id: int, query: str, top_k: int = 5
-    ) -> List[Dict[str, Any]]:
-        """벡터 검색으로 관련 대화 조회
-
-        Args:
-            heroine_id: 히로인 ID (해당 히로인이 참여한 대화만)
-            query: 검색 쿼리
-            top_k: 최대 개수
-
-        Returns:
-            검색된 대화 목록 (relevance_score 포함)
-        """
-        memories = agent_memory_manager.search_npc_conversations(
-            npc_id=heroine_id, query=query, top_k=top_k
-        )
-
-        conversations = []
-        for mem in memories:
-            conversations.append(
-                {
-                    "id": mem.id,
-                    "agent_id": mem.agent_id,
-                    "content": mem.content,
-                    "importance_score": mem.importance_score,
-                    "metadata": mem.metadata,
-                    "created_at": (
-                        mem.created_at.isoformat() if mem.created_at else None
-                    ),
-                    "relevance_score": mem.relevance_score,
-                }
-            )
-
-        return conversations
 
 
 # 싱글톤 인스턴스 (앱 전체에서 하나만 사용)

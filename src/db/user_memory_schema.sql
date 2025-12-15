@@ -130,9 +130,12 @@ BEGIN
             -- Importance: 1~10 -> 0~1 정규화
             m.importance::FLOAT / 10.0 AS importance_norm,
             -- Relevance: 코사인 유사도 (1 - 거리)
+            -- importance_norm = "normalized importance"의 약자로, 정규화된 중요도를 의미
             1 - (m.embedding <=> p_query_embedding) AS relevance,
             -- Keyword: PGroonga BM25 정규화
             COALESCE(pgroonga_score(m.tableoid, m.ctid) / max_keyword_score, 0) AS keyword
+            -- tableoid: 해당 행이 속한 테이블의 OID (Object Identifier)상속 테이블 구조에서 어느 테이블에서 왔는지 식별할 때 사용
+            -- ctid: 행의 물리적 위치를 나타내는 tuple identifier (페이지 번호, 페이지 내 오프셋). 각 행의 고유한 물리적 주소
         FROM user_memories m
         WHERE m.user_id = p_user_id
           AND m.heroine_id = p_heroine_id
@@ -180,11 +183,13 @@ LANGUAGE SQL AS $$
         m.id,
         m.content,
         1 - (m.embedding <=> p_embedding) AS similarity
+        -- p_embedding 파라미터가 새로 저장하려는 데이터의 임베딩
     FROM user_memories m
     WHERE m.user_id = p_user_id
       AND m.heroine_id = p_heroine_id
       AND m.invalid_at IS NULL
       AND 1 - (m.embedding <=> p_embedding) >= p_threshold
+      -- 유사도가 임계값(기본 0.9) 이상인 것만 필터링
     ORDER BY similarity DESC
     LIMIT 1;
 $$;
@@ -208,7 +213,9 @@ CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = NOW();
+    -- NEW.updated_at = NOW(): 수정되는 행(NEW)의 updated_at 컬럼을 현재 시간으로 설정
     RETURN NEW;
+    -- RETURN NEW: 수정된 행을 반환 (이 값이 실제로 DB에 저장됨)
 END;
 $$ LANGUAGE plpgsql;
 
