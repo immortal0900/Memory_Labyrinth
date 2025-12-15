@@ -39,7 +39,7 @@ class EntranceRequest(BaseModel):
     """던전 입장 요청"""
 
     rawMaps: List[RawMapRequest]  # 여러 층 raw_map 지원
-    heroineData: Optional[List[Dict[str, Any]]] = None
+    heroineData: Optional[List[Any]] = None
     usedEvents: Optional[List[Any]] = None
 
 
@@ -47,12 +47,12 @@ class EventChoice(BaseModel):
     """이벤트 선택지"""
 
     action: str
-    rewardId: Optional[str] = None
-    penaltyId: Optional[str] = None
+    reward: Optional[dict] = None  # 보상 dict (id/description 제외)
+    penalty: Optional[dict] = None  # 패널티 dict (id/description 제외)
 
 
 class EventResponse(BaseModel):
-    """이벤트 정보 응답"""
+    """이벤트 정보 응답 (클라 요구: reward/penalty dict)"""
 
     roomId: int
     eventType: int
@@ -64,11 +64,14 @@ class EventResponse(BaseModel):
 
 
 class EntranceResponse(BaseModel):
-    """던전 입장 응답"""
+    """던전 입장 응답 (클라 요구: 최상위 배열)"""
 
     success: bool
     message: str
     firstPlayerId: int
+    playerIds: List[int]
+    heroineIds: List[int]
+    heroineMemoryProgress: List[int]
     events: Optional[List[EventResponse]] = None
 
 
@@ -145,18 +148,19 @@ class NextFloorRequest(BaseModel):
     """다음 층 입장 요청"""
 
     rawMap: RawMapRequest  # 다음 층 raw_map
-    heroineData: Optional[Any] = (
-        None  # Accept both dict and list for backward compatibility
-    )
+    heroineData: Optional[List[Any]] = None  # int/dict 모두 허용
     usedEvents: Optional[List[Any]] = None
 
 
 class NextFloorResponse(BaseModel):
-    """다음 층 입장 응답"""
+    """다음 층 입장 응답 (클라 요구: 최상위 배열)"""
 
     success: bool
     message: str
     floorId: Optional[int] = None
+    playerIds: List[int]
+    heroineIds: List[int]
+    heroineMemoryProgress: List[int]
     events: Optional[List[EventResponse]] = None
 
 
@@ -184,7 +188,7 @@ async def entrance(request: EntranceRequest):
             used_events=request.usedEvents or [],
         )
 
-        # 이벤트 정보 매핑 (floor 구분 포함)
+        # 이벤트 정보 매핑 (floor 구분 포함, reward/penalty dict)
         events_list = []
         if result.get("events"):
             events_data = result["events"]
@@ -201,13 +205,12 @@ async def entrance(request: EntranceRequest):
                             choices=[
                                 EventChoice(
                                     action=c.get("action", ""),
-                                    rewardId=c.get("reward_id"),
-                                    penaltyId=c.get("penalty_id"),
+                                    reward=c.get("reward"),
+                                    penalty=c.get("penalty"),
                                 )
                                 for c in evt.get("choices", [])
                                 if isinstance(c, dict)
                             ],
-                            floor=evt.get("floor", 1),
                         )
                     )
             elif isinstance(events_data, dict):
@@ -223,20 +226,41 @@ async def entrance(request: EntranceRequest):
                         choices=[
                             EventChoice(
                                 action=c.get("action", ""),
-                                rewardId=c.get("reward_id"),
-                                penaltyId=c.get("penalty_id"),
+                                reward=c.get("reward"),
+                                penalty=c.get("penalty"),
                             )
                             for c in evt.get("choices", [])
                             if isinstance(c, dict)
                         ],
-                        floor=evt.get("floor", 1),
                     )
                 )
 
+        # 최상위 배열 추출 (중복 없이)
+        player_ids = raw_maps[0].get("player_ids") or raw_maps[0].get("playerIds", [])
+        heroine_ids = raw_maps[0].get("heroine_ids") or raw_maps[0].get(
+            "heroineIds", []
+        )
+        heroine_data = request.heroineData or []
+        heroine_memory_progress = []
+        for h in heroine_data:
+            if isinstance(h, dict):
+                mp = h.get("memory_progress")
+                if mp is None:
+                    mp = h.get("memoryProgress", 0)
+                heroine_memory_progress.append(mp)
+            elif isinstance(h, int):
+                heroine_memory_progress.append(h)
+            else:
+                heroine_memory_progress.append(0)
+        while len(heroine_memory_progress) < len(heroine_ids):
+            heroine_memory_progress.append(0)
         return EntranceResponse(
             success=True,
             message="던전 입장 성공",
             firstPlayerId=result.get("first_player_id", 0),
+            playerIds=player_ids,
+            heroineIds=heroine_ids,
+            heroineMemoryProgress=heroine_memory_progress,
             events=events_list if events_list else None,
         )
     except Exception as e:
@@ -407,13 +431,12 @@ async def nextfloor(request: NextFloorRequest):
                             choices=[
                                 EventChoice(
                                     action=c.get("action", ""),
-                                    rewardId=c.get("reward_id"),
-                                    penaltyId=c.get("penalty_id"),
+                                    reward=c.get("reward"),
+                                    penalty=c.get("penalty"),
                                 )
                                 for c in evt.get("choices", [])
                                 if isinstance(c, dict)
                             ],
-                            floor=evt.get("floor", 1),
                         )
                     )
             elif isinstance(events_data, dict):
@@ -429,20 +452,38 @@ async def nextfloor(request: NextFloorRequest):
                         choices=[
                             EventChoice(
                                 action=c.get("action", ""),
-                                rewardId=c.get("reward_id"),
-                                penaltyId=c.get("penalty_id"),
+                                reward=c.get("reward"),
+                                penalty=c.get("penalty"),
                             )
                             for c in evt.get("choices", [])
                             if isinstance(c, dict)
                         ],
-                        floor=evt.get("floor", 1),
                     )
                 )
 
+        player_ids = raw_map.get("player_ids") or raw_map.get("playerIds", [])
+        heroine_ids = raw_map.get("heroine_ids") or raw_map.get("heroineIds", [])
+        heroine_data = heroine_data or []
+        heroine_memory_progress = []
+        for h in heroine_data:
+            if isinstance(h, dict):
+                mp = h.get("memory_progress")
+                if mp is None:
+                    mp = h.get("memoryProgress", 0)
+                heroine_memory_progress.append(mp)
+            elif isinstance(h, int):
+                heroine_memory_progress.append(h)
+            else:
+                heroine_memory_progress.append(0)
+        while len(heroine_memory_progress) < len(heroine_ids):
+            heroine_memory_progress.append(0)
         return NextFloorResponse(
             success=True,
             message="다음 층 입장 및 이벤트 생성 성공",
             floorId=result.get("floor_ids"),
+            playerIds=player_ids,
+            heroineIds=heroine_ids,
+            heroineMemoryProgress=heroine_memory_progress,
             events=events_list if events_list else None,
         )
     except Exception as e:

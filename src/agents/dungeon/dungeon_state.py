@@ -17,6 +17,7 @@ class DungeonEventState(TypedDict):
     selected_main_event: str
     sub_event: str
     final_answer: str
+    player_id: Optional[int]  # 플레이어 ID 추가
 
 
 class EventChoice(BaseModel):
