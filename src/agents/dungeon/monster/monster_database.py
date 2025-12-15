@@ -32,33 +32,75 @@ class MonsterData:
 # ===== 몬스터 데이터베이스 =====
 # 프로토타입용: 일반 몬스터 1종, 보스 몬스터 1종만 존재
 MONSTER_DATABASE: Dict[int, MonsterData] = {
-    # 일반 몬스터 (Job Monster)
+    # 일반 몬스터 1
     1: MonsterData(
         monster_id=1,
-        monster_type=0,  # 일반
-        monster_name="일반 몬스터",
-        hp=300,
-        speed=350,
-        attack=10,
-        attack_speed=1.0,
-        attack_range=100.0,
-        stagger_gage=10,
-        weaknesses=None,
-        strengths=None,
+        monster_type=0,
+        monster_name="슬라임",
+        hp=150,
+        speed=200,
+        attack=8,
+        attack_speed=1.2,
+        attack_range=50.0,
+        stagger_gage=5,
+        weaknesses=[1],
+        strengths=[2],
     ),
-    # 보스 몬스터
+    # 일반 몬스터 2
     2: MonsterData(
         monster_id=2,
-        monster_type=2,  # 보스
-        monster_name="보스 몬스터",
-        hp=1000,
+        monster_type=0,
+        monster_name="고블린",
+        hp=220,
         speed=300,
-        attack=50,
-        attack_speed=1.5,
-        attack_range=150.0,
-        stagger_gage=50,
-        weaknesses=None,
-        strengths=None,
+        attack=12,
+        attack_speed=1.0,
+        attack_range=80.0,
+        stagger_gage=8,
+        weaknesses=[2],
+        strengths=[1],
+    ),
+    # 일반 몬스터 3
+    3: MonsterData(
+        monster_id=3,
+        monster_type=0,
+        monster_name="스켈레톤",
+        hp=180,
+        speed=250,
+        attack=10,
+        attack_speed=1.1,
+        attack_range=60.0,
+        stagger_gage=7,
+        weaknesses=[3],
+        strengths=[2],
+    ),
+    # 보스 몬스터 1
+    100: MonsterData(
+        monster_id=100,
+        monster_type=2,
+        monster_name="오우거 보스",
+        hp=1200,
+        speed=180,
+        attack=40,
+        attack_speed=1.3,
+        attack_range=120.0,
+        stagger_gage=60,
+        weaknesses=[1, 2],
+        strengths=[3],
+    ),
+    # 보스 몬스터 2
+    101: MonsterData(
+        monster_id=101,
+        monster_type=2,
+        monster_name="드래곤",
+        hp=2000,
+        speed=220,
+        attack=60,
+        attack_speed=1.7,
+        attack_range=200.0,
+        stagger_gage=100,
+        weaknesses=[2, 3],
+        strengths=[1],
     ),
 }
 

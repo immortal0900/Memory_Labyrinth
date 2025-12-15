@@ -9,3 +9,4 @@ __pycache__/
 NPC_SYSTEM_MASTER.md
 NPC_SYSTEM_IMPLEMENTATION.md  
 src/db/mem0_manager.py 
+.bin

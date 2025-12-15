@@ -10,6 +10,13 @@
 **Description:** 플레이어가 던전(1층)에 입장할 때 호출됩니다. 던전 세션을 초기화하고, 참여하는 플레이어들의 이전 미완료 세션을 정리하며, 제공된 맵 구조를 기반으로 1층 이벤트를 생성합니다.
 
 ### Request Body (`application/json`)
+
+| 필드명 | 타입 | 필수 | 설명 |
+| :--- | :--- | :--- | :--- |
+| `rawMap` | Object | Yes | 언리얼에서 생성한 맵 구조 데이터 |
+| `heroineData` | Object | No | 메인 히로인의 현재 상태 및 스탯 정보 |
+| `usedEvents` | Array | No | 이전에 사용된 이벤트 ID 목록 (중복 방지용) |
+
 ```json
 {
   "rawMap": {
@@ -44,6 +51,14 @@
 ```
 
 ### Response Body (`application/json`)
+
+| 필드명 | 타입 | 설명 |
+| :--- | :--- | :--- |
+| `success` | Boolean | 요청 처리 성공 여부 |
+| `message` | String | 결과 메시지 |
+| `firstPlayerId` | Integer | 방장(Host) 플레이어 ID (세션 키) |
+| `events` | Array | 생성된 이벤트 목록 |
+
 ```json
 {
   "success": true,
@@ -81,6 +96,13 @@
 **Description:** 플레이어가 현재 층의 보스방에 입장할 때 호출됩니다. **다음 층**의 밸런싱(몬스터, 난이도)을 수행하고 다음 층의 이벤트를 생성합니다.
 
 ### Request Body (`application/json`)
+
+| 필드명 | 타입 | 필수 | 설명 |
+| :--- | :--- | :--- | :--- |
+| `firstPlayerId` | Integer | Yes | 방장(Host) 플레이어 ID |
+| `playerDataList` | Array | Yes | 플레이어들의 현재 상태 데이터 목록 |
+| `usedEvents` | Array | No | 이전에 사용된 이벤트 ID 목록 |
+
 ```json
 {
   "firstPlayerId": 1,       // 방장(Host) 플레이어 ID
@@ -99,6 +121,15 @@
 ```
 
 ### Response Body (`application/json`)
+
+| 필드명 | 타입 | 설명 |
+| :--- | :--- | :--- |
+| `success` | Boolean | 요청 처리 성공 여부 |
+| `message` | String | 결과 메시지 |
+| `firstPlayerId` | Integer | 방장(Host) 플레이어 ID |
+| `monsterPlacements` | Array | 다음 층에 배치될 몬스터 정보 목록 |
+| `nextFloorEvent` | Object | 다음 층을 위해 생성된 이벤트 정보 |
+
 ```json
 {
   "success": true,
@@ -122,6 +153,11 @@
 }
 ```
 
+> **⚠️ 중요 알림 (프로토타입 제한사항)**
+> 현재 버전에서는 다음 층의 맵 구조를 알 수 없으므로, **현재 층(1층)의 맵 구조를 그대로 복사**하여 다음 층 이벤트를 생성합니다.
+> - 따라서 `nextFloorEvent`의 `roomId`는 1층 기준으로 반환됩니다.
+> - 추후 정식 버전에서는 **층 진입 시점(`POST /entrance`)에 맵 정보를 받아 이벤트를 생성**하는 방식으로 변경될 예정입니다.
+
 ---
 
 ## 3. 층 클리어 (상태 업데이트)
@@ -129,6 +165,11 @@
 **Description:** 플레이어가 현재 층을 클리어(보스 처치)했을 때 호출됩니다. 현재 층을 "종료 중(`is_finishing = true`)" 상태로 표시하여, 클라이언트가 다음 층의 맵 생성을 요청할 수 있도록 합니다.
 
 ### Request Body (`application/json`)
+
+| 필드명 | 타입 | 필수 | 설명 |
+| :--- | :--- | :--- | :--- |
+| `playerIds` | Array | Yes | 층을 클리어한 플레이어 ID 목록 |
+
 ```json
 {
   "playerIds": [1, 2]       // 층을 클리어한 플레이어 ID 목록
@@ -136,6 +177,13 @@
 ```
 
 ### Response Body (`application/json`)
+
+| 필드명 | 타입 | 설명 |
+| :--- | :--- | :--- |
+| `success` | Boolean | 요청 처리 성공 여부 |
+| `message` | String | 결과 메시지 |
+| `finishedFloor` | Integer | 완료된 층 번호 |
+
 ```json
 {
   "success": true,
@@ -149,26 +197,49 @@
 
 ## 4. 이벤트 선택
 **Endpoint:** `POST /event/select`
-**Description:** 플레이어가 이벤트 방에서 선택지를 골랐을 때 호출됩니다.
+**Description:** 플레이어가 이벤트 방에서 선택지를 골랐을 때 호출됩니다. 사용자의 입력(텍스트)을 분석하여 가장 유사한 선택지의 보상/패널티를 적용하거나, 돌발 행동을 감지합니다.
 
 ### Request Body (`application/json`)
+
+| 필드명 | 타입 | 필수 | 설명 |
+| :--- | :--- | :--- | :--- |
+| `firstPlayerId` | Integer | Yes | 방장(Host) 플레이어 ID |
+| `selectingPlayerId` | Integer | Yes | 선택을 한 플레이어 ID |
+| `roomId` | Integer | Yes | 이벤트가 발생한 방 ID |
+| `choice` | String | Yes | 선택한 선택지의 텍스트 (자유 입력 가능) |
+
 ```json
 {
   "firstPlayerId": 1,       // 방장(Host) 플레이어 ID
   "selectingPlayerId": 1,   // 선택을 한 플레이어 ID
   "roomId": 1,              // 이벤트가 발생한 방 ID
-  "choice": "상인을 공격한다" // 선택한 선택지의 텍스트
+  "choice": "상인을 공격한다" // 선택한 선택지의 텍스트 (자유 입력 가능)
 }
 ```
 
 ### Response Body (`application/json`)
+
+| 필드명 | 타입 | 설명 |
+| :--- | :--- | :--- |
+| `success` | Boolean | 요청 처리 성공 여부 |
+| `firstPlayerId` | Integer | 방장(Host) 플레이어 ID |
+| `selectingPlayerId` | Integer | 선택을 한 플레이어 ID |
+| `roomId` | Integer | 이벤트가 발생한 방 ID |
+| `outcome` | String | LLM이 생성한 결과 서술 |
+| `rewardId` | String | 획득한 보상 ID (없으면 null) |
+| `penaltyId` | String | 적용된 패널티 ID (없으면 null) |
+| `isUnexpected` | Boolean | 돌발 행동 여부 |
+
 ```json
 {
   "success": true,
   "firstPlayerId": 1,
   "selectingPlayerId": 1,
   "roomId": 1,
-  "outcome": "상인이 회피하고 반격합니다! 10의 피해를 입었습니다." // LLM이 생성한 결과 서술
+  "outcome": "상인이 회피하고 반격합니다! 10의 피해를 입었습니다.", // LLM이 생성한 결과 서술
+  "rewardId": "item_rare",      // 획득한 보상 ID (없으면 null)
+  "penaltyId": "hp_damage",     // 적용된 패널티 ID (없으면 null)
+  "isUnexpected": false         // 돌발 행동 여부 (true일 경우 penalty_unexpected_action 적용)
 }
 ```
 
