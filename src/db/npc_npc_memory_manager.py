@@ -256,11 +256,16 @@ class NpcNpcMemoryManager:
                 text_content = msg.get("text")
                 if speaker_id is None or not text_content:
                     continue
-
-                if int(speaker_id) == int(npc1_id):
-                    subject_id = int(npc2_id)
+                # subject_id는 "상대방"으로 저장해야 합니다.
+                # npc1_id/npc2_id가 어떤 순서로 들어와도 동일하게 동작하도록,
+                # 정규화된 pair(heroine_id_1, heroine_id_2)를 기준으로 계산합니다.
+                if int(speaker_id) == int(heroine_id_1):
+                    subject_id = int(heroine_id_2)
+                elif int(speaker_id) == int(heroine_id_2):
+                    subject_id = int(heroine_id_1)
                 else:
-                    subject_id = int(npc1_id)
+                    # 예상치 못한 speaker_id면 스킵
+                    continue
 
                 embed = self.embeddings.embed_query(str(text_content))
 
