@@ -59,7 +59,7 @@ class EventResponse(BaseModel):
     eventTitle: str
     eventCode: str
     scenarioText: str
-    scenarioNarrative: str
+    scenarioNarrative: Any  # str(공용) 또는 dict(개인)
     choices: List[EventChoice] = []
 
 
@@ -194,6 +194,17 @@ async def entrance(request: EntranceRequest):
             events_data = result["events"]
             if isinstance(events_data, list):
                 for evt in events_data:
+                    # scenario_narrative: dict(개인) or str(공용)
+                    scenario_narrative = evt.get("scenario_narrative", "")
+                    if evt.get("is_personal") and evt.get("heroineNarratives"):
+                        # dict로 변환: key = playerId
+                        scenario_narrative = {
+                            str(n["playerId"]): n["narrative"]
+                            for n in evt["heroineNarratives"]
+                            if isinstance(n, dict)
+                            and "playerId" in n
+                            and "narrative" in n
+                        }
                     events_list.append(
                         EventResponse(
                             roomId=evt.get("room_id", 0),
@@ -201,7 +212,7 @@ async def entrance(request: EntranceRequest):
                             eventTitle=evt.get("event_title", ""),
                             eventCode=evt.get("event_code", ""),
                             scenarioText=evt.get("scenario_text", ""),
-                            scenarioNarrative=evt.get("scenario_narrative", ""),
+                            scenarioNarrative=scenario_narrative,
                             choices=[
                                 EventChoice(
                                     action=c.get("action", ""),
@@ -215,6 +226,13 @@ async def entrance(request: EntranceRequest):
                     )
             elif isinstance(events_data, dict):
                 evt = events_data
+                scenario_narrative = evt.get("scenario_narrative", "")
+                if evt.get("is_personal") and evt.get("heroineNarratives"):
+                    scenario_narrative = {
+                        str(n["playerId"]): n["narrative"]
+                        for n in evt["heroineNarratives"]
+                        if isinstance(n, dict) and "playerId" in n and "narrative" in n
+                    }
                 events_list.append(
                     EventResponse(
                         roomId=evt.get("room_id", 0),
@@ -222,7 +240,7 @@ async def entrance(request: EntranceRequest):
                         eventTitle=evt.get("event_title", ""),
                         eventCode=evt.get("event_code", ""),
                         scenarioText=evt.get("scenario_text", ""),
-                        scenarioNarrative=evt.get("scenario_narrative", ""),
+                        scenarioNarrative=scenario_narrative,
                         choices=[
                             EventChoice(
                                 action=c.get("action", ""),
@@ -480,7 +498,7 @@ async def nextfloor(request: NextFloorRequest):
         return NextFloorResponse(
             success=True,
             message="다음 층 입장 및 이벤트 생성 성공",
-            floorId=result.get("floor_ids"),
+            floorId=result.get("floor_id"),
             playerIds=player_ids,
             heroineIds=heroine_ids,
             heroineMemoryProgress=heroine_memory_progress,
