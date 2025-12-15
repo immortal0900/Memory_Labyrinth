@@ -28,6 +28,7 @@ class RawMapRoom(BaseModel):
 class RawMapRequest(BaseModel):
     """Unreal에서 보낸 raw_map 구조"""
 
+    floor: int
     playerIds: List[int]
     heroineIds: List[int]
     rooms: List[RawMapRoom]
@@ -144,7 +145,9 @@ class NextFloorRequest(BaseModel):
     """다음 층 입장 요청"""
 
     rawMap: RawMapRequest  # 다음 층 raw_map
-    heroineData: Optional[Dict[str, Any]] = None
+    heroineData: Optional[Any] = (
+        None  # Accept both dict and list for backward compatibility
+    )
     usedEvents: Optional[List[Any]] = None
 
 
@@ -366,11 +369,25 @@ async def nextfloor(request: NextFloorRequest):
             if hasattr(request.rawMap, "model_dump")
             else dict(request.rawMap)
         )
+        print(f"[DEBUG] API nextfloor raw_map: {raw_map}")
+        # Patch: ensure 'floor' is present in raw_map
+        if "floor" not in raw_map:
+            # Try to extract from request or rooms if possible
+            if hasattr(request.rawMap, "floor"):
+                raw_map["floor"] = request.rawMap.floor
+            # If still not found, raise clear error
+            if "floor" not in raw_map:
+                raise HTTPException(
+                    status_code=400, detail="raw_map에 floor 정보가 없습니다. (API)"
+                )
+        heroine_data = request.heroineData
+        if heroine_data is not None and not isinstance(heroine_data, list):
+            heroine_data = [heroine_data]
         result = service.next_floor_entrance(
             player_ids=raw_map.get("player_ids") or raw_map.get("playerIds", []),
             heroine_ids=raw_map.get("heroine_ids") or raw_map.get("heroineIds", []),
             raw_map=raw_map,
-            heroine_data=request.heroineData,
+            heroine_data=heroine_data,
             used_events=request.usedEvents or [],
         )
 
