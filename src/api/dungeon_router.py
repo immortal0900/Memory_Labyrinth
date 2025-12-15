@@ -361,19 +361,15 @@ async def nextfloor(request: NextFloorRequest):
     """
     try:
         service = get_dungeon_service()
-
-        # raw_map dict 변환
         raw_map = (
             request.rawMap.model_dump()
             if hasattr(request.rawMap, "model_dump")
             else dict(request.rawMap)
         )
-
-        # DB에 다음 층 던전 및 이벤트 생성
-        result = service.entrance(
+        result = service.next_floor_entrance(
             player_ids=raw_map.get("player_ids") or raw_map.get("playerIds", []),
             heroine_ids=raw_map.get("heroine_ids") or raw_map.get("heroineIds", []),
-            raw_maps=[raw_map],
+            raw_map=raw_map,
             heroine_data=request.heroineData,
             used_events=request.usedEvents or [],
         )
@@ -429,7 +425,7 @@ async def nextfloor(request: NextFloorRequest):
         return NextFloorResponse(
             success=True,
             message="다음 층 입장 및 이벤트 생성 성공",
-            floorId=result.get("floor_ids", [None])[0],
+            floorId=result.get("floor_ids"),
             events=events_list if events_list else None,
         )
     except Exception as e:
