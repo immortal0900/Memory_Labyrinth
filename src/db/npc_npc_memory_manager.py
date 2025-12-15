@@ -259,12 +259,25 @@ class NpcNpcMemoryManager:
                 # subject_id는 "상대방"으로 저장해야 합니다.
                 # npc1_id/npc2_id가 어떤 순서로 들어와도 동일하게 동작하도록,
                 # 정규화된 pair(heroine_id_1, heroine_id_2)를 기준으로 계산합니다.
-                if int(speaker_id) == int(heroine_id_1):
+                try:
+                    speaker_int = int(speaker_id)
+                except (TypeError, ValueError):
+                    print(
+                        f"[WARN] npc_npc_memories 저장 스킵: speaker_id 변환 실패 "
+                        f"(speaker_id={speaker_id}, pair=({heroine_id_1},{heroine_id_2}), turn={idx + 1})"
+                    )
+                    continue
+
+                if speaker_int == int(heroine_id_1):
                     subject_id = int(heroine_id_2)
-                elif int(speaker_id) == int(heroine_id_2):
+                elif speaker_int == int(heroine_id_2):
                     subject_id = int(heroine_id_1)
                 else:
-                    # 예상치 못한 speaker_id면 스킵
+                    # 예상치 못한 speaker_id면 저장하지 않고 경고만 출력
+                    print(
+                        f"[WARN] npc_npc_memories 저장 스킵: speaker_id가 pair에 없음 "
+                        f"(speaker_id={speaker_int}, pair=({heroine_id_1},{heroine_id_2}), turn={idx + 1})"
+                    )
                     continue
 
                 embed = self.embeddings.embed_query(str(text_content))
