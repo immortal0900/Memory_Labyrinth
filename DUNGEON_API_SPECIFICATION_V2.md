@@ -11,59 +11,67 @@
 
 ### Request Body (`application/json`)
 
-| 필드명 | 타입 | 필수 | 설명 |
-| :--- | :--- | :--- | :--- |
-| `rawMaps` | Object | Yes | 언리얼에서 생성한 맵 구조 데이터 |
-| `heroineData` | Object | No |히로인별 상태 정보(리스트, 각 히로인 1개 객체) |
-| `usedEvents` | Array | No | 이전에 사용된 이벤트 ID 목록 (중복 방지용) |
+| 필드명        | 타입    | 필수 | 설명                                 |
+| :------------ | :------ | :--- | :----------------------------------- |
+| `playerIds`   | Array   | Yes  | 참여 플레이어 ID 목록                |
+| `heroineIds`  | Array   | Yes  | 참여 히로인 ID 목록                  |
+| `heroineData` | Array   | No   | 히로인별 상태 정보(리스트, 각 히로인 1개 객체) |
+| `rawMaps`     | Array   | Yes  | 각 층의 맵 구조 데이터 (방 정보만 포함) |
+| `usedEvents`  | Array   | No   | 이전에 사용된 이벤트 ID 목록 (중복 방지용) |
 
 ```json
 {
+  "playerIds": [220, 221],
+  "heroineIds": [1, 1],
+  "heroineData": [
+    { "heroineId": 1, "memoryProgress": 0 },
+    { "heroineId": 1, "memoryProgress": 0 }
+  ],
   "rawMaps": [
     {
       "floor": 1,
-      "playerIds": [101, 102],
-      "heroineIds": [1, 2],
       "rooms": [ ... ],
       "rewards": [ ... ]
     },
     {
       "floor": 2,
-      "playerIds": [101, 102],
-      "heroineIds": [1, 2],
       "rooms": [ ... ],
       "rewards": [ ... ]
     }
-  ],
-  "heroineData": [
-    { "heroineId": 1, "memoryProgress": 50 },
-    { "heroineId": 2, "memoryProgress": 30 }
   ],
   "usedEvents": []
 }
 ```
 - floor: 각 층의 고유 번호(1, 2, ...). 각 rawMaps 항목에 반드시 포함되어야 함.
 - heroineData: 여러 히로인 지원. 각 히로인별로 객체 1개씩 리스트로 전달.
+- playerIds, heroineIds: 최상위에서 한 번만 전달, 각 층에 자동 반영됨.
+- rawMaps 내부에는 방 정보(rooms, rewards 등)만 포함, playerIds/heroineIds는 포함하지 않음.
 
 
 ### Response Body (`application/json`)
 
-| 필드명 | 타입 | 설명 |
-| :--- | :--- | :--- |
-| `success` | Boolean | 요청 처리 성공 여부 |
-| `message` | String | 결과 메시지 |
-| `firstPlayerId` | Integer | 방장(Host) 플레이어 ID (세션 키) |
-| `events` | Array | 생성된 이벤트 목록 |
+| 필드명                | 타입      | 설명                                 |
+| :-------------------- | :-------- | :----------------------------------- |
+| `success`             | Boolean   | 요청 처리 성공 여부                  |
+| `message`             | String    | 결과 메시지                          |
+| `firstPlayerId`       | Integer   | 방장(Host) 플레이어 ID (세션 키)     |
+| `playerIds`           | Array     | 참여 플레이어 ID 목록                |
+| `heroineIds`          | Array     | 참여 히로인 ID 목록                  |
+| `heroineMemoryProgress` | Array   | 각 히로인별 memoryProgress 값        |
+| `events`              | Array     | 생성된 이벤트 목록                   |
 
 ```json
 {
   "success": true,
   "message": "던전 입장 성공",
-  "firstPlayerId": 1,       // 방장(Host) 플레이어 ID (세션 키로 사용됨)
+  "firstPlayerId": 1,
+  "playerIds": [101, 102],
+  "heroineIds": [1, 2],
+  "heroineMemoryProgress": [50, 30],
   "events": [
     {
       "roomId": 1,
-      "eventType": 4,       // 생성된 이벤트 ID
+      "eventType": 4,
       "eventTitle": "미치광이 상인",
       "eventCode": "MAD_MERCHANT",
       "scenarioText": "장면 묘사 텍스트...",
@@ -71,13 +79,13 @@
       "choices": [
         {
           "action": "말을 건다",
-          "rewardId": "item_common",
-          "penaltyId": null
+          "reward": { "id": "item_common", "desc": "일반 아이템" },
+          "penalty": null
         },
         {
           "action": "공격한다",
-          "rewardId": "item_rare",
-          "penaltyId": "hp_damage"
+          "reward": { "id": "item_rare", "desc": "희귀 아이템" },
+          "penalty": { "id": "hp_damage", "desc": "HP 감소" }
         }
       ]
     }
@@ -130,34 +138,32 @@
 
 ### Response Body (`application/json`)
 
-| 필드명 | 타입 | 설명 |
-| :--- | :--- | :--- |
-| `success` | Boolean | 요청 처리 성공 여부 |
-| `message` | String | 결과 메시지 |
-| `firstPlayerId` | Integer | 방장(Host) 플레이어 ID |
-| `monsterPlacements` | Array | 다음 층에 배치될 몬스터 정보 목록 |
-| `nextFloorEvent` | Object | 다음 층을 위해 생성된 이벤트 정보 |
+| 필드명            | 타입    | 설명                                 |
+| :---------------- | :------ | :----------------------------------- |
+| `success`         | Boolean | 요청 처리 성공 여부                  |
+| `message`         | String  | 결과 메시지                          |
+| `firstPlayerId`   | Integer | 방장(Host) 플레이어 ID               |
+| `monsterPlacements` | Array | 다음 층에 배치될 몬스터 정보 목록    |
+| `nextFloorEvent`  | Object  | 다음 층을 위해 생성된 이벤트 정보    |
+| `agentResult`     | Object  | (디버깅용) AI 분석 결과              |
 
 ```json
 {
   "success": true,
   "message": "던전 밸런싱 성공",
   "firstPlayerId": 1,
-  "monsterPlacements": [    // 다음 층에 스폰될 몬스터 정보 (또는 로직 변경 시 현재 보스방)
-    {
-      "roomId": 4,
-      "monsterId": 101,
-      "count": 1
-    }
+  "monsterPlacements": [
+    { "roomId": 4, "monsterId": 101, "count": 1 }
   ],
-  "nextFloorEvent": {       // 다음 층을 위해 생성된 이벤트
+  "nextFloorEvent": {
     "roomId": 3,
     "eventType": 5,
     "eventTitle": "미지의 기억",
     "eventCode": "UNKNOWN_MEMORY",
     "scenarioText": "...",
     "scenarioNarrative": "..."
-  }
+  },
+  "agentResult": { /* AI 분석 결과 */ }
 }
 ```
 
@@ -239,10 +245,9 @@
   "firstPlayerId": 1,
   "selectingPlayerId": 1,
   "roomId": 1,
-  "outcome": "상인이 회피하고 반격합니다! 10의 피해를 입었습니다.", // LLM이 생성한 결과 서술
-  "rewardId": "item_rare",      // 획득한 보상 ID (없으면 null)
-  "penaltyId": "hp_damage",     // 적용된 패널티 ID (없으면 null)
-  "isUnexpected": false         // 돌발 행동 여부 (true일 경우 penalty_unexpected_action 적용)
+  "outcome": "상인이 회피하고 반격합니다! 10의 피해를 입었습니다.",
+  "rewardId": "item_rare",
+  "penaltyId": "hp_damage"
 }
 ```
 ---
@@ -277,19 +282,41 @@
 
 ### Response Body (`application/json`)
 
-| 필드명   | 타입    | 설명               |
-| :------- | :------ | :----------------- |
-| success  | Boolean | 요청 처리 성공 여부 |
-| message  | String  | 결과 메시지         |
-| floorId  | int     | 생성될 층 id        |
-| events   | Array   | 생성된 이벤트 목록  |
+| 필드명                | 타입      | 설명                                 |
+| :-------------------- | :-------- | :----------------------------------- |
+| `success`             | Boolean   | 요청 처리 성공 여부                  |
+| `message`             | String    | 결과 메시지                          |
+| `floorId`             | Integer   | 생성될 층 id                         |
+| `playerIds`           | Array     | 참여 플레이어 ID 목록                |
+| `heroineIds`          | Array     | 참여 히로인 ID 목록                  |
+| `heroineMemoryProgress` | Array   | 각 히로인별 memoryProgress 값        |
+| `events`              | Array     | 생성된 이벤트 목록                   |
 
 ```json
 {
   "success": true,
   "message": "다음 층 입장 및 이벤트 생성 성공",
   "floorId": 3,
-  "events": [ ... ]
+  "playerIds": [101, 102],
+  "heroineIds": [1, 2],
+  "heroineMemoryProgress": [50, 30],
+  "events": [
+    {
+      "roomId": 5,
+      "eventType": 2,
+      "eventTitle": "수상한 방",
+      "eventCode": "SUSPICIOUS_ROOM",
+      "scenarioText": "방 안이 어둡고 조용하다...",
+      "scenarioNarrative": "UI 표시용 서술 텍스트...",
+      "choices": [
+        {
+          "action": "탐색한다",
+          "reward": { "id": "item_key", "desc": "열쇠" },
+          "penalty": null
+        }
+      ]
+    }
+  ]
 }
 ```
 ---

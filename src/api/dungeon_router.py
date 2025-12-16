@@ -26,20 +26,20 @@ class RawMapRoom(BaseModel):
 
 
 class RawMapRequest(BaseModel):
-    """Unreal에서 보낸 raw_map 구조"""
+    """Unreal에서 보낸 raw_map 구조 (방 정보만)"""
 
     floor: int
-    playerIds: List[int]
-    heroineIds: List[int]
     rooms: List[RawMapRoom]
     rewards: List[int] = []
 
 
 class EntranceRequest(BaseModel):
-    """던전 입장 요청"""
+    """던전 입장 요청 (최상위에 playerIds, heroineIds, heroineData, rawMaps)"""
 
-    rawMaps: List[RawMapRequest]  # 여러 층 raw_map 지원
+    playerIds: List[str]
+    heroineIds: List[int]
     heroineData: Optional[List[Any]] = None
+    rawMaps: List[RawMapRequest]
     usedEvents: Optional[List[Any]] = None
 
 
@@ -68,8 +68,8 @@ class EntranceResponse(BaseModel):
 
     success: bool
     message: str
-    firstPlayerId: int
-    playerIds: List[int]
+    firstPlayerId: str
+    playerIds: List[str]
     heroineIds: List[int]
     heroineMemoryProgress: List[int]
     events: Optional[List[EventResponse]] = None
@@ -86,7 +86,7 @@ class PlayerBalanceData(BaseModel):
 class BalanceRequest(BaseModel):
     """밸런싱 요청 (보스방 입장)"""
 
-    firstPlayerId: int  # 방장 ID로 던전 식별
+    firstPlayerId: str  # 방장 ID로 던전 식별
     playerDataList: List[PlayerBalanceData]
     usedEvents: Optional[List[Any]] = None
 
@@ -104,14 +104,14 @@ class BalanceResponse(BaseModel):
 
     success: bool
     message: str
-    firstPlayerId: int
+    firstPlayerId: str
     monsterPlacements: List[MonsterPlacement] = []
 
 
 class ClearRequest(BaseModel):
     """층 완료 요청"""
 
-    playerIds: List[int]
+    playerIds: List[str]
 
 
 class ClearResponse(BaseModel):
@@ -125,8 +125,8 @@ class ClearResponse(BaseModel):
 class EventSelectRequest(BaseModel):
     """이벤트 선택 요청"""
 
-    firstPlayerId: int
-    selectingPlayerId: int
+    firstPlayerId: str
+    selectingPlayerId: str
     roomId: int
     choice: str
 
@@ -135,20 +135,21 @@ class EventSelectResponse(BaseModel):
     """이벤트 선택 응답"""
 
     success: bool
-    firstPlayerId: int
-    selectingPlayerId: int
+    firstPlayerId: str
+    selectingPlayerId: str
     roomId: int
     outcome: str  # 결과 텍스트
     rewardId: Optional[str] = None
     penaltyId: Optional[str] = None
-    isUnexpected: bool = False
 
 
 class NextFloorRequest(BaseModel):
-    """다음 층 입장 요청"""
+    """다음 층 입장 요청 (playerIds, heroineIds 최상위)"""
 
-    rawMap: RawMapRequest  # 다음 층 raw_map
+    playerIds: List[str]
+    heroineIds: List[int]
     heroineData: Optional[List[Any]] = None  # int/dict 모두 허용
+    rawMap: RawMapRequest  # 다음 층 raw_map
     usedEvents: Optional[List[Any]] = None
 
 
@@ -158,7 +159,7 @@ class NextFloorResponse(BaseModel):
     success: bool
     message: str
     floorId: Optional[int] = None
-    playerIds: List[int]
+    playerIds: List[str]
     heroineIds: List[int]
     heroineMemoryProgress: List[int]
     events: Optional[List[EventResponse]] = None
@@ -174,15 +175,13 @@ async def entrance(request: EntranceRequest):
     try:
         service = get_dungeon_service()
 
-        # 여러 층 raw_map을 dict로 변환
+        # 여러 층 raw_map을 dict로 변환 (playerIds, heroineIds는 최상위에서 받음)
         raw_maps = [raw_map.model_dump() for raw_map in request.rawMaps]
 
         # 던전 입장
         result = service.entrance(
-            player_ids=raw_maps[0].get("player_ids")
-            or raw_maps[0].get("playerIds", []),
-            heroine_ids=raw_maps[0].get("heroine_ids")
-            or raw_maps[0].get("heroineIds", []),
+            player_ids=request.playerIds,
+            heroine_ids=request.heroineIds,
             raw_maps=raw_maps,
             heroine_data=request.heroineData,
             used_events=request.usedEvents or [],
@@ -254,10 +253,8 @@ async def entrance(request: EntranceRequest):
                 )
 
         # 최상위 배열 추출 (중복 없이)
-        player_ids = raw_maps[0].get("player_ids") or raw_maps[0].get("playerIds", [])
-        heroine_ids = raw_maps[0].get("heroine_ids") or raw_maps[0].get(
-            "heroineIds", []
-        )
+        player_ids = request.playerIds
+        heroine_ids = request.heroineIds
         heroine_data = request.heroineData or []
         heroine_memory_progress = []
         for h in heroine_data:
@@ -390,7 +387,6 @@ async def select_event(request: EventSelectRequest):
             outcome=result.get("outcome", ""),
             rewardId=result.get("rewardId"),
             penaltyId=result.get("penaltyId"),
-            isUnexpected=result.get("isUnexpected", False),
         )
     except Exception as e:
         import traceback
@@ -423,11 +419,18 @@ async def nextfloor(request: NextFloorRequest):
                     status_code=400, detail="raw_map에 floor 정보가 없습니다. (API)"
                 )
         heroine_data = request.heroineData
+        if heroine_data is None or (
+            isinstance(heroine_data, list) and len(heroine_data) == 0
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="heroineData가 비어 있거나 유효하지 않습니다. (API)",
+            )
         if heroine_data is not None and not isinstance(heroine_data, list):
             heroine_data = [heroine_data]
         result = service.next_floor_entrance(
-            player_ids=raw_map.get("player_ids") or raw_map.get("playerIds", []),
-            heroine_ids=raw_map.get("heroine_ids") or raw_map.get("heroineIds", []),
+            player_ids=request.playerIds,
+            heroine_ids=request.heroineIds,
             raw_map=raw_map,
             heroine_data=heroine_data,
             used_events=request.usedEvents or [],
@@ -449,8 +452,8 @@ async def nextfloor(request: NextFloorRequest):
                             choices=[
                                 EventChoice(
                                     action=c.get("action", ""),
-                                    reward=c.get("reward"),
-                                    penalty=c.get("penalty"),
+                                    reward=c.get("reward") if isinstance(c.get("reward"), dict) or c.get("reward") is None else {},
+                                    penalty=c.get("penalty") if isinstance(c.get("penalty"), dict) or c.get("penalty") is None else {},
                                 )
                                 for c in evt.get("choices", [])
                                 if isinstance(c, dict)
@@ -479,8 +482,8 @@ async def nextfloor(request: NextFloorRequest):
                     )
                 )
 
-        player_ids = raw_map.get("player_ids") or raw_map.get("playerIds", [])
-        heroine_ids = raw_map.get("heroine_ids") or raw_map.get("heroineIds", [])
+        player_ids = request.playerIds
+        heroine_ids = request.heroineIds
         heroine_data = heroine_data or []
         heroine_memory_progress = []
         for h in heroine_data:

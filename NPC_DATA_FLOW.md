@@ -842,7 +842,7 @@ Score = (w_recency × Recency) + (w_importance × Importance) + (w_relevance × 
 ├─────────────────────────────────────────────────────────────────────────┤
 │ | 컬럼         | 타입          | 의미                                   │
 │ |--------------|---------------|----------------------------------------│
-│ | user_id      | TEXT          | 플레이어 ID                            │
+│ | player_id    | TEXT          | 플레이어 ID                            │
 │ | heroine_id   | TEXT          | 히로인 ID (letia, lupames, roco, sage) │
 │ | speaker      | TEXT          | 발화자 (user, letia, lupames, roco)    │
 │ | subject      | TEXT          | 대상 (user, letia, world 등)           │

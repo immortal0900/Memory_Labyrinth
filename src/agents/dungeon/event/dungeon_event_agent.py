@@ -21,11 +21,23 @@ def heroine_memories_node(state: DungeonEventState) -> DungeonEventState:
 
     heroine_id = state["heroine_data"].get("heroine_id")
     memory_progress = state["heroine_data"].get("memory_progress")
+
     player_id = state.get("player_id") if "player_id" in state else None
 
-    # 타입 통일 (문자열 → 정수)
-    heroine_id = int(heroine_id) if isinstance(heroine_id, str) else heroine_id
-    player_id = int(player_id) if player_id is not None and isinstance(player_id, str) else player_id
+    # heroine_id는 int 변환 시도 (str일 때만)
+    try:
+        heroine_id = int(heroine_id) if isinstance(heroine_id, str) else heroine_id
+    except Exception:
+        pass
+
+    # player_id는 int 변환이 가능할 때만 변환, 아니면 str 그대로 사용
+    if player_id is not None and isinstance(player_id, str):
+        try:
+            player_id_int = int(player_id)
+            player_id = player_id_int
+        except ValueError:
+            # player_id가 숫자가 아니면(str) 그대로 둠
+            pass
 
     # 해당 히로인의 해금된 기억들을 필터링 (memory_progress 이하)
     heroine_memories = [

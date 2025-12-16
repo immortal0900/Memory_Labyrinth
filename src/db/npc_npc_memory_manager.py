@@ -19,6 +19,7 @@ from langchain_openai import OpenAIEmbeddings
 from langchain.chat_models import init_chat_model
 
 from db.config import CONNECTION_URL
+from src.enums.LLM import LLM
 
 
 def _normalize_pair(a: int, b: int) -> Tuple[int, int]:
@@ -38,7 +39,7 @@ class NpcNpcMemoryManager:
         self.embeddings = OpenAIEmbeddings(model=embedding_model)
 
         # 아주 단순한 fact 추출용 (필요 최소)
-        self.extract_llm = init_chat_model(model="gpt-5-mini")
+        self.extract_llm = init_chat_model(model=LLM.GPT5_MINI)
 
     # ============================================
     # 체크포인트 저장/조회

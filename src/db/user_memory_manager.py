@@ -7,7 +7,7 @@ PostgreSQL + pgvector + PGroonga 기반 4요소 하이브리드 검색
 사용 예시:
     # 대화 후 기억 저장
     await user_memory_manager.save_conversation(
-        user_id="10001",
+        player_id="10001",
         heroine_id="letia",
         user_message="나는 고양이 좋아해",
         npc_response="저도 고양이 좋아해요"
@@ -15,7 +15,7 @@ PostgreSQL + pgvector + PGroonga 기반 4요소 하이브리드 검색
 
     # 기억 검색
     memories = await user_memory_manager.search_memories(
-        user_id="10001",
+        player_id="10001",
         heroine_id="letia",
         query="고양이"
     )
@@ -176,12 +176,12 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
     # ============================================
 
     async def add_memory(
-        self, user_id: str, heroine_id: str, fact: ExtractedFact
+        self, player_id: str, heroine_id: str, fact: ExtractedFact
     ) -> Optional[str]:
         """단일 fact 저장 (중복/충돌 처리 포함)
 
         Args:
-            user_id: 플레이어 ID
+            player_id: 플레이어 ID
             heroine_id: 히로인 ID
             fact: 저장할 fact
 
@@ -192,7 +192,7 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
         embedding = self.embeddings.embed_query(fact.content)
 
         # 2. 중복 검사
-        similar = await self._find_similar_memory(user_id, heroine_id, embedding)
+        similar = await self._find_similar_memory(player_id, heroine_id, embedding)
 
         if similar:
             # 중복 발견 -> 기존 기억 무효화 후 새로 저장
@@ -217,7 +217,7 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
                 sql,
                 {
                     "id": memory_id,
-                    "player_id": user_id,
+                    "player_id": player_id,
                     "heroine_id": heroine_id,
                     "speaker": fact.speaker.value,
                     "subject": fact.subject.value,
@@ -232,14 +232,14 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
         return memory_id
 
     async def save_conversation(
-        self, user_id: str, heroine_id: str, user_message: str, npc_response: str
+        self, player_id: str, heroine_id: str, user_message: str, npc_response: str
     ) -> List[str]:
         """대화를 분석하여 fact 추출 후 저장
 
         Mem0의 add_memory를 대체하는 메인 메서드
 
         Args:
-            user_id: 플레이어 ID
+            player_id: 플레이어 ID
             heroine_id: 히로인 ID
             user_message: 플레이어 메시지
             npc_response: NPC 응답
@@ -259,7 +259,7 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
         # 각 fact 저장
         memory_ids = []
         for fact in facts:
-            memory_id = await self.add_memory(user_id, heroine_id, fact)
+            memory_id = await self.add_memory(player_id, heroine_id, fact)
             if memory_id:
                 memory_ids.append(memory_id)
 
@@ -271,7 +271,7 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
 
     async def search_memories(
         self,
-        user_id: str,
+        player_id: str,
         heroine_id: str,
         query: str,
         limit: int = 5,
@@ -282,7 +282,7 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
         Mem0의 search_memory를 대체하는 메인 검색 메서드
 
         Args:
-            user_id: 플레이어 ID
+            player_id: 플레이어 ID
             heroine_id: 히로인 ID
             query: 검색어
             limit: 최대 결과 수
@@ -319,7 +319,7 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
             result = conn.execute(
                 sql,
                 {
-                    "player_id": user_id,
+                    "player_id": player_id,
                     "heroine_id": heroine_id,
                     "query_text": query,
                     "query_embedding": str(query_embedding),
@@ -368,8 +368,6 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
         Returns:
             기억 dict 리스트 (Mem0 형식 호환)
         """
-        # ID 변환
-        user_id = str(player_id)
         heroine_id = NPC_ID_TO_HEROINE.get(npc_id, "letia")
 
         # 검색어 임베딩
@@ -397,7 +395,7 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
             result = conn.execute(
                 sql,
                 {
-                    "player_id": user_id,
+                    "player_id": player_id,
                     "heroine_id": heroine_id,
                     "query_text": query,
                     "query_embedding": str(query_embedding),
@@ -431,7 +429,7 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
     # ============================================
 
     async def _find_similar_memory(
-        self, user_id: str, heroine_id: str, embedding: list
+        self, player_id: str, heroine_id: str, embedding: list
     ) -> Optional[dict]:
         """유사 기억 검색 (중복 검사용)"""
         sql = text(
@@ -449,7 +447,7 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
             result = conn.execute(
                 sql,
                 {
-                    "player_id": user_id,
+                    "player_id": player_id,
                     "heroine_id": heroine_id,
                     "embedding": str(embedding),
                     "threshold": self.duplicate_threshold,

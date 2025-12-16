@@ -108,7 +108,7 @@ class DungeonService:
 
     def entrance(
         self,
-        player_ids: List[int],
+        player_ids: List[str],
         heroine_ids: List[int],
         raw_maps: List[Dict[str, Any]],  # 여러 층 raw_map
         heroine_data: Optional[List] = None,
@@ -122,20 +122,26 @@ class DungeonService:
                 normalized_heroines = []
                 if heroine_data:
                     if all(isinstance(h, int) for h in heroine_data):
-                        # int 리스트: heroine_ids와 zip
                         for hid, mp in zip(heroine_ids, heroine_data):
-                            normalized_heroines.append({"heroine_id": hid, "memory_progress": mp})
+                            normalized_heroines.append(
+                                {"heroine_id": hid, "memory_progress": mp}
+                            )
                     elif isinstance(heroine_data, list):
                         for h in heroine_data:
                             normalized_heroines.append(_normalize_heroine_data(h))
                     else:
-                        normalized_heroines.append(_normalize_heroine_data(heroine_data))
+                        normalized_heroines.append(
+                            _normalize_heroine_data(heroine_data)
+                        )
                 for idx, raw_map in enumerate(raw_maps):
                     floor_num = idx + 1
                     if floor_num > 2:
                         break  # 1,2층만 생성
                     normalized_raw_map = _normalize_room_keys(raw_map)
                     normalized_raw_map["floor"] = floor_num
+                    # playerIds, heroineIds를 모든 층 raw_map에 주입
+                    normalized_raw_map["player_ids"] = player_ids
+                    normalized_raw_map["heroine_ids"] = heroine_ids
 
                     check_sql = text(
                         """
@@ -144,10 +150,7 @@ class DungeonService:
                         )
                     """
                     )
-                    player_id = (
-                        normalized_raw_map.get("player_ids")
-                        or normalized_raw_map.get("playerIds", [None])
-                    )[0]
+                    player_id = player_ids[0] if player_ids else None
                     player_id_str = str(player_id) if player_id is not None else None
                     result = conn.execute(
                         check_sql, {"floor": floor_num, "player_id": player_id_str}
@@ -171,10 +174,8 @@ class DungeonService:
                         or room.get("event_type", 0) != 0
                     ]
                     events_for_this_floor = []
-                    # 멀티 히로인/플레이어 지원: 각 이벤트룸마다 매칭되는 히로인/플레이어 데이터 사용
                     for room in event_rooms:
                         room_id = room.get("room_id")
-                        # 대표 히로인/플레이어로 메인 이벤트 생성 (is_personal 여부 확인)
                         main_event_data = self._create_event_for_floor(
                             heroine_data=normalized_heroines[0],
                             player_id=player_ids[0] if player_ids else None,
@@ -185,10 +186,11 @@ class DungeonService:
                         if not main_event_data:
                             continue
                         main_event_data["floor"] = floor_num
-                        # 개별 이벤트면 각 히로인/플레이어별 내러티브 생성
                         if main_event_data.get("is_personal", False):
                             heroine_narratives = []
-                            for player_id, heroine in zip(player_ids, normalized_heroines):
+                            for player_id, heroine in zip(
+                                player_ids, normalized_heroines
+                            ):
                                 indiv_event = self._create_event_for_floor(
                                     heroine_data=heroine,
                                     player_id=player_id,
@@ -197,12 +199,18 @@ class DungeonService:
                                     room_id=room_id,
                                 )
                                 if indiv_event:
-                                    heroine_narratives.append({
-                                        "playerId": player_id,
-                                        "heroineId": heroine["heroine_id"],
-                                        "memoryProgress": heroine["memory_progress"],
-                                        "narrative": indiv_event.get("scenario_narrative", "")
-                                    })
+                                    heroine_narratives.append(
+                                        {
+                                            "playerId": player_id,
+                                            "heroineId": heroine["heroine_id"],
+                                            "memoryProgress": heroine[
+                                                "memory_progress"
+                                            ],
+                                            "narrative": indiv_event.get(
+                                                "scenario_narrative", ""
+                                            ),
+                                        }
+                                    )
                             main_event_data["heroineNarratives"] = heroine_narratives
                         events_for_this_floor.append(main_event_data)
                         used_events.append(main_event_data)
@@ -240,10 +248,10 @@ class DungeonService:
             "floor_ids": floor_ids,
             "events": events_list,
         }
-        
+
     def next_floor_entrance(
         self,
-        player_ids: List[int],
+        player_ids: List[str],
         heroine_ids: List[int],
         raw_map: Dict[str, Any],
         heroine_data: Optional[List[Dict[str, Any]]] = None,
@@ -257,10 +265,15 @@ class DungeonService:
         try:
             with self.repo.engine.begin() as conn:
                 normalized_raw_map = _normalize_room_keys(raw_map)
+                # 항상 player_ids, heroine_ids를 주입하여 DB에 반영
+                normalized_raw_map["player_ids"] = [str(pid) for pid in player_ids]
+                normalized_raw_map["heroine_ids"] = list(heroine_ids)
+
                 floor_num = normalized_raw_map.get("floor")
                 print(f"[DEBUG] next_floor_entrance: floor_num={floor_num}")
                 if not floor_num:
                     raise ValueError("raw_map에 floor 정보가 없습니다.")
+
                 check_sql = text(
                     """
                     SELECT id, event FROM dungeon WHERE floor = :floor AND (
@@ -268,14 +281,10 @@ class DungeonService:
                     )
                     """
                 )
-                player_id = (
-                    normalized_raw_map.get("player_ids")
-                    or normalized_raw_map.get("playerIds", [None])
-                )[0]
-                player_id_str = str(player_id) if player_id is not None else None
-                print(f"[DEBUG] next_floor_entrance: player_id_str={player_id_str}")
+                player_id = str(player_ids[0]) if player_ids else None
+                print(f"[DEBUG] next_floor_entrance: player_id_str={player_id}")
                 result = conn.execute(
-                    check_sql, {"floor": floor_num, "player_id": player_id_str}
+                    check_sql, {"floor": floor_num, "player_id": player_id}
                 )
                 row = result.fetchone()
                 print(f"[DEBUG] next_floor_entrance: select row={row}")
@@ -307,14 +316,28 @@ class DungeonService:
                 # 멀티 히로인/플레이어 지원: 각 이벤트룸마다 매칭되는 히로인/플레이어 데이터 사용
                 normalized_heroines = []
                 if heroine_data:
+                    # If int list, pad or trim to match heroine_ids length
                     if all(isinstance(h, int) for h in heroine_data):
-                        for hid, mp in zip(heroine_ids, heroine_data):
-                            normalized_heroines.append({"heroine_id": hid, "memory_progress": mp})
+                        # Pad heroine_data if shorter than heroine_ids
+                        padded = list(heroine_data)[:]
+                        while len(padded) < len(heroine_ids):
+                            padded.append(0)
+                        for hid, mp in zip(heroine_ids, padded):
+                            normalized_heroines.append(
+                                {"heroine_id": hid, "memory_progress": mp}
+                            )
                     elif isinstance(heroine_data, list):
                         for h in heroine_data:
                             normalized_heroines.append(_normalize_heroine_data(h))
                     else:
-                        normalized_heroines.append(_normalize_heroine_data(heroine_data))
+                        normalized_heroines.append(
+                            _normalize_heroine_data(heroine_data)
+                        )
+                # Defensive: if normalized_heroines is empty, raise clear error
+                if not normalized_heroines:
+                    raise ValueError(
+                        "heroineData가 비어 있거나 유효하지 않습니다. (nextfloor)"
+                    )
                 for room in event_rooms:
                     room_id = room.get("room_id")
                     # 대표 히로인/플레이어로 메인 이벤트 생성 (is_personal 여부 확인)
@@ -340,29 +363,47 @@ class DungeonService:
                                 room_id=room_id,
                             )
                             if indiv_event:
-                                heroine_narratives.append({
-                                    "playerId": player_id,
-                                    "heroineId": heroine["heroine_id"],
-                                    "memoryProgress": heroine["memory_progress"],
-                                    "narrative": indiv_event.get("scenario_narrative", "")
-                                })
+                                heroine_narratives.append(
+                                    {
+                                        "playerId": player_id,
+                                        "heroineId": heroine["heroine_id"],
+                                        "memoryProgress": heroine["memory_progress"],
+                                        "narrative": indiv_event.get(
+                                            "scenario_narrative", ""
+                                        ),
+                                    }
+                                )
                         main_event_data["heroineNarratives"] = heroine_narratives
                     events_for_this_floor.append(main_event_data)
                     used_events.append(main_event_data)
 
                 summary_info_value = self._generate_raw_map_summary(normalized_raw_map)
-                # event/summary_info 항상 업데이트
-                conn.execute(
-                    text(
-                        "UPDATE dungeon SET raw_map = :raw_map, event = :event, summary_info = :summary_info WHERE id = :id"
-                    ),
-                    {
-                        "raw_map": json.dumps(normalized_raw_map),
-                        "event": json.dumps(events_for_this_floor),
-                        "summary_info": summary_info_value,
-                        "id": floor_id,
-                    },
-                )
+                # event/summary_info만 항상 업데이트, raw_map은 새 row(INSERT)일 때만 저장
+                if row:
+                    # 기존 row: raw_map은 건드리지 않음
+                    conn.execute(
+                        text(
+                            "UPDATE dungeon SET event = :event, summary_info = :summary_info WHERE id = :id"
+                        ),
+                        {
+                            "event": json.dumps(events_for_this_floor),
+                            "summary_info": summary_info_value,
+                            "id": floor_id,
+                        },
+                    )
+                else:
+                    # 새 row: raw_map 포함 전체 저장 (INSERT 내부에서 처리)
+                    conn.execute(
+                        text(
+                            "UPDATE dungeon SET raw_map = :raw_map, event = :event, summary_info = :summary_info WHERE id = :id"
+                        ),
+                        {
+                            "raw_map": json.dumps(normalized_raw_map),
+                            "event": json.dumps(events_for_this_floor),
+                            "summary_info": summary_info_value,
+                            "id": floor_id,
+                        },
+                    )
                 print(f"[DEBUG] next_floor_entrance: updated dungeon row id={floor_id}")
                 events_list.extend(events_for_this_floor)
             print(
@@ -382,10 +423,8 @@ class DungeonService:
         """트랜잭션 내에서 던전 삽입 (연결 재사용)"""
 
         raw_map_dict = raw_map if isinstance(raw_map, dict) else json.loads(raw_map)
-        player_ids = raw_map_dict.get("player_ids") or raw_map_dict.get("playerIds", [])
-        heroine_ids = raw_map_dict.get("heroine_ids") or raw_map_dict.get(
-            "heroineIds", []
-        )
+        player_ids = [str(pid) for pid in raw_map_dict.get("player_ids", [])]
+        heroine_ids = raw_map_dict.get("heroine_ids", [])
 
         player_with_heroine = []
         for i in range(0, 4):
@@ -463,7 +502,7 @@ class DungeonService:
             return False
 
     def update_raw_map_and_event_for_floor(
-        self, first_player_id: int, floor: int, raw_map: Dict[str, Any], event: Any
+        self, first_player_id: str, floor: int, raw_map: Dict[str, Any], event: Any
     ) -> bool:
         try:
 
@@ -623,7 +662,7 @@ class DungeonService:
     # ============================================================
     def balance_dungeon(
         self,
-        first_player_id: int,
+        first_player_id: str,
         player_data_list: List[Dict[str, Any]],
         monster_db: Dict[str, Any],
         used_events: List[Any] = None,
@@ -807,26 +846,47 @@ class DungeonService:
 
             # DB 업데이트 (단일 연결 블록으로 통합)
             with self.repo.engine.begin() as conn:
-                # 다음 층 업데이트 (raw_map, balanced_map, event, summary_info 저장)
+                # 다음 층의 raw_map이 이미 존재하는지 확인 (NULL/빈 값만 업데이트)
+                check_sql = text("SELECT raw_map FROM dungeon WHERE id = :id")
+                result = conn.execute(check_sql, {"id": next_floor_id}).fetchone()
+                raw_map_exists = False
+                if result:
+                    existing_raw_map = result[0]
+                    if existing_raw_map not in [None, "", "{}", "null"]:
+                        raw_map_exists = True
 
-                # 1층, 2층은 event 값이 None/빈 값이면 기존 event를 유지
                 update_params = {
-                    "raw_map": json.dumps(next_floor_raw_map),
                     "balanced_map": json.dumps(balanced_map_data),
                     "summary_info": summary_info,
                     "id": next_floor_id,
                 }
-                if next_floor >= 3 or (next_floor_events not in [None, [], {}]):
-                    update_params["event"] = json.dumps(next_floor_events)
-                    update_sql = text(
-                        "UPDATE dungeon SET raw_map = :raw_map, balanced_map = :balanced_map, event = :event, summary_info = :summary_info WHERE id = :id"
-                    )
+                update_sql = None
+                if not raw_map_exists:
+                    update_params["raw_map"] = json.dumps(next_floor_raw_map)
+                    if next_floor >= 3 or (next_floor_events not in [None, [], {}]):
+                        update_params["event"] = json.dumps(next_floor_events)
+                        update_sql = text(
+                            "UPDATE dungeon SET raw_map = :raw_map, balanced_map = :balanced_map, event = :event, summary_info = :summary_info WHERE id = :id"
+                        )
+                    else:
+                        update_sql = text(
+                            "UPDATE dungeon SET raw_map = :raw_map, balanced_map = :balanced_map, summary_info = :summary_info WHERE id = :id"
+                        )
                 else:
-                    update_sql = text(
-                        "UPDATE dungeon SET raw_map = :raw_map, balanced_map = :balanced_map, summary_info = :summary_info WHERE id = :id"
-                    )
+                    # raw_map이 이미 있으면 raw_map은 건드리지 않음
+                    if next_floor >= 3 or (next_floor_events not in [None, [], {}]):
+                        update_params["event"] = json.dumps(next_floor_events)
+                        update_sql = text(
+                            "UPDATE dungeon SET balanced_map = :balanced_map, event = :event, summary_info = :summary_info WHERE id = :id"
+                        )
+                    else:
+                        update_sql = text(
+                            "UPDATE dungeon SET balanced_map = :balanced_map, summary_info = :summary_info WHERE id = :id"
+                        )
                 conn.execute(update_sql, update_params)
-                print(f"[SUCCESS] 다음 층({next_floor}층) 밸런싱 및 저장 완료")
+                print(
+                    f"[SUCCESS] 다음 층({next_floor}층) 밸런싱 및 저장 완료 (raw_map {'업데이트' if not raw_map_exists else '유지'})"
+                )
 
             # 몬스터 배치 정보 추출 (roomId, monsterId, count) - 다음 층 기준
             monster_placements = []
@@ -876,7 +936,7 @@ class DungeonService:
     # ============================================================
     def prepare_next_floor(
         self,
-        first_player_id: int,
+        first_player_id: str,
         heroine_data: Dict[str, Any],
         used_events: List[Any] = None,
     ) -> Dict[str, Any]:
@@ -950,7 +1010,7 @@ class DungeonService:
     # ============================================================
     # 5. 층 완료 (Clear - is_finishing = TRUE)
     # ============================================================
-    def clear_floor(self, player_ids: List[int]) -> Dict[str, Any]:
+    def clear_floor(self, player_ids: List[str]) -> Dict[str, Any]:
         """
         현재 층 완료 처리 및 balanced_map 반환
         (Unreal에 다음 층 raw_map 생성을 위해 전달할 데이터)
@@ -1001,7 +1061,7 @@ class DungeonService:
     # ============================================================
     # 5. 상태 조회 (Status)
     # ============================================================
-    def get_status(self, player_ids: List[int]) -> Dict[str, Any]:
+    def get_status(self, player_ids: List[str]) -> Dict[str, Any]:
         """플레이어의 현재 진행 중인 던전 상태 조회"""
         return self.repo.get_unfinished_dungeons(player_ids=player_ids)
 
@@ -1022,7 +1082,7 @@ class DungeonService:
     # 6. 이벤트 선택 (Event Select)
     # ============================================================
     def select_event(
-        self, first_player_id: int, selecting_player_id: int, room_id: int, choice: str
+        self, first_player_id: str, selecting_player_id: str, room_id: int, choice: str
     ) -> Dict[str, Any]:
         """
         플레이어의 이벤트 선택 처리
@@ -1197,7 +1257,6 @@ class DungeonService:
             return {
                 "success": True,
                 "outcome": outcome,
-                   "isUnexpected": False,  # Default value since we removed the variable
             }
 
         except Exception as e:
@@ -1222,7 +1281,9 @@ class DungeonService:
         특정 층에 대한 이벤트 생성
         """
         try:
-            print(f"[DEBUG] _create_event_for_floor: player_id={player_id}, heroine_data={heroine_data}")
+            print(
+                f"[DEBUG] _create_event_for_floor: player_id={player_id}, heroine_data={heroine_data}"
+            )
             from agents.dungeon.event.dungeon_event_agent import graph_builder
             from agents.dungeon.dungeon_state import DungeonEventState
 

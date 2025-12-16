@@ -126,7 +126,7 @@ async def background_npc_conversation_loop(player_id: str):
 
             try:
                 await heroine_heroine_agent.generate_and_save_conversation(
-                    user_id=player_id,
+                    player_id=player_id,
                     heroine1_id=npc1_id,
                     heroine2_id=npc2_id,
                     turn_count=10,
