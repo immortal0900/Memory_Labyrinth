@@ -21,7 +21,7 @@ from langchain.chat_models import init_chat_model
 from typing import List
 from db.RDBRepository import RDBRepository
 from db.rdb_entity.DungeonRow import DungeonRow
-from agents.fairy.dynamic_prompt import dungeon_spec_prompt
+from agents.fairy.dynamic_prompt import dungeon_spec_prompt, item_spec_prompt,monster_spec_prompt
 from agents.fairy.util import (
     contains_hanja,
     replace_hanja_naively,
@@ -37,7 +37,10 @@ rdb_repository = RDBRepository()
 intent_model = FairyDungeonIntentModel()
 
 async def get_monsters_info(target_monster_ids: List[int]):
-    return find_monsters_info(target_monster_ids)
+    monster_prompt = monster_spec_prompt.format(
+        monster_infos_json = find_monsters_info(target_monster_ids)
+    )
+    return monster_prompt
 
 async def get_event_info(dungeon_row: DungeonRow, curr_room_id: int):
     event = dungeon_row.event
@@ -74,7 +77,10 @@ async def dungeon_navigator(dungeon_row: DungeonRow, curr_room_id: int):
 
 
 async def create_interaction(inventory_ids):
-    inventory_prompt = f"        <인벤토리 내의 아이템 설명>\n{get_inventory_items(inventory_ids)}\n        </인벤토리 내의 아이템 설명>"
+    item_prompt = item_spec_prompt.format(
+        items_json = get_inventory_items(inventory_ids)
+    )
+    inventory_prompt = f"        <인벤토리 내의 아이템 설명>\n{item_prompt}\n        </인벤토리 내의 아이템 설명>"
     result = inventory_prompt
     return result
 

@@ -103,12 +103,9 @@ def create_interation(state: FairyInteractionState):
     if FairyInterationIntentType.LIGHT_OFF_ROOM in intent_types:
         room_light = 2
 
-    isCheckNextRoom = FairyInterationIntentType.MOVE_NEXT_ROOM in intent_types
-
     return {
         "useItemId": item_id,
         "roomLight": room_light,
-        "isCheckNextRoom": isCheckNextRoom,
     }
 
 

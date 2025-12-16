@@ -6,7 +6,7 @@ from core.game_dto.WeaponData import WeaponData
 
 # ==== START 던전 =====
 class DungeonPlayerState(BaseModel):
-    playerId: int
+    playerId: str
     heroineId: int
     currRoomId: int
     difficulty: int 
@@ -43,7 +43,6 @@ class FairyInterationIntentType(StrEnum):
     INVENTORY_ITEM_USE = "INVENTORY_ITEM_USE"
     LIGHT_ON_ROOM = "LIGHT_ON_ROOM"
     LIGHT_OFF_ROOM = "LIGHT_OFF_ROOM"
-    MOVE_NEXT_ROOM = "MOVE_NEXT_ROOM"
     NONE = "NONE"
 
 class FairyInterationIntentOutput(BaseModel):
@@ -55,7 +54,6 @@ class FairyInteractionState(MessagesState):
     inventory: List[int] = []
     # 0 은 미행동, 1은 불키기, 2은 불끄기
     roomLight: int = 0
-    isCheckNextRoom: bool = False
     useItemId: Optional[int] = None
     is_item_use: bool = False
     intent_types: List[FairyInterationIntentType]
