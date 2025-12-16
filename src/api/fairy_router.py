@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/fairy", tags=["Fairy"])
 
 
 class DungeonPlayerDto(BaseModel):
-    playerId: int
+    playerId: str
     heroineId: int
     currRoomId: int
     difficulty: int = 0
@@ -31,7 +31,7 @@ class DungeonPlayerDto(BaseModel):
     inventory: List[int] = []
 
 
-def _create_dungeon_player_dto(player_id: int):
+def _create_dungeon_player_dto(player_id: str):
     return DungeonPlayerDto(
         playerId=player_id,
         heroineId=random.randint(0, 2),
@@ -50,7 +50,7 @@ class TalkDungeonRequest(BaseModel):
     dungeonPlayer: DungeonPlayerDto = Field(
         ...,
         description="던전 플레이어의 실시간 상태",
-        example=_create_dungeon_player_dto(1),
+        example=_create_dungeon_player_dto("1"),
     )
 
     question: str = Field(
@@ -68,8 +68,8 @@ class TalkDungeonRequest(BaseModel):
 
 
 class TalkGuildRequest(BaseModel):
-    playerId: int = Field(..., description="사용자 ID")
-    heroine_id: int = Field(..., description="히로인 ID")
+    playerId: str = Field(..., description="사용자 ID")
+    heroine_id: str = Field(..., description="히로인 ID")
     memory_progress: int = Field(..., description="히로인 기억 해금 진척도")
     affection: int = Field(..., description="히로인 호감도")
     sanity: int = Field(..., description="히로인 정신력")
@@ -77,7 +77,7 @@ class TalkGuildRequest(BaseModel):
 
 
 class TalkResponse(BaseModel):
-    response_text: str = Field(
+    responseText: str = Field(
         ..., description="현재 던전의 불을 켜드리겠습니다. 방이 밝아졌어요!"
     )
 
@@ -96,11 +96,6 @@ class InteractionResponse(BaseModel):
         ...,
         description="방 밝기 On/Off 여부 (정령 행동 필요 없으면 :0 , 불키기: 1, 불끄기: 2)",
         example=0,
-    )
-    isCheckNextRoom: bool = Field(
-        ...,
-        description="다음방 확인 시키기 여부(정령 행동 필요 없으면 False)",
-        example=True,
     )
     useItemId: Optional[int] = Field(
         ..., description="사용 하려는 아이템 (정령 행동 필요 없으면 Null)", example=None
@@ -149,7 +144,7 @@ async def talk_dungeon(request: TalkDungeonRequest):
     result_text = await fairy_dungeon_talk(
         player, question, target_monster_ids, next_room_ids
     )
-    return TalkResponse(response_text=result_text)
+    return TalkResponse(responseText=result_text)
 
 
 @router.post("/dungeon/interaction", response_model=InteractionResponse)
@@ -161,12 +156,10 @@ def interaction(request: InteractionRequest):
 
     useItemId = response["useItemId"]
     roomLight = response["roomLight"]
-    isCheckNextRoom = response["isCheckNextRoom"]
 
     return InteractionResponse(
         useItemId=useItemId,
         roomLight=roomLight,
-        isCheckNextRoom=isCheckNextRoom,
     )
 
 
@@ -184,7 +177,7 @@ async def talk_guild(request: TalkGuildRequest):
     result_text = await fairy_guild_talk(
         playerId, question, heroine_id, affection, memory_progress, sanity
     )
-    return TalkResponse(response_text=result_text)
+    return TalkResponse(responseText=result_text)
 
 
 from fastapi import UploadFile, File

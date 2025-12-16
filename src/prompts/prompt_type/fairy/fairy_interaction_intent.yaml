@@ -17,8 +17,6 @@ FAIRY_INTERACTION_INTENT:
     LIGHT_OFF_ROOM
         - Selected when the user wants to turn off the lights in the current dungeon room.
 
-    MOVE_NEXT_ROOM
-        - Selected when the user asks about the next room.
 
     NONE
         - Selected when the request does not match any category accurately.
@@ -43,9 +41,6 @@ FAIRY_INTERACTION_INTENT:
 
     Question: "Turn on the lights in this room and tell me how to defeat the slime."
     Answer: ["LIGHT_ON_ROOM"]
-
-    Question: "Tell me about the next room."
-    Answer: ["MOVE_NEXT_ROOM"]
 
     Question: "Switch my weapon."
     Answer: ["INVENTORY_ITEM_USE"]

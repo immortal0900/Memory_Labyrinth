@@ -88,5 +88,4 @@ def fairy_interaction(inventory: List[int], question: str) -> dict:
     return {
         "useItemId": response["useItemId"],
         "roomLight": response["roomLight"],
-        "isCheckNextRoom": response["isCheckNextRoom"],
     }

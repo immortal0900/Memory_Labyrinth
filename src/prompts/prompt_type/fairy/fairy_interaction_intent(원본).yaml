@@ -16,9 +16,6 @@ FAIRY_INTERACTION_INTENT:
 
     LIGHT_OFF_ROOM
         - 사용자가 현재 플레이 중인 던전 방의 불을 끄고 싶어할 때 사용됩니다.
-
-    MOVE_NEXT_ROOM
-        - 다음 방에 대한 질문을 할때 선택됩니다.
         
     NONE
         - 어떤 요청에도 정확히 매칭되지 않을 때 선택됩니다.
@@ -44,9 +41,6 @@ FAIRY_INTERACTION_INTENT:
 
     질문: "방의 불을 키면서 슬라임 공략법을 알려줘"
     답변: ["LIGHT_ON_ROOM"]
-
-    질문: "다음 방에 대해서 설명해줘"
-    답변: ["MOVE_NEXT_ROOM"]
 
     질문: "무기좀 교체해줘"
     답변: ["INVENTORY_ITEM_USE"]
