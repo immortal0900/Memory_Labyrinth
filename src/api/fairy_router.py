@@ -69,7 +69,7 @@ class TalkDungeonRequest(BaseModel):
 
 class TalkGuildRequest(BaseModel):
     playerId: str = Field(..., description="사용자 ID")
-    heroine_id: str = Field(..., description="히로인 ID")
+    heroine_id: int = Field(..., description="히로인 ID")
     memory_progress: int = Field(..., description="히로인 기억 해금 진척도")
     affection: int = Field(..., description="히로인 호감도")
     sanity: int = Field(..., description="히로인 정신력")
