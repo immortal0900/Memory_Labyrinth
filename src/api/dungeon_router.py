@@ -57,10 +57,8 @@ class EventResponse(BaseModel):
     roomId: int
     eventType: int
     eventTitle: str
-    eventCode: str
     scenarioText: str
     scenarioNarrative: Any  # str(공용) 또는 dict(개인)
-    choices: List[EventChoice] = []
 
 
 class EntranceResponse(BaseModel):
@@ -68,10 +66,7 @@ class EntranceResponse(BaseModel):
 
     success: bool
     message: str
-    firstPlayerId: str
     playerIds: List[str]
-    heroineIds: List[int]
-    heroineMemoryProgress: List[int]
     events: Optional[List[EventResponse]] = None
 
 
@@ -158,10 +153,7 @@ class NextFloorResponse(BaseModel):
 
     success: bool
     message: str
-    floorId: Optional[int] = None
     playerIds: List[str]
-    heroineIds: List[int]
-    heroineMemoryProgress: List[int]
     events: Optional[List[EventResponse]] = None
 
 
@@ -191,12 +183,13 @@ async def entrance(request: EntranceRequest):
         events_list = []
         if result.get("events"):
             events_data = result["events"]
+            # 1층 이벤트만 추출
             if isinstance(events_data, list):
                 for evt in events_data:
-                    # scenario_narrative: dict(개인) or str(공용)
+                    if evt.get("floor", 1) != 1:
+                        continue
                     scenario_narrative = evt.get("scenario_narrative", "")
                     if evt.get("is_personal") and evt.get("heroineNarratives"):
-                        # dict로 변환: key = playerId
                         scenario_narrative = {
                             str(n["playerId"]): n["narrative"]
                             for n in evt["heroineNarratives"]
@@ -209,7 +202,6 @@ async def entrance(request: EntranceRequest):
                             roomId=evt.get("room_id", 0),
                             eventType=evt.get("event_type", 0),
                             eventTitle=evt.get("event_title", ""),
-                            eventCode=evt.get("event_code", ""),
                             scenarioText=evt.get("scenario_text", ""),
                             scenarioNarrative=scenario_narrative,
                             choices=[
@@ -225,32 +217,32 @@ async def entrance(request: EntranceRequest):
                     )
             elif isinstance(events_data, dict):
                 evt = events_data
-                scenario_narrative = evt.get("scenario_narrative", "")
-                if evt.get("is_personal") and evt.get("heroineNarratives"):
-                    scenario_narrative = {
-                        str(n["playerId"]): n["narrative"]
-                        for n in evt["heroineNarratives"]
-                        if isinstance(n, dict) and "playerId" in n and "narrative" in n
-                    }
-                events_list.append(
-                    EventResponse(
-                        roomId=evt.get("room_id", 0),
-                        eventType=evt.get("event_type", 0),
-                        eventTitle=evt.get("event_title", ""),
-                        eventCode=evt.get("event_code", ""),
-                        scenarioText=evt.get("scenario_text", ""),
-                        scenarioNarrative=scenario_narrative,
-                        choices=[
-                            EventChoice(
-                                action=c.get("action", ""),
-                                reward=c.get("reward"),
-                                penalty=c.get("penalty"),
-                            )
-                            for c in evt.get("choices", [])
-                            if isinstance(c, dict)
-                        ],
+                if evt.get("floor", 1) == 1:
+                    scenario_narrative = evt.get("scenario_narrative", "")
+                    if evt.get("is_personal") and evt.get("heroineNarratives"):
+                        scenario_narrative = {
+                            str(n["playerId"]): n["narrative"]
+                            for n in evt["heroineNarratives"]
+                            if isinstance(n, dict) and "playerId" in n and "narrative" in n
+                        }
+                    events_list.append(
+                        EventResponse(
+                            roomId=evt.get("room_id", 0),
+                            eventType=evt.get("event_type", 0),
+                            eventTitle=evt.get("event_title", ""),
+                            scenarioText=evt.get("scenario_text", ""),
+                            scenarioNarrative=scenario_narrative,
+                            choices=[
+                                EventChoice(
+                                    action=c.get("action", ""),
+                                    reward=c.get("reward"),
+                                    penalty=c.get("penalty"),
+                                )
+                                for c in evt.get("choices", [])
+                                if isinstance(c, dict)
+                            ],
+                        )
                     )
-                )
 
         # 최상위 배열 추출 (중복 없이)
         player_ids = request.playerIds
@@ -272,10 +264,7 @@ async def entrance(request: EntranceRequest):
         return EntranceResponse(
             success=True,
             message="던전 입장 성공",
-            firstPlayerId=result.get("first_player_id", 0),
             playerIds=player_ids,
-            heroineIds=heroine_ids,
-            heroineMemoryProgress=heroine_memory_progress,
             events=events_list if events_list else None,
         )
     except Exception as e:
@@ -318,7 +307,6 @@ async def balance_dungeon(request: BalanceRequest):
                 roomId=evt.get("room_id", 0),
                 eventType=evt.get("event_type", 0),
                 eventTitle=evt.get("event_title", ""),
-                eventCode=evt.get("event_code", ""),
                 scenarioText=evt.get("scenario_text", ""),
                 scenarioNarrative=evt.get("scenario_narrative", ""),
             )
@@ -436,51 +424,59 @@ async def nextfloor(request: NextFloorRequest):
             used_events=request.usedEvents or [],
         )
 
+        # 현재 입장해야 하는 층(가장 낮은 is_finishing=False인 floor) 구하기
+        repo = service.repo
+        player_id = request.playerIds[0] if request.playerIds else None
+        unfinished_row = repo.get_unfinished_dungeons([player_id])
+        current_floor = None
+        if unfinished_row:
+            current_floor = unfinished_row.get("floor")
+
         events_list = []
-        if result.get("events"):
-            events_data = result["events"]
-            if isinstance(events_data, list):
-                for evt in events_data:
+        if player_id and current_floor is not None:
+            # DB에서 해당 층 이벤트 조회
+            previous_events = repo.get_event_by_floor(player_id, current_floor)
+            if previous_events:
+                if isinstance(previous_events, list):
+                    for evt in previous_events:
+                        events_list.append(
+                            EventResponse(
+                                roomId=evt.get("room_id", 0),
+                                eventType=evt.get("event_type", 0),
+                                eventTitle=evt.get("event_title", ""),
+                                scenarioText=evt.get("scenario_text", ""),
+                                scenarioNarrative=evt.get("scenario_narrative", ""),
+                                choices=[
+                                    EventChoice(
+                                        action=c.get("action", ""),
+                                        reward=c.get("reward"),
+                                        penalty=c.get("penalty"),
+                                    )
+                                    for c in evt.get("choices", [])
+                                    if isinstance(c, dict)
+                                ],
+                            )
+                        )
+                elif isinstance(previous_events, dict):
+                    evt = previous_events
                     events_list.append(
                         EventResponse(
                             roomId=evt.get("room_id", 0),
                             eventType=evt.get("event_type", 0),
                             eventTitle=evt.get("event_title", ""),
-                            eventCode=evt.get("event_code", ""),
                             scenarioText=evt.get("scenario_text", ""),
                             scenarioNarrative=evt.get("scenario_narrative", ""),
                             choices=[
                                 EventChoice(
                                     action=c.get("action", ""),
-                                    reward=c.get("reward") if isinstance(c.get("reward"), dict) or c.get("reward") is None else {},
-                                    penalty=c.get("penalty") if isinstance(c.get("penalty"), dict) or c.get("penalty") is None else {},
+                                    reward=c.get("reward"),
+                                    penalty=c.get("penalty"),
                                 )
                                 for c in evt.get("choices", [])
                                 if isinstance(c, dict)
                             ],
                         )
                     )
-            elif isinstance(events_data, dict):
-                evt = events_data
-                events_list.append(
-                    EventResponse(
-                        roomId=evt.get("room_id", 0),
-                        eventType=evt.get("event_type", 0),
-                        eventTitle=evt.get("event_title", ""),
-                        eventCode=evt.get("event_code", ""),
-                        scenarioText=evt.get("scenario_text", ""),
-                        scenarioNarrative=evt.get("scenario_narrative", ""),
-                        choices=[
-                            EventChoice(
-                                action=c.get("action", ""),
-                                reward=c.get("reward"),
-                                penalty=c.get("penalty"),
-                            )
-                            for c in evt.get("choices", [])
-                            if isinstance(c, dict)
-                        ],
-                    )
-                )
 
         player_ids = request.playerIds
         heroine_ids = request.heroineIds
@@ -501,10 +497,7 @@ async def nextfloor(request: NextFloorRequest):
         return NextFloorResponse(
             success=True,
             message="다음 층 입장 및 이벤트 생성 성공",
-            floorId=result.get("floor_id"),
             playerIds=player_ids,
-            heroineIds=heroine_ids,
-            heroineMemoryProgress=heroine_memory_progress,
             events=events_list if events_list else None,
         )
     except Exception as e:

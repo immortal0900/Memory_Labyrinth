@@ -46,12 +46,9 @@ class RDBRepository:
             1층: raw_map과 balanced_map에 동일한 초기값 설정 (언리얼이 보낸 맵)
             2층, 3층: balanced_map은 None으로 시작 (이전 층의 balance_dungeon() 후 자동 업데이트)
         """
-        # raw_map에서 playerIds와 heroineIds 파싱 (정규화된 형태도 지원)
         raw_map_dict = raw_map if isinstance(raw_map, dict) else json.loads(raw_map)
         player_ids = raw_map_dict.get("player_ids") or raw_map_dict.get("playerIds", [])
-        heroine_ids = raw_map_dict.get("heroine_ids") or raw_map_dict.get(
-            "heroineIds", []
-        )
+        heroine_ids = raw_map_dict.get("heroine_ids") or raw_map_dict.get("heroineIds", [])
 
         player_with_heroine = []
         for i in range(0, 4):
@@ -71,13 +68,10 @@ class RDBRepository:
         RETURNING id
         """
 
-        # JSON 데이터를 문자열로 변환
         raw_map_json = (
             json.dumps(raw_map) if isinstance(raw_map, (dict, list)) else raw_map
         )
 
-        # 1층: balanced_map = raw_map (초기값 동일)
-        # 2층 이상: balanced_map = None (다음 층의 balance_dungeon() 후 자동 업데이트)
         if floor == 1:
             balanced_map_value = raw_map_json
         else:
@@ -363,3 +357,30 @@ class RDBRepository:
                 row_dict["event"] = event_value[0] if event_value else None
 
             return DungeonRow(**row_dict)
+
+    def get_event_by_floor(self, player_id: str, floor: int) -> Optional[Any]:
+        """
+        특정 플레이어가 참여한, 특정 층의 던전 이벤트를 반환
+        """
+        sql = """
+        SELECT event
+        FROM dungeon
+        WHERE is_finishing = false
+        AND (
+            player1 = :player_id OR player2 = :player_id OR player3 = :player_id OR player4 = :player_id
+        )
+        AND floor = :floor
+        LIMIT 1
+        """
+        params = {"player_id": str(player_id), "floor": floor}
+        with self.engine.connect() as conn:
+            row = conn.execute(text(sql), params).fetchone()
+            if not row:
+                return None
+            event_value = row[0]
+            if isinstance(event_value, str):
+                try:
+                    return json.loads(event_value)
+                except Exception:
+                    return event_value
+            return event_value

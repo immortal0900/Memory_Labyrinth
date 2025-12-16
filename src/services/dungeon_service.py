@@ -1280,6 +1280,7 @@ class DungeonService:
         """
         특정 층에 대한 이벤트 생성
         """
+
         try:
             print(
                 f"[DEBUG] _create_event_for_floor: player_id={player_id}, heroine_data={heroine_data}"
@@ -1329,6 +1330,7 @@ class DungeonService:
                 "expected_outcome": expected_outcome,
                 "player_id": player_id,
                 "is_personal": main_event.get("is_personal", False),
+                "floor": next_floor,
             }
 
             return event_json
@@ -1344,6 +1346,11 @@ class DungeonService:
         """
         생성된 이벤트 JSON을 DB의 event 컬럼에 저장
         """
+        if event_data is None:
+            print(
+                f"[WARNING] 이벤트 데이터가 None 입니다.저장을 건너뜁니다. (dungeon_id={dungeon_id}"
+            )
+            return False
         try:
             # 리스트인지 단일 객체인지 확인하여 JSON 변환
             event_json_str = (
