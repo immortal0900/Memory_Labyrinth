@@ -7,8 +7,9 @@ class LLM(StrEnum):
     GPT4_1_NANO = "gpt-4.1-nano-2025-04-14"
     GPT4O = "gpt-4o-2024-08-06"
     GPT5_1 = "gpt-5.1-2025-11-13"
-    GPT5_MINI = "gpt-5-mini-2025-08-07"
+    GPT5_MINI = "gpt-5-mini"
     GPT5_NANO = "gpt-5-nano-2025-08-07"
+    GPT5_2_INTANT = "gpt-5.2-instant"
 
     # Claude (Anthropic)
     CLAUDE_3_5_SONNET = "claude-3-5-sonnet-20241022"

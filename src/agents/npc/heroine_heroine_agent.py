@@ -18,6 +18,7 @@
 - npc_npc_memories: 장기기억(핵심/턴 단위)
 """
 
+import asyncio
 import json
 import yaml
 from pathlib import Path
@@ -113,17 +114,15 @@ class HeroineHeroineAgent:
             print(chunk, end="")
     """
 
-    def __init__(self, model_name: str = LLM.GROK_4_1_FAST_REASONING):
+    def __init__(self, model_name: str = LLM.GROK_4_FAST_NON_REASONING):
         """초기화
 
         Args:
             model_name: 사용할 LLM 모델명
         """
         # 대화 생성용 LLM (temperature=0.8로 다양한 대화)
-        self.llm = init_chat_model(model=model_name, temperature=0.8)
-        self.streaming_llm = init_chat_model(
-            model=model_name, temperature=0.8, streaming=True
-        )
+        self.llm = init_chat_model(model=model_name, temperature=1.0)
+        self.streaming_llm = init_chat_model(model=model_name, streaming=True)
 
     # ============================================
     # 페르소나 및 관계 헬퍼 메서드
@@ -404,8 +403,8 @@ JSON 배열로 출력하세요:
         """대화를 DB에 저장
 
         저장 내용:
-        1. npc_npc_checkpoints: 대화 전체 기록
-        2. npc_npc_memories: 턴 단위 장기기억
+        1. npc_npc_checkpoints: 대화 전체 기록 (동기)
+        2. npc_npc_memories: LLM으로 중요 fact 추출 후 저장 (백그라운드)
 
         Args:
             heroine1_id: 첫 번째 히로인 ID
@@ -417,7 +416,7 @@ JSON 배열로 출력하세요:
         Returns:
             저장된 대화 ID
         """
-        # 1) 체크포인트 저장
+        # 1) 체크포인트 저장 (동기)
         checkpoint_id = npc_npc_memory_manager.save_checkpoint(
             user_id=int(user_id),
             npc1_id=heroine1_id,
@@ -426,17 +425,19 @@ JSON 배열로 출력하세요:
             conversation=conversation,
         )
 
-        # 2) 턴 단위 장기기억 저장 (최소 구현)
-        npc_npc_memory_manager.save_turn_memories(
-            user_id=int(user_id),
-            npc1_id=heroine1_id,
-            npc2_id=heroine2_id,
-            checkpoint_id=checkpoint_id,
-            situation=situation,
-            conversation=conversation,
+        # 2) 장기기억 저장 (백그라운드)
+        asyncio.create_task(
+            self._save_to_npc_npc_memory_background(
+                user_id=int(user_id),
+                npc1_id=heroine1_id,
+                npc2_id=heroine2_id,
+                checkpoint_id=checkpoint_id,
+                situation=situation,
+                conversation=conversation,
+            )
         )
 
-        # 3) Redis에 NPC-NPC 세션 저장 (최근 대화/인터럽트용)
+        # 3) Redis에 NPC-NPC 세션 저장 (동기)
         session_data = {
             "user_id": int(user_id),
             "npc1_id": heroine1_id,
@@ -452,6 +453,40 @@ JSON 배열로 출력하세요:
         )
 
         return checkpoint_id
+
+    async def _save_to_npc_npc_memory_background(
+        self,
+        user_id: int,
+        npc1_id: int,
+        npc2_id: int,
+        checkpoint_id: str,
+        situation: str,
+        conversation: List[Dict[str, Any]],
+    ) -> None:
+        """백그라운드로 NPC-NPC 장기기억 저장
+
+        LLM으로 중요 fact 추출 후 저장
+
+        Args:
+            user_id: 플레이어 ID
+            npc1_id: 첫 번째 NPC ID
+            npc2_id: 두 번째 NPC ID
+            checkpoint_id: 체크포인트 ID
+            situation: 대화 상황
+            conversation: 대화 리스트
+        """
+        try:
+            inserted = await npc_npc_memory_manager.save_conversation(
+                user_id=user_id,
+                npc1_id=npc1_id,
+                npc2_id=npc2_id,
+                checkpoint_id=checkpoint_id,
+                situation=situation,
+                conversation=conversation,
+            )
+            print(f"[INFO] NPC-NPC 장기기억 저장 완료: {inserted}개 fact")
+        except Exception as e:
+            print(f"[ERROR] NPC-NPC 장기기억 저장 실패: {e}")
 
     # ============================================
     # 대화 생성 메서드
