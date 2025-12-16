@@ -574,10 +574,9 @@ class SageAgent(BaseNPCAgent):
             npc_response: NPC 응답
         """
         try:
-            user_id = str(player_id)
             # sage NPC는 heroine_id를 "sage"로 설정
             await user_memory_manager.save_conversation(
-                user_id=user_id,
+                player_id=str(player_id),
                 heroine_id="sage",
                 user_message=user_msg,
                 npc_response=npc_response,

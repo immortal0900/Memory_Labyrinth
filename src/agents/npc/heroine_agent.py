@@ -355,7 +355,7 @@ class HeroineAgent(BaseNPCAgent):
 
         if other_id is not None and int(other_id) != int(npc_id):
             npc_memories = npc_npc_memory_manager.search_memories(
-                user_id=int(player_id),
+                player_id=str(player_id),
                 npc1_id=int(npc_id),
                 npc2_id=int(other_id),
                 query=user_message,
@@ -776,11 +776,10 @@ class HeroineAgent(BaseNPCAgent):
         try:
             from db.user_memory_models import NPC_ID_TO_HEROINE
 
-            user_id = str(player_id)
             heroine_id = NPC_ID_TO_HEROINE.get(npc_id, "letia")
 
             await user_memory_manager.save_conversation(
-                user_id=user_id,
+                player_id=str(player_id),
                 heroine_id=heroine_id,
                 user_message=user_msg,
                 npc_response=npc_response,

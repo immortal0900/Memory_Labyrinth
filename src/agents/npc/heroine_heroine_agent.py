@@ -107,10 +107,10 @@ class HeroineHeroineAgent:
         agent = HeroineHeroineAgent()
 
         # 비스트리밍 (JSON 배열 반환)
-        result = await agent.generate_and_save_conversation(user_id=10001, heroine1_id=1, heroine2_id=2)
+        result = await agent.generate_and_save_conversation(player_id="10001", heroine1_id=1, heroine2_id=2)
 
         # 스트리밍 (텍스트 스트림 + DB 저장)
-        async for chunk in agent.generate_conversation_stream(user_id=10001, heroine1_id=1, heroine2_id=2):
+        async for chunk in agent.generate_conversation_stream(player_id="10001", heroine1_id=1, heroine2_id=2):
             print(chunk, end="")
     """
 
@@ -122,7 +122,9 @@ class HeroineHeroineAgent:
         """
         # 대화 생성용 LLM (temperature=0.8로 다양한 대화)
         self.llm = init_chat_model(model=model_name, temperature=1.0)
-        self.streaming_llm = init_chat_model(model=model_name, temperature=1.0, streaming=True)
+        self.streaming_llm = init_chat_model(
+            model=model_name, temperature=1.0, streaming=True
+        )
 
     # ============================================
     # 페르소나 및 관계 헬퍼 메서드
