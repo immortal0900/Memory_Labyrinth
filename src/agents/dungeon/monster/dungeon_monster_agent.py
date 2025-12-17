@@ -43,7 +43,7 @@ def calculate_combat_score_node(state: DungeonMonsterState) -> DungeonMonsterSta
 
         # StatData 객체로 변환
         if isinstance(stats_list[0], dict):
-            stats_objects = [StatData(**stat) for stat in stats_list]
+            stats_objects = [StatData(**_ensure_stat_dict(stat)) for stat in stats_list]
         else:
             stats_objects = stats_list
 
@@ -58,7 +58,7 @@ def calculate_combat_score_node(state: DungeonMonsterState) -> DungeonMonsterSta
     else:
         # 단일 플레이어
         if isinstance(heroine_stat, dict):
-            stat = StatData(**heroine_stat)
+            stat = StatData(**_ensure_stat_dict(heroine_stat))
         else:
             stat = heroine_stat
 
@@ -84,26 +84,48 @@ def _calculate_single_combat_score(stat: StatData) -> float:
     )
 
 
+def _ensure_stat_dict(stat: dict) -> dict:
+    """
+    Ensure the provided heroine stat dict contains required keys for StatData.
+    Fill sensible defaults for any missing fields to avoid Pydantic validation errors.
+    """
+    if stat is None:
+        stat = {}
+    s = dict(stat)
+    s.setdefault("strength", 1)
+    s.setdefault("dexterity", 1)
+    s.setdefault("intelligence", 1)
+    s.setdefault("hp", 100)
+    s.setdefault("attackSpeed", 1.0)
+    s.setdefault("critChance", 0.0)
+    s.setdefault("skillDamageMultiplier", 1.0)
+    return s
+
+
 def llm_strategy_node(state: DungeonMonsterState) -> DungeonMonsterState:
     combat_score = state["combat_score"]
     floor = state.get("floor", 1)
-    heroine_stat = state["heroine_stat"]
+    heroine_stat = state.get("heroine_stat")
     dungeon_player_data = state.get("dungeon_player_data", {})
 
     # 멀티 플레이어 감지
     is_party = isinstance(heroine_stat, list)
 
     if is_party:
-        first_stat = heroine_stat[0]
+        first_stat = heroine_stat[0] if heroine_stat else None
         if isinstance(first_stat, dict):
-            hero = StatData(**first_stat)
+            hero = StatData(**_ensure_stat_dict(first_stat))
+        elif first_stat is None:
+            hero = StatData(**_ensure_stat_dict({}))
         else:
             hero = first_stat
         player_count = len(heroine_stat)
     else:
         # 단일 플레이어
         if isinstance(heroine_stat, dict):
-            hero = StatData(**heroine_stat)
+            hero = StatData(**_ensure_stat_dict(heroine_stat))
+        elif heroine_stat is None:
+            hero = StatData(**_ensure_stat_dict({}))
         else:
             hero = heroine_stat
         player_count = 1
