@@ -45,9 +45,6 @@ class PromptManager:
                 )
 
         # 변수 치환 (JSON/{} 보존을 위해 안전 치환)
-        # 주의: prompt 내의 일반 JSON 중괄호는 그대로 두고,
-        #       input_variables 에 명시된 플레이스홀더만 직접 치환합니다.
-        # 변수명 정규화 (공백/따옴표 제거)
         input_vars = [
             str(v).strip().strip('"').strip("'") for v in template.input_variables
         ]
@@ -55,15 +52,20 @@ class PromptManager:
         prompt_text = template.prompt
         for var in input_vars:
             value = cleaned.get(var, "")
-            # None 방지 및 문자열 변환
             if not isinstance(value, str):
                 try:
                     value = str(value)
                 except Exception:
                     value = ""
-            # 단일 중괄호 플레이스홀더 치환
             prompt_text = prompt_text.replace(f"{{{var}}}", value)
-            # 혹시 남아있을 수 있는 이중 중괄호(템플릿 엔진 호환)도 치환
             prompt_text = prompt_text.replace(f"{{{{{var}}}}}", value)
+
+        # 치환 후에도 플레이스홀더가 남아있으면 에러 발생
+        for var in input_vars:
+            if f"{{{var}}}" in prompt_text or f"{{{{{var}}}}}" in prompt_text:
+                raise ValueError(
+                    f"Prompt variable '{{{var}}}' was not replaced in template '{template.name}'.\n"
+                    f"Check if you passed the correct argument and value."
+                )
 
         return prompt_text
