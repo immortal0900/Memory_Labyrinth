@@ -162,8 +162,12 @@ class NextFloorResponse(BaseModel):
 # =============================================================================
 
 
+import time
+
+
 @router.post("/entrance", response_model=EntranceResponse)
 def entrance(request: EntranceRequest):
+    total_start = time.time()
     try:
         service = get_dungeon_service()
 
@@ -223,7 +227,9 @@ def entrance(request: EntranceRequest):
                         scenario_narrative = {
                             str(n["playerId"]): n["narrative"]
                             for n in evt["heroineNarratives"]
-                            if isinstance(n, dict) and "playerId" in n and "narrative" in n
+                            if isinstance(n, dict)
+                            and "playerId" in n
+                            and "narrative" in n
                         }
                     events_list.append(
                         EventResponse(
@@ -261,6 +267,8 @@ def entrance(request: EntranceRequest):
                 heroine_memory_progress.append(0)
         while len(heroine_memory_progress) < len(heroine_ids):
             heroine_memory_progress.append(0)
+        total_elapsed = time.time() - total_start
+        print(f"[TIMING] 던전 입장~이벤트 생성 전체 처리 시간: {total_elapsed:.3f}s")
         return EntranceResponse(
             success=True,
             message="던전 입장 성공",

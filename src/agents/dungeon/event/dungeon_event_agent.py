@@ -53,10 +53,6 @@ def heroine_memories_node(state: DungeonEventState) -> DungeonEventState:
     print(f"[heroine_memories_node] 플레이어 ID: {player_id} | 히로인 ID: {heroine_id}")
     print(f"[heroine_memories_node] 기억 진척도: {memory_progress}")
     print(f"[heroine_memories_node] 해금된 기억 개수: {len(heroine_memories)}")
-
-    total_elapsed = time.time() - total_start
-    print(f"[TIMING] heroine_memories_node 전체 처리 시간: {total_elapsed:.3f}s")
-
     return {"heroine_memories": heroine_memories}
 
 
