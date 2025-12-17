@@ -163,7 +163,7 @@ class NextFloorResponse(BaseModel):
 
 
 @router.post("/entrance", response_model=EntranceResponse)
-async def entrance(request: EntranceRequest):
+def entrance(request: EntranceRequest):
     try:
         service = get_dungeon_service()
 
@@ -272,7 +272,7 @@ async def entrance(request: EntranceRequest):
 
 
 @router.post("/balance", response_model=BalanceResponse)
-async def balance_dungeon(request: BalanceRequest):
+def balance_dungeon(request: BalanceRequest):
     try:
         service = get_dungeon_service()
 
@@ -326,7 +326,7 @@ async def balance_dungeon(request: BalanceRequest):
 
 
 @router.put("/clear", response_model=ClearResponse)
-async def clear_floor(request: ClearRequest):
+def clear_floor(request: ClearRequest):
     try:
         service = get_dungeon_service()
 
@@ -349,7 +349,7 @@ async def clear_floor(request: ClearRequest):
 
 
 @router.post("/event/select", response_model=EventSelectResponse)
-async def select_event(request: EventSelectRequest):
+def select_event(request: EventSelectRequest):
     """
     플레이어가 이벤트 선택지를 선택했을 때 처리
     """
@@ -384,7 +384,7 @@ async def select_event(request: EventSelectRequest):
 
 
 @router.post("/nextfloor", response_model=NextFloorResponse)
-async def nextfloor(request: NextFloorRequest):
+def nextfloor(request: NextFloorRequest):
     """
     다음 층 입장 시 raw_map과 heroineData를 받아 이벤트 생성 및 DB 저장
     """
