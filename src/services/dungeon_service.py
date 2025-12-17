@@ -250,6 +250,10 @@ class DungeonService:
                             events_for_this_floor.append(main_event_data)
                             used_events.append(main_event_data)
 
+                    # 정렬: room_id가 작은 순서대로 반환하도록 정렬
+                    events_for_this_floor = sorted(
+                        events_for_this_floor, key=lambda e: e.get("room_id", 0)
+                    )
                     summary_info_value = self._generate_raw_map_summary(
                         normalized_raw_map
                     )
@@ -442,6 +446,10 @@ class DungeonService:
                         events_for_this_floor.append(main_event_data)
                         used_events.append(main_event_data)
 
+                # 정렬: room_id가 작은 순서대로 반환하도록 정렬
+                events_for_this_floor = sorted(
+                    events_for_this_floor, key=lambda e: e.get("room_id", 0)
+                )
                 summary_info_value = self._generate_raw_map_summary(normalized_raw_map)
                 # event/summary_info만 항상 업데이트, raw_map은 새 row(INSERT)일 때만 저장
                 
