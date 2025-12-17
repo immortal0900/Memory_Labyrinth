@@ -117,6 +117,13 @@ class DungeonService:
         events_list = []
         floor_ids = []
         try:
+            # Ensure used_events is a list for safe appends
+            used_events = used_events or []
+
+            # First pass: do DB existence checks / INSERTs inside a transaction,
+            # but defer actual event generation (LLM, graph invokes) until after
+            # the transaction to allow parallel execution across floors.
+            floors_meta = []
             with self.repo.engine.begin() as conn:
                 # heroine_data가 int 리스트면 dict로 변환
                 normalized_heroines = []
@@ -166,58 +173,115 @@ class DungeonService:
                         existing_event = None
                     floor_ids.append(floor_id)
 
-                    # 이벤트 생성 (이벤트 방이 있는 경우에만)
+                    # 이벤트 룸 목록만 수집 (실제 이벤트 생성은 트랜잭션 바깥에서 병렬 실행)
                     event_rooms = [
                         room
                         for room in normalized_raw_map.get("rooms", [])
                         if room.get("room_type") == "event"
                         or room.get("event_type", 0) != 0
                     ]
-                    events_for_this_floor = []
-                    for room in event_rooms:
-                        room_id = room.get("room_id")
-                        main_event_data = self._create_event_for_floor(
-                            heroine_data=normalized_heroines[0],
-                            player_id=player_ids[0] if player_ids else None,
-                            next_floor=floor_num,
-                            used_events=used_events,
-                            room_id=room_id,
-                        )
-                        if not main_event_data:
-                            continue
-                        main_event_data["floor"] = floor_num
-                        if main_event_data.get("is_personal", False):
-                            heroine_narratives = []
-                            for player_id, heroine in zip(
-                                player_ids, normalized_heroines
-                            ):
-                                indiv_event = self._create_event_for_floor(
-                                    heroine_data=heroine,
-                                    player_id=player_id,
-                                    next_floor=floor_num,
-                                    used_events=used_events,
-                                    room_id=room_id,
-                                )
-                                if indiv_event:
-                                    heroine_narratives.append(
-                                        {
-                                            "playerId": player_id,
-                                            "heroineId": heroine["heroine_id"],
-                                            "memoryProgress": heroine[
-                                                "memory_progress"
-                                            ],
-                                            "narrative": indiv_event.get(
-                                                "scenario_narrative", ""
-                                            ),
-                                        }
-                                    )
-                            main_event_data["heroineNarratives"] = heroine_narratives
-                        events_for_this_floor.append(main_event_data)
-                        used_events.append(main_event_data)
 
-                    summary_info_value = self._generate_raw_map_summary(
-                        normalized_raw_map
+                    # store metadata for later parallel processing
+                    floors_meta.append(
+                        {
+                            "floor_num": floor_num,
+                            "normalized_raw_map": normalized_raw_map,
+                            "event_rooms": event_rooms,
+                            "floor_id": floor_id,
+                            "existing_event": existing_event,
+                            "normalized_heroines": normalized_heroines,
+                        }
                     )
+
+                # end with conn
+
+            # Outside the DB transaction: generate events for each floor in parallel
+            import concurrent.futures
+
+            def process_floor_meta(meta):
+                fn = meta["floor_num"]
+                nmap = meta["normalized_raw_map"]
+                rooms = meta["event_rooms"]
+                floor_events = []
+                # Use representative heroine list prepared earlier
+                n_heroines = meta.get("normalized_heroines") or normalized_heroines
+                for room in rooms:
+                    room_id = room.get("room_id")
+                    main_event_data = self._create_event_for_floor(
+                        heroine_data=n_heroines[0],
+                        player_id=player_ids[0] if player_ids else None,
+                        next_floor=fn,
+                        used_events=list(used_events),
+                        room_id=room_id,
+                    )
+                    if not main_event_data:
+                        continue
+                    main_event_data["floor"] = fn
+                    if main_event_data.get("is_personal", False):
+                        heroine_narratives = []
+                        for player_id_val, heroine in zip(player_ids, n_heroines):
+                            indiv_event = self._create_event_for_floor(
+                                heroine_data=heroine,
+                                player_id=player_id_val,
+                                next_floor=fn,
+                                used_events=list(used_events),
+                                room_id=room_id,
+                            )
+                            if indiv_event:
+                                heroine_narratives.append(
+                                    {
+                                        "playerId": player_id_val,
+                                        "heroineId": heroine["heroine_id"],
+                                        "memoryProgress": heroine["memory_progress"],
+                                        "narrative": indiv_event.get("scenario_narrative", ""),
+                                    }
+                                )
+                        main_event_data["heroineNarratives"] = heroine_narratives
+                    floor_events.append(main_event_data)
+
+                summary_info_value = self._generate_raw_map_summary(nmap)
+                return {"floor_num": fn, "events": floor_events, "summary": summary_info_value, "floor_id": meta["floor_id"], "existing_event": meta["existing_event"], "normalized_raw_map": nmap}
+
+            # Run floor processing in parallel (max 2 workers)
+            floor_results = []
+            if floors_meta:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=min(2, len(floors_meta))) as ex:
+                    futures = [ex.submit(process_floor_meta, m) for m in floors_meta]
+                    for fut in concurrent.futures.as_completed(futures):
+                        floor_results.append(fut.result())
+
+            # Persist generated events & summaries back into DB in a single transaction
+            with self.repo.engine.begin() as conn:
+                for res in floor_results:
+                    floor_id = res["floor_id"]
+                    events_for_this_floor = res["events"]
+                    summary_info_value = res["summary"]
+                    nmap = res.get("normalized_raw_map")
+                    existing_event = res.get("existing_event")
+                    if existing_event:
+                        conn.execute(
+                            text(
+                                "UPDATE dungeon SET event = :event, summary_info = :summary_info WHERE id = :id"
+                            ),
+                            {
+                                "event": json.dumps(events_for_this_floor),
+                                "summary_info": summary_info_value,
+                                "id": floor_id,
+                            },
+                        )
+                    else:
+                        conn.execute(
+                            text(
+                                "UPDATE dungeon SET raw_map = :raw_map, event = :event, summary_info = :summary_info WHERE id = :id"
+                            ),
+                            {
+                                "raw_map": json.dumps(nmap),
+                                "event": json.dumps(events_for_this_floor),
+                                "summary_info": summary_info_value,
+                                "id": floor_id,
+                            },
+                        )
+                    events_list.extend(events_for_this_floor)
                     if not existing_event:
                         conn.execute(
                             text(
