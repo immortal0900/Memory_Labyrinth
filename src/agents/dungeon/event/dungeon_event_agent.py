@@ -123,16 +123,61 @@ def create_sub_event_node(state: DungeonEventState) -> DungeonEventState:
 
     Note: 개별 이벤트는 보상/패널티는 동일하지만, 각 플레이어에게 다른 텍스트가 표시됨
     """
+
+    # Prepare additional inputs for the prompt (compatibility with updated YAML)
+    from agents.dungeon.event import event_rewards_penalties as rewards_module
+
+    heroine_info = state.get("heroine_data", {}) if isinstance(state, dict) else {}
+    heroine_name = heroine_info.get("name") or heroine_info.get("heroine_name") or None
+    memory_progress = heroine_info.get("memory_progress") or heroine_info.get("memoryProgress") or 0
+    selected_main_event = state.get("selected_main_event", {})
+    is_personal = bool(selected_main_event.get("is_personal", False))
+    player_id = state.get("player_id")
+
+    available_rewards = [r.get("id") for r in (getattr(rewards_module, "SPAWN_MONSTER_REWARDS", []) + getattr(rewards_module, "DROP_ITEM_REWARDS", []) + getattr(rewards_module, "CHANGE_STAT_REWARDS", []))]
+    available_penalties = [p.get("id") for p in (getattr(rewards_module, "SPAWN_MONSTER_PENALTIES", []) + getattr(rewards_module, "DROP_ITEM_PENALTIES", []) + getattr(rewards_module, "CHANGE_STAT_PENALTIES", []))]
+
     prompts = PromptManager(DungeonPromptType.DUNGEON_SUB_EVENT).get_prompt(
-        heroine_data=state["heroine_data"],
-        heroine_memories=state["heroine_memories"],
-        selected_main_event=state["selected_main_event"],
-        event_room=state["event_room"],
-        next_floor=state["next_floor"],
+        heroine_data=state.get("heroine_data"),
+        heroine_memories=state.get("heroine_memories"),
+        selected_main_event=selected_main_event,
+        event_room=state.get("event_room"),
+        next_floor=state.get("next_floor"),
+        heroine_name=heroine_name,
+        memory_progress=memory_progress,
+        is_personal=is_personal,
+        available_rewards=available_rewards,
+        available_penalties=available_penalties,
+        player_id=player_id,
     )
 
     parser_llm = llm.with_structured_output(DungeonEventParser)
-    response = parser_llm.invoke(prompts)
+    try:
+        response = parser_llm.invoke(prompts)
+    except Exception as e:
+        # LLM 실패 시 안전한 폴백을 반환하여 그래프 전체 중단을 방지
+        print(f"[create_sub_event_node] LLM invoke failed: {e}")
+        # 간단한 폴백 내용 구성
+        fallback_narrative = (
+            (selected_main_event.get("scenario_text")[:200] + "...")
+            if isinstance(selected_main_event, dict)
+            else "짧은 이상한 기척이 느껴진다."
+        )
+        class _Resp:
+            pass
+
+        response = _Resp()
+        response.sub_event_narrative = fallback_narrative
+        # 기본 2개의 선택지 제공 (보상/패널티 없음)
+        from pydantic import BaseModel
+
+        class _Choice(BaseModel):
+            action: str
+            reward_id: str | None = None
+            penalty_id: str | None = None
+
+        response.event_choices = [_Choice(action="조용히 관찰한다"), _Choice(action="상호작용을 시도한다")]
+        response.expected_outcome = "선택에 따라 간단한 반응이 발생합니다."
 
     # 보상/패널티 dict 변환 유틸리티 import
     from agents.dungeon.event.event_rewards_penalties import (

@@ -25,12 +25,23 @@ def event_node(state: SuperDungeonState) -> Dict[str, Any]:
 
     event_graph = event_graph_builder.compile()
 
+    # player_id 추출 (player_ids가 있으면 첫 번째, 없으면 None)
+    player_id = None
+    # 다양한 위치에서 player_id를 추출 시도
+    if "player_id" in state:
+        player_id = state["player_id"]
+    elif "player_ids" in state and state["player_ids"]:
+        player_id = state["player_ids"][0]
+    elif "dungeon_base_data" in state and state["dungeon_base_data"].get("player_ids"):
+        player_id = state["dungeon_base_data"]["player_ids"][0]
+
     event_state = {
         "heroine_data": state.get("heroine_data"),
         "heroine_memories": state.get("heroine_memories"),
         "event_room": state.get("heroine_data", {}).get("event_room", 3),
         "next_floor": state.get("dungeon_base_data", {}).get("floor_count", 1),
         "used_events": state.get("used_events", []),
+        "player_id": player_id,
     }
 
     event_result = event_graph.invoke(event_state)
@@ -171,9 +182,14 @@ def create_super_dungeon_graph():
     graph_builder.add_node("monster_node", monster_node)
     graph_builder.add_node("merge_results_node", merge_results_node)
 
-    # Edge 연결 (병렬 실행)
-    graph_builder.add_edge(START, "event_node")
-    graph_builder.add_edge(START, "monster_node")
+    # Edge 연결 (병렬 실행, 단 skip_event_node 플래그가 있으면 event_node 생략)
+    def start_conditional(state):
+        # skip_event_node가 True면 event_node 생략
+        if state.get("skip_event_node"):
+            return ["monster_node"]
+        return ["event_node", "monster_node"]
+
+    graph_builder.add_conditional_edges(START, start_conditional)
 
     # 두 노드가 완료되면 merge로 이동
     graph_builder.add_edge("event_node", "merge_results_node")

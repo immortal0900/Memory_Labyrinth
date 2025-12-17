@@ -43,7 +43,7 @@ def calculate_combat_score_node(state: DungeonMonsterState) -> DungeonMonsterSta
 
         # StatData 객체로 변환
         if isinstance(stats_list[0], dict):
-            stats_objects = [StatData(**stat) for stat in stats_list]
+            stats_objects = [StatData(**_ensure_stat_dict(stat)) for stat in stats_list]
         else:
             stats_objects = stats_list
 
@@ -58,7 +58,7 @@ def calculate_combat_score_node(state: DungeonMonsterState) -> DungeonMonsterSta
     else:
         # 단일 플레이어
         if isinstance(heroine_stat, dict):
-            stat = StatData(**heroine_stat)
+            stat = StatData(**_ensure_stat_dict(heroine_stat))
         else:
             stat = heroine_stat
 
@@ -84,26 +84,48 @@ def _calculate_single_combat_score(stat: StatData) -> float:
     )
 
 
+def _ensure_stat_dict(stat: dict) -> dict:
+    """
+    Ensure the provided heroine stat dict contains required keys for StatData.
+    Fill sensible defaults for any missing fields to avoid Pydantic validation errors.
+    """
+    if stat is None:
+        stat = {}
+    s = dict(stat)
+    s.setdefault("strength", 1)
+    s.setdefault("dexterity", 1)
+    s.setdefault("intelligence", 1)
+    s.setdefault("hp", 100)
+    s.setdefault("attackSpeed", 1.0)
+    s.setdefault("critChance", 0.0)
+    s.setdefault("skillDamageMultiplier", 1.0)
+    return s
+
+
 def llm_strategy_node(state: DungeonMonsterState) -> DungeonMonsterState:
     combat_score = state["combat_score"]
     floor = state.get("floor", 1)
-    heroine_stat = state["heroine_stat"]
+    heroine_stat = state.get("heroine_stat")
     dungeon_player_data = state.get("dungeon_player_data", {})
 
     # 멀티 플레이어 감지
     is_party = isinstance(heroine_stat, list)
 
     if is_party:
-        first_stat = heroine_stat[0]
+        first_stat = heroine_stat[0] if heroine_stat else None
         if isinstance(first_stat, dict):
-            hero = StatData(**first_stat)
+            hero = StatData(**_ensure_stat_dict(first_stat))
+        elif first_stat is None:
+            hero = StatData(**_ensure_stat_dict({}))
         else:
             hero = first_stat
         player_count = len(heroine_stat)
     else:
         # 단일 플레이어
         if isinstance(heroine_stat, dict):
-            hero = StatData(**heroine_stat)
+            hero = StatData(**_ensure_stat_dict(heroine_stat))
+        elif heroine_stat is None:
+            hero = StatData(**_ensure_stat_dict({}))
         else:
             hero = heroine_stat
         player_count = 1
@@ -117,6 +139,8 @@ def llm_strategy_node(state: DungeonMonsterState) -> DungeonMonsterState:
     # 히로인 요약 정보 생성
     player_type = "파티 평균" if is_party else "플레이어"
     player_info = f" ({player_count}명)" if is_party else ""
+
+
 
     hero_summary = f"""
 전투 스탯{player_info}:
@@ -135,17 +159,25 @@ def llm_strategy_node(state: DungeonMonsterState) -> DungeonMonsterState:
 - 정신력: {sanity}
 """
 
+    # DEBUG: hero_summary와 floor 값 및 타입 출력
+    print("[llm_strategy_node DEBUG] hero_summary type:", type(hero_summary))
+    print("[llm_strategy_node DEBUG] hero_summary value:\n", hero_summary)
+    print("[llm_strategy_node DEBUG] floor type:", type(current_floor))
+    print("[llm_strategy_node DEBUG] floor value:", current_floor)
+
     try:
         # 프롬프트 생성
-        prompts = PromptManager(DungeonPromptType.MONSTER_STRATEGY).get_prompt(
-            hero_summary=hero_summary, floor=current_floor
-        )
-        # hero_summary가 프롬프트에 포함되었는지 확인
+        try:
+            prompts = PromptManager(DungeonPromptType.MONSTER_STRATEGY).get_prompt(
+                hero_summary=hero_summary, floor=current_floor
+            )
+        except ValueError as ve:
+            print("[llm_strategy_node ERROR] PromptManager ValueError:", ve)
+            raise
+        # hero_summary가 프롬프트에 포함되었는지 확인 (치환 실패만 에러로 출력)
         if isinstance(prompts, str):
             if "hero_summary" in prompts or "{hero_summary}" in prompts:
                 print("[llm_strategy_node ERROR] 프롬프트에 hero_summary 치환 실패!")
-            else:
-                print("[llm_strategy_node WARNING] hero_summary 확인 불가")
 
         # LLM 호출 (Structured Output)
         parser_llm = llm.with_structured_output(MonsterStrategyParser)

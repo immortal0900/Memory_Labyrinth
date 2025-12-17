@@ -32,47 +32,51 @@ class MonsterData:
 # ===== 몬스터 데이터베이스 =====
 # 프로토타입용: 일반 몬스터 1종, 보스 몬스터 1종만 존재
 MONSTER_DATABASE: Dict[int, MonsterData] = {
-    # 일반 몬스터 1
+    0: MonsterData(
+        monster_id=0,
+        monster_type=0,
+        monster_name="스켈레톤",
+        hp=350,
+        speed=350,
+        attack=30,
+        attack_speed=1.0,
+        attack_range=300.0,
+        stagger_gage=10,
+    ),
     1: MonsterData(
         monster_id=1,
         monster_type=0,
-        monster_name="슬라임",
+        monster_name="저주받은 고사지",
         hp=150,
-        speed=200,
-        attack=8,
-        attack_speed=1.2,
-        attack_range=50.0,
-        stagger_gage=5,
-        weaknesses=[1],
-        strengths=[2],
+        speed=400,
+        attack=75,
+        attack_speed=1.0,
+        attack_range=250.0,
+        stagger_gage=50,
     ),
     # 일반 몬스터 2
     2: MonsterData(
         monster_id=2,
         monster_type=0,
-        monster_name="고블린",
-        hp=220,
-        speed=300,
-        attack=12,
-        attack_speed=1.0,
-        attack_range=80.0,
-        stagger_gage=8,
-        weaknesses=[2],
-        strengths=[1],
+        monster_name="거미",
+        hp=400,
+        speed=250,
+        attack=40,
+        attack_speed=0.7,
+        attack_range=200.0,
+        stagger_gage=100,
     ),
     # 일반 몬스터 3
-    3: MonsterData(
-        monster_id=3,
+    4: MonsterData(
+        monster_id=4,
         monster_type=0,
-        monster_name="스켈레톤",
-        hp=180,
-        speed=250,
-        attack=10,
-        attack_speed=1.1,
-        attack_range=60.0,
-        stagger_gage=7,
-        weaknesses=[3],
-        strengths=[2],
+        monster_name="스켈레톤 석궁병",
+        hp=300,
+        speed=350,
+        attack=30,
+        attack_speed=1.0,
+        attack_range=2000.0,
+        stagger_gage=10,
     ),
     # 보스 몬스터 1
     100: MonsterData(
@@ -88,43 +92,63 @@ MONSTER_DATABASE: Dict[int, MonsterData] = {
         weaknesses=[1, 2],
         strengths=[3],
     ),
-    # 보스 몬스터 2
-    101: MonsterData(
-        monster_id=101,
-        monster_type=2,
-        monster_name="드래곤",
-        hp=2000,
-        speed=220,
-        attack=60,
-        attack_speed=1.7,
-        attack_range=200.0,
+    # ======================
+    # 엘리트 몬스터
+    # ======================
+    3: MonsterData(
+        monster_id=3,
+        monster_type=1,
+        monster_name="언데드",
+        hp=800,
+        speed=150,
+        attack=50,
+        attack_speed=1.5,
+        attack_range=170.0,
         stagger_gage=100,
-        weaknesses=[2, 3],
-        strengths=[1],
+    ),
+    # ======================
+    # 보스 몬스터
+    # ======================
+    1000: MonsterData(
+        monster_id=1000,
+        monster_type=2,
+        monster_name="광란의 골렘",
+        hp=3500,
+        speed=300,
+        attack=45,
+        attack_speed=2.0,
+        attack_range=500.0,
+        stagger_gage=55,
+    ),
+    1001: MonsterData(
+        monster_id=1001,
+        monster_type=2,
+        monster_name="육승찬",
+        hp=8000,
+        speed=350,
+        attack=100,
+        attack_speed=1.0,
+        attack_range=500.0,
+        stagger_gage=100,
     ),
 }
 
 
 def get_monster_by_id(monster_id: int) -> Optional[MonsterData]:
-    """몬스터 ID로 데이터 조회"""
     return MONSTER_DATABASE.get(monster_id)
 
 
 def get_monsters_by_type(monster_type: int) -> List[MonsterData]:
-    """몬스터 타입으로 필터링"""
     return [m for m in MONSTER_DATABASE.values() if m.monster_type == monster_type]
 
 
 def get_all_normal_monsters() -> List[MonsterData]:
-    """일반 몬스터 목록"""
     return get_monsters_by_type(0)
 
 
 def get_all_elite_monsters() -> List[MonsterData]:
-    """엘리트 몬스터 목록"""
     return get_monsters_by_type(1)
 
 
 def get_all_boss_monsters() -> List[MonsterData]:
-    """보스 몬스터 목록"""
     return get_monsters_by_type(2)

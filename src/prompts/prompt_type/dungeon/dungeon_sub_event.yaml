@@ -65,11 +65,11 @@ DUNGEON_SUB_EVENT:
        ❌ 잘못된 예: 메인 이벤트가 "상인"인데 서브 이벤트에 "쓰러진 사람" 등장
        ❌ 잘못된 예: 메인 이벤트가 "물"인데 서브 이벤트에 "제단" 등장
     
-    3. **내러티브 작성**
-       - 메인 이벤트의 요소를 시각적으로 구체화 (색, 소리, 냄새, 질감)
-       - 메인 이벤트의 상황을 확장 (긴장감, 불안감)
-       - 히로인 정보 절대 사용 금지
-       - 200~350자
+     3. **내러티브 작성 (간결하게)**
+       - 메인 이벤트의 핵심 요소를 시각적·감각적으로 구체화하되 문장을 간결하게 유지합니다.
+       - 상황을 확장하되 반복·장황한 서술을 피하고 핵심 감각 묘사(1~2개)에 집중하세요.
+       - 히로인 정보는 공통 이벤트에서 사용하지 마세요.
+       - 권장 길이: 120~220자 (짧고 즉시 읽히는 문장 우선)
     
     4. **선택지 생성**
        메인 이벤트의 요소와 직접 상호작용하는 선택지:
@@ -89,11 +89,11 @@ DUNGEON_SUB_EVENT:
     "방 중앙에 제단이 있고 디멘시움 결정이 빛나고 있다..." (메인 이벤트에 없는 요소 창작)
     
     <생성 규칙 - 개별 이벤트인 경우>
-    1. 히로인의 과거 기억과 강하게 연결되는 요소를 반드시 포함하세요.
-    2. 히로인이 겪었던 트라우마, 관계, 감정이 이벤트에 깊이 반영되어야 합니다.
-    3. 히로인의 이름과 구체적인 기억 세부사항을 사용하세요.
-    4. 선택지는 히로인의 성격과 과거를 고려한 개인화된 것이어야 합니다.
-    5. 내러티브는 구체적이고 감각적으로 작성하되, 350~500자로 작성하세요.
+    1. 히로인의 과거 기억과 연결되는 핵심 단서를 반드시 포함하세요.
+    2. 트라우마·관계·감정은 간결한 문장으로 반영하되 과도한 서술은 피하세요.
+    3. 히로인의 이름과 핵심 기억 세부사항으로 개인화하세요.
+    4. 선택지는 히로인의 성격과 과거를 고려한 개인화된 내용이어야 합니다.
+    5. 권장 길이: 220~320자 — 구체적이되 불필요한 장황함을 줄이세요.
     
     **[중요] 내러티브 스타일 가이드:**
     - **주체:** 플레이어("당신")가 아닌 **히로인** 또는 **상황 그 자체**를 주체로 서술하세요.
@@ -117,41 +117,19 @@ DUNGEON_SUB_EVENT:
     반드시 아래 목록에서만 선택하세요. 메인 이벤트의 맥락에 맞는 것을 골라야 합니다.
     
     보상 (REWARDS):
-    - hp_increase_all: 최대 체력 +50
-    - strength_increase_all: 근력 +5
-    - dexterity_increase_all: 기량 +5
-    - move_speed_increase_all: 이동속도 +10%
-    - crit_chance_increase_all: 치명타 확률 +10%
-    - attack_speed_increase_all: 공격 속도 +15%
-    - cooldown_reduction_all: 쿨타임 -10%
-    - skill_damage_increase_all: 스킬 데미지 +20%
-    - hp_recovery_all: 체력 회복 100
-    - item_reward_common: 커먼 아이템 획득
-    - item_reward_uncommon: 언커먼 아이템 획득
-    - item_reward_rare: 레어 아이템 획득
-    
+   
     패널티 (PENALTIES):
-    - hp_decrease_all: 최대 체력 -30
-    - strength_decrease_all: 근력 -3
-    - dexterity_decrease_all: 기량 -3
-    - move_speed_decrease_all: 이동속도 -10%
-    - crit_chance_decrease_all: 치명타 확률 -10%
-    - attack_speed_decrease_all: 공격 속도 -15%
-    - instant_damage_low: 고정 피해 50
-    - instant_damage_medium: 고정 피해 100
-    - instant_damage_high: 고정 피해 150
-    - slow_debuff: 감속 디버프 (2분간 이동속도 -20%)
-    - weakness_debuff: 허약 디버프 (3분간 근력 -5)
-    - curse_debuff: 저주 디버프 (3분간 스킬 데미지 -20%)
+
     </구현 가능한 보상/패널티 목록>
 
     <출력 형식>
     - sub_event_narrative: 서브 이벤트의 내러티브 (공통 이벤트는 범용적, 개별 이벤트는 히로인 특화)
-    - event_choices: 선택지 리스트 (2~4개), EventChoice 객체 형식
+      - 길이 권장: 공통 120~220자, 개별 220~320자
+    - event_choices: 선택지 리스트 (3~4개 권장), EventChoice 객체 형식
       - action: 선택지 텍스트
       - reward_id: 보상 ID (위 목록에서 선택, 없으면 null)
       - penalty_id: 패널티 ID (위 목록에서 선택, 없으면 null)
-    - expected_outcome: 각 선택지의 보상/패널티가 게임플레이에 미치는 영향 설명
+    - expected_outcome: 각 선택지의 보상/패널티가 게임플레이에 미치는 영향(간단 요약)
     </출력 형식>
 
   input_variables:
@@ -160,3 +138,9 @@ DUNGEON_SUB_EVENT:
     - "selected_main_event"
     - "event_room"
     - "next_floor"
+    - "heroine_name"
+    - "memory_progress"
+    - "is_personal"
+    - "available_rewards"
+    - "available_penalties"
+    - "player_id"

@@ -818,6 +818,8 @@ class DungeonService:
                 "filled_dungeon_data": {},
                 "difficulty_log": {},
                 "final_dungeon_json": {},
+                # 이벤트 노드 생략 플래그 (던전 밸런스 API에서는 True)
+                "skip_event_node": True,
             }
 
             # Super Agent 실행 (연결 블록 외부에서 - DB 연결 점유 안함)
