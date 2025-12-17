@@ -118,6 +118,8 @@ def llm_strategy_node(state: DungeonMonsterState) -> DungeonMonsterState:
     player_type = "파티 평균" if is_party else "플레이어"
     player_info = f" ({player_count}명)" if is_party else ""
 
+
+
     hero_summary = f"""
 전투 스탯{player_info}:
 - HP: {hero.hp}
@@ -135,17 +137,25 @@ def llm_strategy_node(state: DungeonMonsterState) -> DungeonMonsterState:
 - 정신력: {sanity}
 """
 
+    # DEBUG: hero_summary와 floor 값 및 타입 출력
+    print("[llm_strategy_node DEBUG] hero_summary type:", type(hero_summary))
+    print("[llm_strategy_node DEBUG] hero_summary value:\n", hero_summary)
+    print("[llm_strategy_node DEBUG] floor type:", type(current_floor))
+    print("[llm_strategy_node DEBUG] floor value:", current_floor)
+
     try:
         # 프롬프트 생성
-        prompts = PromptManager(DungeonPromptType.MONSTER_STRATEGY).get_prompt(
-            hero_summary=hero_summary, floor=current_floor
-        )
-        # hero_summary가 프롬프트에 포함되었는지 확인
+        try:
+            prompts = PromptManager(DungeonPromptType.MONSTER_STRATEGY).get_prompt(
+                hero_summary=hero_summary, floor=current_floor
+            )
+        except ValueError as ve:
+            print("[llm_strategy_node ERROR] PromptManager ValueError:", ve)
+            raise
+        # hero_summary가 프롬프트에 포함되었는지 확인 (치환 실패만 에러로 출력)
         if isinstance(prompts, str):
             if "hero_summary" in prompts or "{hero_summary}" in prompts:
                 print("[llm_strategy_node ERROR] 프롬프트에 hero_summary 치환 실패!")
-            else:
-                print("[llm_strategy_node WARNING] hero_summary 확인 불가")
 
         # LLM 호출 (Structured Output)
         parser_llm = llm.with_structured_output(MonsterStrategyParser)

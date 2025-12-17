@@ -117,32 +117,9 @@ DUNGEON_SUB_EVENT:
     반드시 아래 목록에서만 선택하세요. 메인 이벤트의 맥락에 맞는 것을 골라야 합니다.
     
     보상 (REWARDS):
-    - hp_increase_all: 최대 체력 +50
-    - strength_increase_all: 근력 +5
-    - dexterity_increase_all: 기량 +5
-    - move_speed_increase_all: 이동속도 +10%
-    - crit_chance_increase_all: 치명타 확률 +10%
-    - attack_speed_increase_all: 공격 속도 +15%
-    - cooldown_reduction_all: 쿨타임 -10%
-    - skill_damage_increase_all: 스킬 데미지 +20%
-    - hp_recovery_all: 체력 회복 100
-    - item_reward_common: 커먼 아이템 획득
-    - item_reward_uncommon: 언커먼 아이템 획득
-    - item_reward_rare: 레어 아이템 획득
-    
+   
     패널티 (PENALTIES):
-    - hp_decrease_all: 최대 체력 -30
-    - strength_decrease_all: 근력 -3
-    - dexterity_decrease_all: 기량 -3
-    - move_speed_decrease_all: 이동속도 -10%
-    - crit_chance_decrease_all: 치명타 확률 -10%
-    - attack_speed_decrease_all: 공격 속도 -15%
-    - instant_damage_low: 고정 피해 50
-    - instant_damage_medium: 고정 피해 100
-    - instant_damage_high: 고정 피해 150
-    - slow_debuff: 감속 디버프 (2분간 이동속도 -20%)
-    - weakness_debuff: 허약 디버프 (3분간 근력 -5)
-    - curse_debuff: 저주 디버프 (3분간 스킬 데미지 -20%)
+
     </구현 가능한 보상/패널티 목록>
 
     <출력 형식>
