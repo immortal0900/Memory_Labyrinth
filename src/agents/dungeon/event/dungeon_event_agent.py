@@ -3,7 +3,7 @@ from enums.LLM import LLM
 from agents.dungeon.dungeon_state import DungeonEventParser
 import random
 
-llm = init_chat_model(model=LLM.GPT4_1_MINI, temperature=0.5, max_token=500)
+llm = init_chat_model(model=LLM.GPT4_1_MINI, temperature=0.5)
 
 from prompts.promptmanager import PromptManager
 from prompts.prompt_type.dungeon.DungeonPromptType import DungeonPromptType
@@ -204,6 +204,7 @@ def create_sub_event_node(state: DungeonEventState) -> DungeonEventState:
         get_reward_dict,
         get_penalty_dict,
     )
+
     choices = []
     for choice in response.event_choices:
         reward = get_reward_dict(choice.reward_id) if choice.reward_id else None
