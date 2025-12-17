@@ -17,6 +17,9 @@ def heroine_memories_node(state: DungeonEventState) -> DungeonEventState:
     히로인의 기억 데이터 로드
     heroine_scenarios.py에서 heroine_id와 memory_progress에 맞는 기억을 필터링
     """
+    import time
+
+    total_start = time.time()
     from agents.dungeon.event.heroine_scenarios import HEROINE_SCENARIOS
 
     heroine_id = state["heroine_data"].get("heroine_id")
@@ -50,6 +53,9 @@ def heroine_memories_node(state: DungeonEventState) -> DungeonEventState:
     print(f"[heroine_memories_node] 플레이어 ID: {player_id} | 히로인 ID: {heroine_id}")
     print(f"[heroine_memories_node] 기억 진척도: {memory_progress}")
     print(f"[heroine_memories_node] 해금된 기억 개수: {len(heroine_memories)}")
+
+    total_elapsed = time.time() - total_start
+    print(f"[TIMING] heroine_memories_node 전체 처리 시간: {total_elapsed:.3f}s")
 
     return {"heroine_memories": heroine_memories}
 
@@ -91,18 +97,18 @@ def selected_main_event_node(state: DungeonEventState) -> DungeonEventState:
     selected_event = random.choice(available_events)
 
     # 시나리오 텍스트 치환 (히로인 이름 등)
-    scenario_text = selected_event['scenario_text']
+    scenario_text = selected_event["scenario_text"]
     heroine_name = state["heroine_data"].get("name", "그녀")
     if "{heroine_name}" in scenario_text:
         scenario_text = scenario_text.format(heroine_name=heroine_name)
 
     # 선택된 이벤트를 구조화된 dict로 반환
     event_data = {
-        "event_id": selected_event.get('event_id', 0),
-        "title": selected_event['title'],
-        "event_code": selected_event['event_code'],
-        "is_personal": selected_event['is_personal'],
-        "scenario_text": scenario_text
+        "event_id": selected_event.get("event_id", 0),
+        "title": selected_event["title"],
+        "event_code": selected_event["event_code"],
+        "is_personal": selected_event["is_personal"],
+        "scenario_text": scenario_text,
     }
 
     print(f"[selected_main_event_node] 선택된 이벤트: {selected_event['title']}")
@@ -132,25 +138,23 @@ def create_sub_event_node(state: DungeonEventState) -> DungeonEventState:
     parser_llm = llm.with_structured_output(DungeonEventParser)
     response = parser_llm.invoke(prompts)
 
-
     # 보상/패널티 dict 변환 유틸리티 import
-    from agents.dungeon.event.event_rewards_penalties import get_reward_dict, get_penalty_dict
+    from agents.dungeon.event.event_rewards_penalties import (
+        get_reward_dict,
+        get_penalty_dict,
+    )
 
     # 클라 요구사항: reward/penalty는 id가 아니라 dict(필수 필드만, id/description 제외)
     choices = []
     for choice in response.event_choices:
         reward = get_reward_dict(choice.reward_id) if choice.reward_id else None
         penalty = get_penalty_dict(choice.penalty_id) if choice.penalty_id else None
-        choices.append({
-            "action": choice.action,
-            "reward": reward,
-            "penalty": penalty
-        })
+        choices.append({"action": choice.action, "reward": reward, "penalty": penalty})
 
     sub_event_data = {
         "narrative": response.sub_event_narrative,
         "choices": choices,
-        "expected_outcome": response.expected_outcome
+        "expected_outcome": response.expected_outcome,
     }
 
     print(f"[create_sub_event_node] 서브 이벤트 생성 완료")
