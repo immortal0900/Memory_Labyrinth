@@ -3,7 +3,7 @@ from enums.LLM import LLM
 from agents.dungeon.dungeon_state import DungeonEventParser
 import random
 
-llm = init_chat_model(model=LLM.GPT5_1, temperature=0.5)
+llm = init_chat_model(model=LLM.GPT4_1_MINI, temperature=0.5, max_token=500)
 
 from prompts.promptmanager import PromptManager
 from prompts.prompt_type.dungeon.DungeonPromptType import DungeonPromptType
@@ -129,13 +129,29 @@ def create_sub_event_node(state: DungeonEventState) -> DungeonEventState:
 
     heroine_info = state.get("heroine_data", {}) if isinstance(state, dict) else {}
     heroine_name = heroine_info.get("name") or heroine_info.get("heroine_name") or None
-    memory_progress = heroine_info.get("memory_progress") or heroine_info.get("memoryProgress") or 0
+    memory_progress = (
+        heroine_info.get("memory_progress") or heroine_info.get("memoryProgress") or 0
+    )
     selected_main_event = state.get("selected_main_event", {})
     is_personal = bool(selected_main_event.get("is_personal", False))
     player_id = state.get("player_id")
 
-    available_rewards = [r.get("id") for r in (getattr(rewards_module, "SPAWN_MONSTER_REWARDS", []) + getattr(rewards_module, "DROP_ITEM_REWARDS", []) + getattr(rewards_module, "CHANGE_STAT_REWARDS", []))]
-    available_penalties = [p.get("id") for p in (getattr(rewards_module, "SPAWN_MONSTER_PENALTIES", []) + getattr(rewards_module, "DROP_ITEM_PENALTIES", []) + getattr(rewards_module, "CHANGE_STAT_PENALTIES", []))]
+    available_rewards = [
+        r.get("id")
+        for r in (
+            getattr(rewards_module, "SPAWN_MONSTER_REWARDS", [])
+            + getattr(rewards_module, "DROP_ITEM_REWARDS", [])
+            + getattr(rewards_module, "CHANGE_STAT_REWARDS", [])
+        )
+    ]
+    available_penalties = [
+        p.get("id")
+        for p in (
+            getattr(rewards_module, "SPAWN_MONSTER_PENALTIES", [])
+            + getattr(rewards_module, "DROP_ITEM_PENALTIES", [])
+            + getattr(rewards_module, "CHANGE_STAT_PENALTIES", [])
+        )
+    ]
 
     prompts = PromptManager(DungeonPromptType.DUNGEON_SUB_EVENT).get_prompt(
         heroine_data=state.get("heroine_data"),
@@ -163,6 +179,7 @@ def create_sub_event_node(state: DungeonEventState) -> DungeonEventState:
             if isinstance(selected_main_event, dict)
             else "짧은 이상한 기척이 느껴진다."
         )
+
         class _Resp:
             pass
 
@@ -176,7 +193,10 @@ def create_sub_event_node(state: DungeonEventState) -> DungeonEventState:
             reward_id: str | None = None
             penalty_id: str | None = None
 
-        response.event_choices = [_Choice(action="조용히 관찰한다"), _Choice(action="상호작용을 시도한다")]
+        response.event_choices = [
+            _Choice(action="조용히 관찰한다"),
+            _Choice(action="상호작용을 시도한다"),
+        ]
         response.expected_outcome = "선택에 따라 간단한 반응이 발생합니다."
 
     # 보상/패널티 dict 변환 유틸리티 import
@@ -184,8 +204,6 @@ def create_sub_event_node(state: DungeonEventState) -> DungeonEventState:
         get_reward_dict,
         get_penalty_dict,
     )
-
-    # 클라 요구사항: reward/penalty는 id가 아니라 dict(필수 필드만, id/description 제외)
     choices = []
     for choice in response.event_choices:
         reward = get_reward_dict(choice.reward_id) if choice.reward_id else None
@@ -197,7 +215,6 @@ def create_sub_event_node(state: DungeonEventState) -> DungeonEventState:
         "choices": choices,
         "expected_outcome": response.expected_outcome,
     }
-
     print(f"[create_sub_event_node] 서브 이벤트 생성 완료")
     print(response)
 
