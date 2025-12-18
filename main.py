@@ -13,6 +13,7 @@ import logging, time
 from api.npc_router import router as npc_router
 from api.fairy_router import router as fairy_router
 from api.dungeon_router import router as dungeon_router
+from api.common_router import router as common_router
 from db.RDBRepository import RDBRepository
 
 # FastAPI 앱 생성
@@ -35,6 +36,7 @@ app.add_middleware(
 app.include_router(npc_router)
 app.include_router(fairy_router)
 app.include_router(dungeon_router)
+app.include_router(common_router)
 
 
 logger = logging.getLogger("stt")

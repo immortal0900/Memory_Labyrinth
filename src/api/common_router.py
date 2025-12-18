@@ -1,7 +1,6 @@
 import os
 import re
 import time
-import uuid
 import wave
 import logging
 from logging.handlers import RotatingFileHandler
@@ -10,7 +9,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 import whisper
 import numpy as np
-from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Request
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Request, APIRouter
 from fastapi.responses import JSONResponse
 
 SAVE_UPLOADS = True                      
@@ -53,38 +52,19 @@ def _make_save_path(prefix: str, original_name: str, ext: str) -> str:
     base, _ = os.path.splitext(safe)
     return os.path.join(UPLOAD_DIR, f"{prefix}_{ts}_{base}{ext}")
 
+router = APIRouter(prefix="/stt", tags=["stt"])
 model = whisper.load_model("large")
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info("Starting up... warming up whisper model")
-    dummy = np.zeros(16000, dtype=np.float32)
-    t0 = time.perf_counter()
-    _ = model.transcribe(dummy, language="ko")
-    logger.info(f"Warmup done in {time.perf_counter() - t0:.3f}s")
-    yield
-    logger.info("Shutting down...")
+# @asynccontextmanager
+# async def lifespan(app: FastAPI):
+#     logger.info("Starting up... warming up whisper model")
+#     dummy = np.zeros(16000, dtype=np.float32)
+#     t0 = time.perf_counter()
+#     _ = model.transcribe(dummy, language="ko")
+#     logger.info(f"Warmup done in {time.perf_counter() - t0:.3f}s")
+#     yield
+#     logger.info("Shutting down...")
 
-app = FastAPI(lifespan=lifespan)
-
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    request_id = uuid.uuid4().hex[:10]
-    request.state.request_id = request_id
-
-    start = time.perf_counter()
-    client = request.client.host if request.client else "unknown"
-    logger.info(f"[{request_id}] -> {client} {request.method} {request.url.path}")
-
-    try:
-        response = await call_next(request)
-        dur = time.perf_counter() - start
-        logger.info(f"[{request_id}] <- {response.status_code} ({dur:.3f}s)")
-        return response
-    except Exception:
-        dur = time.perf_counter() - start
-        logger.exception(f"[{request_id}] !! unhandled error ({dur:.3f}s)")
-        raise
-
+    
 def _is_suspicious_segment(seg: dict) -> bool:
     if seg.get("no_speech_prob", 0) > 0.6:
         return True
@@ -95,8 +75,8 @@ def _is_suspicious_segment(seg: dict) -> bool:
     return False
 
 
-@app.post("/stt")
-async def stt(request: Request, file: UploadFile = File(...)):
+@router.post("/wav")
+async def stt_wav(request: Request, file: UploadFile = File(...)):
     rid = getattr(request.state, "request_id", "noid")
 
     if not file.filename:
@@ -145,7 +125,7 @@ async def stt(request: Request, file: UploadFile = File(...)):
     })
 
     
-@app.post("/stt_pcm")
+@router.post("/pcm")
 async def stt_pcm(request: Request, pcm: bytes = Body(...)):
     rid = getattr(request.state, "request_id", "noid")
 
