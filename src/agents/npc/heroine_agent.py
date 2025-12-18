@@ -661,7 +661,8 @@ class HeroineAgent(BaseNPCAgent):
 
         # 변화량
         affection_delta = context.get("affection_delta", 0)
-        sanity_delta = affection_delta if affection_delta > 0 else 0
+        sanity_delta = affection_delta 
+        # if affection_delta > 0 else 0
 
         print(
             f"[DEBUG] _update_state: current affection={affection}, delta={affection_delta}"
