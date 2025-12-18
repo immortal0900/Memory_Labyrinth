@@ -428,3 +428,12 @@ def measure_latency(func):
         latency = (end - start)
         return result, latency
     return wrapper
+
+
+from langchain_core.messages import HumanMessage
+
+def get_last_human_message(messages):
+    for m in reversed(messages):
+        if isinstance(m, HumanMessage):
+            return m.content
+    return None

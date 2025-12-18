@@ -33,13 +33,25 @@ from agents.fairy.util import (
     describe_dungeon_row,
 )
 from agents.fairy.dungeon.fairy_dungeon_model_logics import FairyDungeonIntentModel
+import asyncio
 
 intent_llm = get_groq_llm_lc(model=LLM.LLAMA_3_1_8B_INSTANT, max_token=43)
 # action_llm = get_groq_llm_lc(max_token=80, temperature=0)
-action_llm = init_chat_model(model=LLM.GROK_4_FAST_NON_REASONING, max_tokens=80, temperature=0)
+action_llm = init_chat_model(
+    model=LLM.GROK_4_FAST_NON_REASONING, max_tokens=80, temperature=0
+)
 small_talk_llm = init_chat_model(model=LLM.GROK_4_FAST_NON_REASONING, max_tokens=120)
 rdb_repository = RDBRepository()
 intent_model = FairyDungeonIntentModel()
+
+
+def _rdb_fairy_messages_bg(user_args, ai_args):
+    try:
+        rdb_repository.insert_fairy_message(**user_args)
+        rdb_repository.insert_fairy_message(**ai_args)
+    except Exception as e:
+        # 로그만 남기고 흐름은 막지 않음
+        print("fairy_message insert failed:", e)
 
 
 async def get_monsters_info(target_monster_ids: List[int]):
@@ -217,6 +229,7 @@ async def fairy_action(state: FairyDungeonState):
     question = messages[-1].content
 
     fewshots = get_human_few_shot_prompts(intent_types)
+
     human_prompt = PromptManager(FairyPromptType.FAIRY_DUNGEON_HUMAN).get_prompt(
         dungenon_player=pretty_dungenon_player,
         use_intents=[rt.value if hasattr(rt, "value") else rt for rt in intent_types],
@@ -243,6 +256,27 @@ async def fairy_action(state: FairyDungeonState):
         if contains_hanja(ai_answer.content):
             ai_answer.content = replace_hanja_naively(ai_answer.content)
 
+    asyncio.create_task(
+        asyncio.to_thread(
+            _rdb_fairy_messages_bg,
+            {
+                "sender_type": "USER",
+                "message": question,
+                "context_type": "DUNGEON",
+                "player_id": dungenon_player.playerId,
+                "heroine_id": dungenon_player.heroineId,
+                "intent_type": None,
+            },
+            {
+                "sender_type": "AI",
+                "message": ai_answer.content,
+                "context_type": "DUNGEON",
+                "player_id": dungenon_player.playerId,
+                "heroine_id": dungenon_player.heroineId,
+                "intent_type": intent_types,
+            },
+        )
+    )
     latency = time.perf_counter() - start
     return {
         "messages": [

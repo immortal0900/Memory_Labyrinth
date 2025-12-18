@@ -10,21 +10,29 @@ from enums.LLM import LLM
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from langgraph.prebuilt import ToolNode, tools_condition
-from agents.fairy.util import find_scenarios, str_to_bool, find_heroine_info
+from agents.fairy.util import find_scenarios, str_to_bool, find_heroine_info, get_last_human_message
 from agents.fairy.cache_data import GAME_SYSTEM_INFO
+from db.RDBRepository import RDBRepository
+import asyncio
 
+rdb_repository = RDBRepository()
 
 fast_llm = init_chat_model(
-    model=LLM.GROK_4_FAST_NON_REASONING, 
-    model_provider="xai",
-    max_tokens = 120
+    model=LLM.GROK_4_FAST_NON_REASONING, model_provider="xai", max_tokens=120
 )
 
 reasoning_llm = init_chat_model(
-    model=LLM.GROK_4_FAST_REASONING, 
-    model_provider="xai", 
-    max_tokens = 120
+    model=LLM.GROK_4_FAST_REASONING, model_provider="xai", max_tokens=120
 )
+
+
+def _rdb_fairy_messages_bg(user_args, ai_args):
+    try:
+        rdb_repository.insert_fairy_message(**user_args)
+        rdb_repository.insert_fairy_message(**ai_args)
+    except Exception as e:
+        print("fairy_message insert failed:", e)
+
 
 @tool
 def get_scenarios(config: RunnableConfig):
@@ -38,6 +46,7 @@ def get_scenarios(config: RunnableConfig):
 def get_game_system():
     """사용자가 현재 게임의 시스템적 기능, 구조, 진행 방식, 옵션, 조작 방식 등에 대해 질문할 때 선택됩니다."""
     return GAME_SYSTEM_INFO
+
 
 @tool
 def get_heroine_info(config: RunnableConfig):
@@ -78,13 +87,16 @@ def reasoning_required(state: FairyGuildState):
 
 
 def call_llm(state: FairyGuildState, config: RunnableConfig):
+    player_id = config.get("configurable", {}).get("thread_id")
     heroine_id = config.get("configurable", {}).get("heroine_id")
     heroine_info = find_heroine_info(heroine_id=heroine_id)
 
     messages = state["messages"]
 
     if state["reasoning_required"]:
-        llm = reasoning_llm.bind_tools([get_scenarios, get_game_system, get_heroine_info])
+        llm = reasoning_llm.bind_tools(
+            [get_scenarios, get_game_system, get_heroine_info]
+        )
     else:
         llm = fast_llm
 
@@ -93,6 +105,34 @@ def call_llm(state: FairyGuildState, config: RunnableConfig):
     )
     new_messages = [SystemMessage(content=system_prompt)] + messages
     ai_answer = llm.invoke(new_messages)
+    has_tool_call = bool(
+        getattr(ai_answer, "tool_calls", None)
+        or ai_answer.response_metadata.get("tool_calls")
+    )
+    last_user_message = get_last_human_message(messages)
+    if not has_tool_call and last_user_message:
+        asyncio.create_task(
+            asyncio.to_thread(
+                _rdb_fairy_messages_bg,
+                {
+                    "sender_type": "USER",
+                    "message": last_user_message,
+                    "context_type": "GUILD",
+                    "player_id": player_id,
+                    "heroine_id": heroine_id,
+                    "intent_type": None,
+                },
+                {
+                    "sender_type": "AI",
+                    "message": ai_answer.content,
+                    "context_type": "GUILD",
+                    "player_id": player_id,
+                    "heroine_id": heroine_id,
+                    "intent_type": None,
+                },
+            )
+        )
+
     return {"messages": [ai_answer]}
 
 

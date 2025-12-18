@@ -1,5 +1,5 @@
 import json
-from typing import List, Any, Dict, Optional
+from typing import List, Any, Dict, Optional,Sequence
 from sqlalchemy import create_engine, text
 from db.config import CONNECTION_URL
 from enums.EmbeddingModel import EmbeddingModel
@@ -384,3 +384,32 @@ class RDBRepository:
                 except Exception:
                     return event_value
             return event_value
+        
+    def insert_fairy_message(
+        self,
+        sender_type: str,        # 'AI' | 'USER'
+        message: str,
+        context_type: str,       # 'DUNGEON' | 'GUILD'
+        player_id: str,          # <= 100 chars
+        heroine_id: int,         # <= 2 digits
+        intent_type: Optional[Sequence[str]] = None,  # ← list 허용
+    ) -> None:
+        sql = """
+        INSERT INTO fairy_messages
+            (sender_type, message, context_type, player_id, heroine_id, intent_type)
+        VALUES
+            (:sender_type, :message, :context_type, :player_id, :heroine_id, :intent_type)
+        """
+
+        params = {
+            "sender_type": sender_type,
+            "message": message[:100],  # DB 제약 보호
+            "context_type": context_type,
+            "player_id": str(player_id)[:100],
+            "heroine_id": str(heroine_id)[:2],
+            "intent_type": json.dumps(intent_type) if intent_type else None,
+        }
+
+        with self.engine.connect() as conn:
+            conn.execute(text(sql), params)
+            conn.commit()
