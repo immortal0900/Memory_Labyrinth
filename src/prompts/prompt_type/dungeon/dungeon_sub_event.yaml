@@ -117,8 +117,21 @@ DUNGEON_SUB_EVENT:
     반드시 아래 목록에서만 선택하세요. 메인 이벤트의 맥락에 맞는 것을 골라야 합니다.
     
     보상 (REWARDS):
+    - spawn_monster_0: "스켈레톤 1마리 등장"
+    - spawn_monster_1: "저주받은 고사지 1마리 등장"
+    - spawn_monster_2: "거미 1마리 등장"
+    - drop_weapon_0: "일반 숏소드 드랍"
+    - drop_weapon_4: "일반 한손검 드랍"
+    - drop_accessory_100: "용표식 반지 드랍"
+    - hp_up_10: "Max HP +10"
+    - str_up_3: "Strength +3"
    
     패널티 (PENALTIES):
+    - pen_spawn_monster_0: "스켈레톤 1마리 등장(패널티)"
+    - pen_spawn_monster_1: "저주받은 고사지 등장(패널티)"
+    - drop_cursed_301: "저주 아이템 드랍"
+    - hp_down_10: "Max HP -10"
+    - str_down_3: "Strength -3"
 
     </구현 가능한 보상/패널티 목록>
 

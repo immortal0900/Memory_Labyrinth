@@ -75,19 +75,7 @@
       "eventTitle": "미치광이 상인",
       "eventCode": "MAD_MERCHANT",
       "scenarioText": "장면 묘사 텍스트...",
-      "scenarioNarrative": "UI 표시용 서술 텍스트...",
-      "choices": [
-        {
-          "action": "말을 건다",
-          "reward": { "id": "item_common", "desc": "일반 아이템" },
-          "penalty": null
-        },
-        {
-          "action": "공격한다",
-          "reward": { "id": "item_rare", "desc": "희귀 아이템" },
-          "penalty": { "id": "hp_damage", "desc": "HP 감소" }
-        }
-      ]
+      "scenarioNarrative": "UI 표시용 서술 텍스트..."
     }
   ]
 }
@@ -154,16 +142,7 @@
   "firstPlayerId": 1,
   "monsterPlacements": [
     { "roomId": 4, "monsterId": 101, "count": 1 }
-  ],
-  "nextFloorEvent": {
-    "roomId": 3,
-    "eventType": 5,
-    "eventTitle": "미지의 기억",
-    "eventCode": "UNKNOWN_MEMORY",
-    "scenarioText": "...",
-    "scenarioNarrative": "..."
-  },
-  "agentResult": { /* AI 분석 결과 */ }
+  ]
 }
 ```
 
@@ -235,19 +214,20 @@
 | `selectingPlayerId` | Integer | 선택을 한 플레이어 ID |
 | `roomId` | Integer | 이벤트가 발생한 방 ID |
 | `outcome` | String | LLM이 생성한 결과 서술 |
-| `rewardId` | String | 획득한 보상 ID (없으면 null) |
-| `penaltyId` | String | 적용된 패널티 ID (없으면 null) |
-| `isUnexpected` | Boolean | 돌발 행동 여부 |
+| `rewardId` | Object / Array / null | 획득한 보상 정보 — 문자열 ID뿐 아니라 구조체(dict)나 리스트 형태로 반환될 수 있습니다. (예: `{ "weaponId": 20 }` 또는 `[ {"monsterId": 3, "count":1} ]`) |
+| `penaltyId` | Object / Array / null | 적용된 패널티 정보 — 문자열 ID뿐 아니라 구조체(dict)나 리스트 형태로 반환될 수 있습니다. |
+| `appliedActions` | Array | 알파 모드에서는 보상/패널티 효과가 DB에 영속되지 않고 간단화된 적용 결과를 인메모리로 요약하여 반환합니다. 각 항목은 클라이언트가 즉시 반영할 수 있는 최소 구조를 가집니다. |
 
 ```json
 {
-  "success": true,
-  "firstPlayerId": 1,
-  "selectingPlayerId": 1,
-  "roomId": 1,
-  "outcome": "상인이 회피하고 반격합니다! 10의 피해를 입었습니다.",
-  "rewardId": "item_rare",
-  "penaltyId": "hp_damage"
+"success": true,
+"firstPlayerId": 101,
+"selectingPlayerId": 101,
+"roomId": 2,
+"outcome": "...", // 이벤트 선택 결과
+"rewardId": {"monsterId":[3,5]}, // 데이터 스프레드 시트 기준 Id로 설정 
+"penaltyId": null,
+"isUnexpected": false
 }
 ```
 ---
@@ -308,13 +288,6 @@
       "eventCode": "SUSPICIOUS_ROOM",
       "scenarioText": "방 안이 어둡고 조용하다...",
       "scenarioNarrative": "UI 표시용 서술 텍스트...",
-      "choices": [
-        {
-          "action": "탐색한다",
-          "reward": { "id": "item_key", "desc": "열쇠" },
-          "penalty": null
-        }
-      ]
     }
   ]
 }

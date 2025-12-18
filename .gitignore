@@ -12,3 +12,4 @@ src/db/mem0_manager.py
 .bin
 logs
 uvicion_9999.out
+/src/agents/dungeon/data/
