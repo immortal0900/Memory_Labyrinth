@@ -64,6 +64,27 @@ model = whisper.load_model("large")
 #     yield
 #     logger.info("Shutting down...")
 
+
+_CJK_OR_KANA = re.compile(r'[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]')
+_HANGUL = re.compile(r'[가-힣]')
+_LETTERS = re.compile(r'[A-Za-z가-힣]')
+
+def _is_valid_text(text: str) -> bool:
+    t = (text or "").strip()
+    if len(t) < 2:
+        return False
+    if _CJK_OR_KANA.search(t):
+        return False
+
+    letters = _LETTERS.findall(t)
+    if letters:
+        hangul = _HANGUL.findall(t)
+        if (len(hangul) / len(letters)) < 0.85:   # 필요시 0.9로 더 빡세게
+            return False
+    else:
+        return False
+
+    return True
     
 def _is_suspicious_segment(seg: dict) -> bool:
     if seg.get("no_speech_prob", 0) > 0.6:
@@ -112,15 +133,14 @@ async def stt_wav(request: Request, file: UploadFile = File(...)):
         for seg in segments
         if not _is_suspicious_segment(seg)
     ).strip()
-    is_valid = bool(final_text)
-    dur = time.perf_counter() - t0
-    
-    text = (result.get("text") or "").strip()
-    logger.info(f"[{rid}] transcribe done in {dur:.3f}s text_len={len(text)}")
 
+    dur = time.perf_counter() - t0
+    transfer_text = final_text 
+    logger.info(f"[{rid}] transcribe done in {dur:.3f}s text_len={len(final_text)}")
+    is_valid = bool(transfer_text) and _is_valid_text(transfer_text)
                                 
     return JSONResponse({
-        "transferText": text,
+        "transferText": transfer_text,
         "isValid":is_valid
     })
 
@@ -158,13 +178,13 @@ async def stt_pcm(request: Request, pcm: bytes = Body(...)):
         for seg in segments
             if not _is_suspicious_segment(seg)
         ).strip()
-        is_valid = bool(final_text)
 
-        text = (result.get("text") or "").strip()
-        logger.info(f"[{rid}] transcribe done in {dur:.3f}s text_len={len(text)}")
+        transfer_text = final_text 
+        is_valid = bool(transfer_text) and _is_valid_text(transfer_text)
+        logger.info(f"[{rid}] transcribe done in {dur:.3f}s text_len={len(transfer_text)}")
 
         return JSONResponse({
-            "transferText": text,
+            "transferText": transfer_text,
             "isValid":is_valid
         })
     except Exception:
