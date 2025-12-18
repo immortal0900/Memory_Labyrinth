@@ -10,43 +10,43 @@ class ItemEmbeddingLogic:
 
     def __init__(self):
         self.ITEM_VEC_CACHE = {}
-        self._init_item_vectors()
+    #     self._init_item_vectors()
 
-    def _item_text(self, item: ItemData) -> str:
-        w = item.weapon
-        return (
-            f"{item.itemName} {w.attackPower} {w.staggerPower} {w.rarity} {w.modifier}"
-        )
+    # def _item_text(self, item: ItemData) -> str:
+    #     w = item.weapon        
+    #     return (
+    #         f"{item.itemName} {w.attackPower} {w.staggerPower} {w.rarity} {w.modifier}"
+    #     )
 
-    def _init_item_vectors(self):
-        texts = [self._item_text(item) for item in cache_items]
-        vecs = emb_model.encode(texts)["dense_vecs"]
-        for item, vec in zip(cache_items, vecs):
-            self.ITEM_VEC_CACHE[item.itemId] = vec
+    # def _init_item_vectors(self):
+    #     texts = [self._item_text(item) for item in cache_items]
+    #     vecs = emb_model.encode(texts)["dense_vecs"]
+    #     for item, vec in zip(cache_items, vecs):
+    #         self.ITEM_VEC_CACHE[item.itemId] = vec
 
-    def _cosine(self, a, b):
-        return float(a @ b / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-8))
+    # def _cosine(self, a, b):
+    #     return float(a @ b / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-8))
 
-    def pick_items(
-        self, question: str, inventory_ids: List[int], top_k: int = 4
-    ) -> List[int]:
-        items = get_inventory_items(inventory_ids)
-        if not items:
-            return []
+    # def pick_items(
+    #     self, question: str, inventory_ids: List[int], top_k: int = 4
+    # ) -> List[int]:
+    #     items = get_inventory_items(inventory_ids)
+    #     if not items:
+    #         return []
 
-        # 질문 임베딩 1회
-        q_vec = emb_model.encode([question])["dense_vecs"][0]
-        sims = []
+    #     # 질문 임베딩 1회
+    #     q_vec = emb_model.encode([question])["dense_vecs"][0]
+    #     sims = []
 
-        for item in items:
-            item_vec = self.ITEM_VEC_CACHE[item.itemId]
-            sim = self._cosine(q_vec, item_vec)
-            sims.append((item.itemId, sim))
+    #     for item in items:
+    #         item_vec = self.ITEM_VEC_CACHE[item.itemId]
+    #         sim = self._cosine(q_vec, item_vec)
+    #         sims.append((item.itemId, sim))
 
-        # 유사도 높은 순으로 정렬 (index 0 = 가장 유사)
-        sims.sort(key=lambda x: x[1], reverse=True)
-        filtered = [item_id for item_id, sim in sims if sim >= 0.2]
-        return filtered[:top_k]
+    #     # 유사도 높은 순으로 정렬 (index 0 = 가장 유사)
+    #     sims.sort(key=lambda x: x[1], reverse=True)
+    #     filtered = [item_id for item_id, sim in sims if sim >= 0.2]
+    #     return filtered[:top_k]
 
 
 class IsItemUseEmbeddingLogic:
