@@ -7,6 +7,7 @@ import json
 from typing import Dict, Any, List, Optional
 from sqlalchemy import text
 from db.RDBRepository import RDBRepository
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 # ============================================================
@@ -133,6 +134,25 @@ class DungeonService:
                         normalized_heroines.append(
                             _normalize_heroine_data(heroine_data)
                         )
+                # 동일 플레이어로 재입장 시 이전 미완료 던전이 DB에 남아있으면
+                # 충돌을 방지하기 위해 모두 완료 처리(is_finishing = TRUE) 합니다.
+                if player_ids:
+                    for _pid in player_ids:
+                        try:
+                            conn.execute(
+                                text(
+                                    """
+                                    UPDATE dungeon
+                                    SET is_finishing = TRUE
+                                    WHERE is_finishing = FALSE
+                                    AND (player1 = :pid OR player2 = :pid OR player3 = :pid OR player4 = :pid)
+                                    """
+                                ),
+                                {"pid": str(_pid)},
+                            )
+                        except Exception as e:
+                            # 실패 시 로그만 남기고 진행 (DB 상태에 따라 다르게 처리 가능)
+                            print(f"[WARN] failed to mark previous dungeons finished for pid={_pid}: {e}")
                 for idx, raw_map in enumerate(raw_maps):
                     floor_num = idx + 1
                     if floor_num > 2:
@@ -174,47 +194,85 @@ class DungeonService:
                         or room.get("event_type", 0) != 0
                     ]
                     events_for_this_floor = []
-                    for room in event_rooms:
-                        room_id = room.get("room_id")
-                        main_event_data = self._create_event_for_floor(
-                            heroine_data=normalized_heroines[0],
-                            player_id=player_ids[0] if player_ids else None,
-                            next_floor=floor_num,
-                            used_events=used_events,
-                            room_id=room_id,
-                        )
-                        if not main_event_data:
-                            continue
-                        main_event_data["floor"] = floor_num
-                        if main_event_data.get("is_personal", False):
-                            heroine_narratives = []
-                            for player_id, heroine in zip(
-                                player_ids, normalized_heroines
-                            ):
-                                indiv_event = self._create_event_for_floor(
-                                    heroine_data=heroine,
-                                    player_id=player_id,
-                                    next_floor=floor_num,
-                                    used_events=used_events,
-                                    room_id=room_id,
-                                )
-                                if indiv_event:
-                                    heroine_narratives.append(
-                                        {
-                                            "playerId": player_id,
-                                            "heroineId": heroine["heroine_id"],
-                                            "memoryProgress": heroine[
-                                                "memory_progress"
-                                            ],
-                                            "narrative": indiv_event.get(
-                                                "scenario_narrative", ""
-                                            ),
-                                        }
-                                    )
-                            main_event_data["heroineNarratives"] = heroine_narratives
-                        events_for_this_floor.append(main_event_data)
-                        used_events.append(main_event_data)
+                    # 병렬 생성: 메인 이벤트들을 병렬로 요청한 뒤,
+                    # 필요 시 각 플레이어에 대해 개인화 이벤트를 병렬로 생성합니다.
+                    used_events_snapshot = list(used_events) if used_events else []
+                    max_workers_main = min(8, max(1, len(event_rooms)))
+                    with ThreadPoolExecutor(max_workers=max_workers_main) as ex:
+                        fut_to_room = {
+                            ex.submit(
+                                self._create_event_for_floor,
+                                heroine_data=normalized_heroines[0],
+                                player_id=player_ids[0] if player_ids else None,
+                                next_floor=floor_num,
+                                used_events=used_events_snapshot,
+                                room_id=room.get("room_id"),
+                            ): room
+                            for room in event_rooms
+                        }
 
+                        for fut in as_completed(fut_to_room):
+                            room = fut_to_room[fut]
+                            try:
+                                main_event_data = fut.result()
+                            except Exception as e:
+                                print(f"[WARN] main event future failed: {e}")
+                                continue
+                            if not main_event_data:
+                                continue
+                            main_event_data["floor"] = floor_num
+
+                            # 개인화 이벤트가 필요하면 각 플레이어에 대해 병렬 생성
+                            if main_event_data.get("is_personal", False) and player_ids:
+                                heroine_narratives = []
+                                workers = min(4, max(1, len(player_ids)))
+                                with ThreadPoolExecutor(max_workers=workers) as ex2:
+                                    fut2_to_info = {
+                                        ex2.submit(
+                                            self._create_event_for_floor,
+                                            heroine_data=h,
+                                            player_id=pid,
+                                            next_floor=floor_num,
+                                            used_events=used_events_snapshot,
+                                            room_id=room.get("room_id"),
+                                        ): (pid, h)
+                                        for pid, h in zip(
+                                            player_ids, normalized_heroines
+                                        )
+                                    }
+                                    for f2 in as_completed(fut2_to_info):
+                                        pid, h = fut2_to_info[f2]
+                                        try:
+                                            indiv_event = f2.result()
+                                        except Exception as e:
+                                            print(
+                                                f"[WARN] individual event future failed: {e}"
+                                            )
+                                            indiv_event = None
+                                        if indiv_event:
+                                            heroine_narratives.append(
+                                                {
+                                                    "playerId": pid,
+                                                    "heroineId": h.get("heroine_id"),
+                                                    "memoryProgress": h.get(
+                                                        "memory_progress"
+                                                    ),
+                                                    "narrative": indiv_event.get(
+                                                        "scenario_narrative", ""
+                                                    ),
+                                                }
+                                            )
+                                main_event_data["heroineNarratives"] = (
+                                    heroine_narratives
+                                )
+
+                            events_for_this_floor.append(main_event_data)
+                            used_events.append(main_event_data)
+
+                    # 정렬: room_id가 작은 순서대로 반환하도록 정렬
+                    events_for_this_floor = sorted(
+                        events_for_this_floor, key=lambda e: e.get("room_id", 0)
+                    )
                     summary_info_value = self._generate_raw_map_summary(
                         normalized_raw_map
                     )
@@ -338,47 +396,82 @@ class DungeonService:
                     raise ValueError(
                         "heroineData가 비어 있거나 유효하지 않습니다. (nextfloor)"
                     )
-                for room in event_rooms:
-                    room_id = room.get("room_id")
-                    # 대표 히로인/플레이어로 메인 이벤트 생성 (is_personal 여부 확인)
-                    main_event_data = self._create_event_for_floor(
-                        heroine_data=normalized_heroines[0],
-                        player_id=player_ids[0] if player_ids else None,
-                        next_floor=floor_num,
-                        used_events=used_events,
-                        room_id=room_id,
-                    )
-                    if not main_event_data:
-                        continue
-                    main_event_data["floor"] = floor_num
-                    # 개별 이벤트면 각 히로인/플레이어별 내러티브 생성
-                    if main_event_data.get("is_personal", False):
-                        heroine_narratives = []
-                        for player_id, heroine in zip(player_ids, normalized_heroines):
-                            indiv_event = self._create_event_for_floor(
-                                heroine_data=heroine,
-                                player_id=player_id,
-                                next_floor=floor_num,
-                                used_events=used_events,
-                                room_id=room_id,
-                            )
-                            if indiv_event:
-                                heroine_narratives.append(
-                                    {
-                                        "playerId": player_id,
-                                        "heroineId": heroine["heroine_id"],
-                                        "memoryProgress": heroine["memory_progress"],
-                                        "narrative": indiv_event.get(
-                                            "scenario_narrative", ""
-                                        ),
-                                    }
-                                )
-                        main_event_data["heroineNarratives"] = heroine_narratives
-                    events_for_this_floor.append(main_event_data)
-                    used_events.append(main_event_data)
+                # 병렬 생성: 메인 이벤트들을 병렬로 요청한 뒤,
+                # 필요 시 각 플레이어에 대해 개인화 이벤트를 병렬로 생성합니다.
+                used_events_snapshot = list(used_events) if used_events else []
+                max_workers_main = min(8, max(1, len(event_rooms)))
+                with ThreadPoolExecutor(max_workers=max_workers_main) as ex:
+                    fut_to_room = {
+                        ex.submit(
+                            self._create_event_for_floor,
+                            heroine_data=normalized_heroines[0],
+                            player_id=player_ids[0] if player_ids else None,
+                            next_floor=floor_num,
+                            used_events=used_events_snapshot,
+                            room_id=room.get("room_id"),
+                        ): room
+                        for room in event_rooms
+                    }
 
+                    for fut in as_completed(fut_to_room):
+                        room = fut_to_room[fut]
+                        try:
+                            main_event_data = fut.result()
+                        except Exception as e:
+                            print(f"[WARN] next_floor main event future failed: {e}")
+                            continue
+                        if not main_event_data:
+                            continue
+                        main_event_data["floor"] = floor_num
+
+                        # 개인화 이벤트가 필요하면 각 플레이어에 대해 병렬 생성
+                        if main_event_data.get("is_personal", False) and player_ids:
+                            heroine_narratives = []
+                            workers = min(4, max(1, len(player_ids)))
+                            with ThreadPoolExecutor(max_workers=workers) as ex2:
+                                fut2_to_info = {
+                                    ex2.submit(
+                                        self._create_event_for_floor,
+                                        heroine_data=h,
+                                        player_id=pid,
+                                        next_floor=floor_num,
+                                        used_events=used_events_snapshot,
+                                        room_id=room.get("room_id"),
+                                    ): (pid, h)
+                                    for pid, h in zip(player_ids, normalized_heroines)
+                                }
+                                for f2 in as_completed(fut2_to_info):
+                                    pid, h = fut2_to_info[f2]
+                                    try:
+                                        indiv_event = f2.result()
+                                    except Exception as e:
+                                        print(f"[WARN] next_floor individual event future failed: {e}")
+                                        indiv_event = None
+                                    if indiv_event:
+                                        heroine_narratives.append(
+                                            {
+                                                "playerId": pid,
+                                                "heroineId": h.get("heroine_id"),
+                                                "memoryProgress": h.get(
+                                                    "memory_progress"
+                                                ),
+                                                "narrative": indiv_event.get(
+                                                    "scenario_narrative", ""
+                                                ),
+                                            }
+                                        )
+                            main_event_data["heroineNarratives"] = heroine_narratives
+
+                        events_for_this_floor.append(main_event_data)
+                        used_events.append(main_event_data)
+
+                # 정렬: room_id가 작은 순서대로 반환하도록 정렬
+                events_for_this_floor = sorted(
+                    events_for_this_floor, key=lambda e: e.get("room_id", 0)
+                )
                 summary_info_value = self._generate_raw_map_summary(normalized_raw_map)
                 # event/summary_info만 항상 업데이트, raw_map은 새 row(INSERT)일 때만 저장
+                
                 if row:
                     # 기존 row: raw_map은 건드리지 않음
                     conn.execute(

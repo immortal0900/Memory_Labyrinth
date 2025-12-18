@@ -23,7 +23,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Redis 연결 URL (기본값: 로컬 Redis)
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+# Windows에서 localhost는 IPv6로 resolve되어 문제 발생 -> 127.0.0.1 사용
+REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
 
 # 세션 유효 시간 (24시간)
 SESSION_TTL = 3600 * 24
