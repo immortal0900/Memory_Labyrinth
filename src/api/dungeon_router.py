@@ -133,9 +133,9 @@ class EventSelectResponse(BaseModel):
     firstPlayerId: str
     selectingPlayerId: str
     roomId: int
-    outcome: str  # 결과 텍스트
-    rewardId: Optional[str] = None
-    penaltyId: Optional[str] = None
+    outcome: str
+    rewardId: Optional[Any] = None
+    penaltyId: Optional[Any] = None
 
 
 class NextFloorRequest(BaseModel):

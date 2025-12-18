@@ -140,8 +140,6 @@ def llm_strategy_node(state: DungeonMonsterState) -> DungeonMonsterState:
     player_type = "파티 평균" if is_party else "플레이어"
     player_info = f" ({player_count}명)" if is_party else ""
 
-
-
     hero_summary = f"""
 전투 스탯{player_info}:
 - HP: {hero.hp}
@@ -219,10 +217,41 @@ def select_monsters_node(state: DungeonMonsterState) -> DungeonMonsterState:
     print(f"\n[select_monsters_node] 타겟 위협도: {target_threat:.2f}")
     print(f"[select_monsters_node] 배율: {difficulty_multiplier:.2f}")
 
-    # 보스방과 일반 전투방 분리
+    # 보스방과 일반 전투방 분리 (더 관대한 타입 판별)
     rooms = dungeon_data.get("rooms", [])
-    boss_rooms = [room for room in rooms if room.get("room_type") == "boss"]
-    combat_rooms = [room for room in rooms if room.get("room_type") == "monster"]
+
+    def _is_boss_room(room: Dict[str, Any]) -> bool:
+        rt = room.get("room_type") or room.get("roomType") or room.get("type")
+        if isinstance(rt, str):
+            return rt.strip().lower() == "boss"
+        if isinstance(rt, int):
+            return rt == 4
+        return False
+
+    def _is_monster_room(room: Dict[str, Any]) -> bool:
+        rt = room.get("room_type") or room.get("roomType") or room.get("type")
+        if isinstance(rt, str):
+            return rt.strip().lower() == "monster"
+        if isinstance(rt, int):
+            return rt == 1
+        return False
+
+    boss_rooms = [room for room in rooms if _is_boss_room(room)]
+    combat_rooms = [room for room in rooms if _is_monster_room(room)]
+
+    # Debug: 현재 rooms와 판별된 타입 로그
+    try:
+        print(
+            f"[select_monsters_node] rooms: {[ (r.get('room_id'), r.get('room_type') or r.get('roomType') or r.get('type')) for r in rooms ]}"
+        )
+        print(
+            f"[select_monsters_node] identified boss_rooms: {[r.get('room_id') for r in boss_rooms]}"
+        )
+        print(
+            f"[select_monsters_node] identified combat_rooms: {[r.get('room_id') for r in combat_rooms]}"
+        )
+    except Exception:
+        pass
 
     # LLM 전략에서 고급 선호도 추출
     monster_preferences = []

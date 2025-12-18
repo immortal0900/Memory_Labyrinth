@@ -8,6 +8,11 @@ from typing import Dict, Any, List, Optional
 from sqlalchemy import text
 from db.RDBRepository import RDBRepository
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from src.agents.dungeon.event import event_rewards_penalties as er
+from agents.dungeon.event.event_rewards_penalties import (
+    normalize_reward_payload,
+    normalize_penalty_payload,
+)
 
 
 # ============================================================
@@ -87,9 +92,6 @@ def _normalize_heroine_data(data: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
-# ============================================================
-# Dungeon Balancing Graph - Lazy Loading
-# ============================================================
 _dungeon_graph = None
 
 
@@ -106,6 +108,27 @@ def get_dungeon_graph():
 class DungeonService:
     def __init__(self):
         self.repo = RDBRepository()
+
+    def _strip_applied_actions(self, events: Any) -> None:
+        """Remove `applied_actions` keys from event dict or list before persisting."""
+        if events is None:
+            return
+        if isinstance(events, dict):
+            evs = [events]
+        elif isinstance(events, list):
+            evs = events
+        else:
+            return
+
+        for ev in evs:
+            if not isinstance(ev, dict):
+                continue
+            ev.pop("applied_actions", None)
+            # also remove applied_actions from heroineNarratives if present (defensive)
+            if "heroineNarratives" in ev and isinstance(ev["heroineNarratives"], list):
+                for hn in ev["heroineNarratives"]:
+                    if isinstance(hn, dict):
+                        hn.pop("applied_actions", None)
 
     def entrance(
         self,
@@ -152,7 +175,9 @@ class DungeonService:
                             )
                         except Exception as e:
                             # 실패 시 로그만 남기고 진행 (DB 상태에 따라 다르게 처리 가능)
-                            print(f"[WARN] failed to mark previous dungeons finished for pid={_pid}: {e}")
+                            print(
+                                f"[WARN] failed to mark previous dungeons finished for pid={_pid}: {e}"
+                            )
                 for idx, raw_map in enumerate(raw_maps):
                     floor_num = idx + 1
                     if floor_num > 2:
@@ -165,7 +190,7 @@ class DungeonService:
 
                     check_sql = text(
                         """
-                        SELECT id, event FROM dungeon WHERE floor = :floor AND (
+                        SELECT id, event FROM dungeon WHERE floor = :floor AND is_finishing = FALSE AND (
                             player1 = :player_id OR player2 = :player_id OR player3 = :player_id OR player4 = :player_id
                         )
                     """
@@ -273,10 +298,20 @@ class DungeonService:
                     events_for_this_floor = sorted(
                         events_for_this_floor, key=lambda e: e.get("room_id", 0)
                     )
+                    # 알파: 정렬된 이벤트에 대해 인메모리로 적용 결과를 단순화하여 첨부합니다 (DB에 저장하지 않음)
+                    try:
+                        self._attach_in_memory_applications(events_for_this_floor)
+                    except Exception as _e:
+                        print(f"[WARN] attach_in_memory_applications failed: {_e}")
                     summary_info_value = self._generate_raw_map_summary(
                         normalized_raw_map
                     )
                     if not existing_event:
+                        # Strip transient applied_actions before persisting
+                        try:
+                            self._strip_applied_actions(events_for_this_floor)
+                        except Exception:
+                            pass
                         conn.execute(
                             text(
                                 "UPDATE dungeon SET event = :event, summary_info = :summary_info WHERE id = :id"
@@ -334,7 +369,7 @@ class DungeonService:
 
                 check_sql = text(
                     """
-                    SELECT id, event FROM dungeon WHERE floor = :floor AND (
+                    SELECT id, event FROM dungeon WHERE floor = :floor AND is_finishing = FALSE AND (
                         player1 = :player_id OR player2 = :player_id OR player3 = :player_id OR player4 = :player_id
                     )
                     """
@@ -445,7 +480,9 @@ class DungeonService:
                                     try:
                                         indiv_event = f2.result()
                                     except Exception as e:
-                                        print(f"[WARN] next_floor individual event future failed: {e}")
+                                        print(
+                                            f"[WARN] next_floor individual event future failed: {e}"
+                                        )
                                         indiv_event = None
                                     if indiv_event:
                                         heroine_narratives.append(
@@ -469,9 +506,14 @@ class DungeonService:
                 events_for_this_floor = sorted(
                     events_for_this_floor, key=lambda e: e.get("room_id", 0)
                 )
+                # 알파: 정렬된 이벤트에 대해 인메모리로 적용 결과를 단순화하여 첨부합니다 (DB에 저장하지 않음)
+                try:
+                    self._attach_in_memory_applications(events_for_this_floor)
+                except Exception as _e:
+                    print(f"[WARN] attach_in_memory_applications failed: {_e}")
                 summary_info_value = self._generate_raw_map_summary(normalized_raw_map)
                 # event/summary_info만 항상 업데이트, raw_map은 새 row(INSERT)일 때만 저장
-                
+
                 if row:
                     # 기존 row: raw_map은 건드리지 않음
                     conn.execute(
@@ -603,7 +645,7 @@ class DungeonService:
                 # 해당 플레이어의 진행 중인 던전 중 floor에 해당하는 row 찾기
                 sql = text(
                     """
-                    SELECT id FROM dungeon WHERE floor = :floor AND (
+                    SELECT id FROM dungeon WHERE floor = :floor AND is_finishing = FALSE AND (
                         player1 = :player_id OR player2 = :player_id OR player3 = :player_id OR player4 = :player_id
                     )
                     """
@@ -634,7 +676,9 @@ class DungeonService:
                             else raw_map
                         ),
                         "event": (
-                            json.dumps(event)
+                            json.dumps(
+                                (lambda e: (self._strip_applied_actions(e), e)[1])(event)
+                            )
                             if isinstance(event, (dict, list))
                             else event
                         ),
@@ -750,9 +794,103 @@ class DungeonService:
         ]
         return "\n".join(summary_lines)
 
-    # ============================================================
-    # 3. 던전 밸런싱 (Boss Room - Super Agent 실행)
-    # ============================================================
+    # --------------------------------------------------
+    # 무기 -> weaponId, 악세서리 -> AccessoryItem
+    # - 몬스터: monsterId와 monsterType(기본값 normal=0)을 반환
+    # - 스탯: stat, value, duration 정보를 반환
+    # - 알파 단계에서는 DB에 저장하지 않음
+    # --------------------------------------------------
+    def _attach_in_memory_applications(self, events: List[Dict[str, Any]]) -> None:
+        def _simplify_reward(r: Dict[str, Any]) -> Dict[str, Any]:
+            t = r.get("type")
+            if t == "drop_item":
+                item_type = r.get("item_type") or r.get("itemType")
+                item_id = r.get("item_id") or r.get("itemId") or r.get("itemId")
+                if item_type == "weapon":
+                    return {
+                        "action": "drop_item",
+                        "weaponId": item_id,
+                        "count": r.get("count", 1),
+                    }
+                if item_type == "accessory":
+                    return {
+                        "action": "drop_item",
+                        "AccessoryItem": item_id,
+                        "count": r.get("count", 1),
+                    }
+                return {
+                    "action": "drop_item",
+                    "itemId": item_id,
+                    "count": r.get("count", 1),
+                }
+            if t == "spawn_monster":
+                return {
+                    "action": "spawn_monster",
+                    "monsterId": r.get("monster_id") or r.get("monsterId"),
+                    "monsterType": r.get("monster_type", 0),
+                    "count": r.get("count", 1),
+                }
+            if t == "change_stat":
+                return {
+                    "action": "change_stat",
+                    "stat": r.get("stat"),
+                    "value": r.get("value"),
+                    "duration": r.get("duration", 0),
+                }
+            return {"action": "unknown", "raw": r}
+
+        for ev in events:
+            applied = []
+
+            # 보상 id에서 실제 객체를 찾아 단순화하여 applied에 추가
+            for key in ("reward_ids", "rewards", "rewardId", "reward_id"):
+                if key in ev and ev.get(key):
+                    vals = ev.get(key)
+                    if isinstance(vals, (list, tuple)):
+                        for rid in vals:
+                            r = er.get_reward_dict(rid)
+                            if r:
+                                applied.append(_simplify_reward(r))
+                    else:
+                        r = er.get_reward_dict(vals)
+                        if r:
+                            applied.append(_simplify_reward(r))
+
+            # 패널티 id 처리
+            for key in ("penalty_ids", "penalties", "penaltyId", "penalty_id"):
+                if key in ev and ev.get(key):
+                    vals = ev.get(key)
+                    if isinstance(vals, (list, tuple)):
+                        for pid in vals:
+                            p = er.get_penalty_dict(pid)
+                            if p:
+                                applied.append(_simplify_reward(p))
+                    else:
+                        p = er.get_penalty_dict(vals)
+                        if p:
+                            applied.append(_simplify_reward(p))
+
+            # applied_rewards 등 이미 객체로 포함된 보상들도 허용
+            for key in ("applied_rewards", "applied", "applies"):
+                if key in ev and ev.get(key):
+                    vals = ev.get(key)
+                    if isinstance(vals, (list, tuple)):
+                        for obj in vals:
+                            if isinstance(obj, dict):
+                                applied.append(_simplify_reward(obj))
+
+            # Attach simplified applied list and remove verbose fields
+            ev["applied_actions"] = applied
+            for drop_key in (
+                "choice",
+                "choices",
+                "reward_ids",
+                "penalty_ids",
+                "rewards",
+                "penalties",
+            ):
+                if drop_key in ev:
+                    ev.pop(drop_key, None)
     def balance_dungeon(
         self,
         first_player_id: str,
@@ -874,6 +1012,7 @@ class DungeonService:
                         SELECT id FROM dungeon 
                         WHERE floor = :next_floor 
                         AND player1 = :player1
+                        AND is_finishing = FALSE
                         LIMIT 1
                     """
                     next_result = conn.execute(
@@ -1062,6 +1201,7 @@ class DungeonService:
                     SELECT id FROM dungeon 
                     WHERE floor = :next_floor 
                     AND player1 = :player1
+                    AND is_finishing = FALSE
                     LIMIT 1
                 """
                 next_result = conn.execute(
@@ -1085,6 +1225,10 @@ class DungeonService:
                 )
 
                 if events:
+                    try:
+                        self._strip_applied_actions(events)
+                    except Exception:
+                        pass
                     conn.execute(
                         text("UPDATE dungeon SET event = :event WHERE id = :id"),
                         {"event": json.dumps(events), "id": next_floor_id},
@@ -1270,52 +1414,154 @@ class DungeonService:
 
             scenario_narrative = target_event.get("scenario_narrative", "")
             choices = target_event.get("choices", [])
+            # If choices missing but expected_outcome present, try to parse it into choices
+            if not choices:
+                eo = target_event.get("expected_outcome") or target_event.get(
+                    "expectedOutcome"
+                )
+                if eo and isinstance(eo, str) and eo.strip():
+                    from agents.dungeon.event.event_rewards_penalties import (
+                        parse_expected_outcome_to_choices,
+                    )
+
+                    parsed = parse_expected_outcome_to_choices(eo)
+                    if parsed:
+                        choices = parsed
+                        # attach back for downstream processing
+                        target_event["choices"] = choices
+            if not choices:
+                print(
+                    f"[WARN] select_event - room {room_id} has no choices. event: {target_event.get('event_code') or target_event.get('event_code', '')}"
+                )
+                return {
+                    "success": True,
+                    "outcome": f"No choices available for room {room_id}.",
+                    "rewardId": None,
+                    "penaltyId": None,
+                }
+            print(f"[DEBUG] select_event - choices count: {len(choices)}")
 
             matched_action = ""
             is_unexpected = False
+            reward_id: Optional[str] = None
+            penalty_id: Optional[str] = None
 
             # 선택지가 있는 경우 분류 로직 수행
             if choices:
                 options_text = ""
+                actions = []
                 for idx, c in enumerate(choices):
-                    options_text += f"{idx}. {c.get('action', '')}\n"
+                    act = c.get("action", "")
+                    actions.append(act)
+                    options_text += f"{idx}. {act}\n"
 
-                classification_prompt = f"""
-                [상황]
-                {scenario_narrative}
+                import difflib, re
 
-                [가능한 선택지]
-                {options_text}
+                def _norm(s: str) -> str:
+                    return re.sub(r"\s+", " ", (s or "").strip().lower())
 
-                [플레이어 입력]
-                {choice}
+                choice_norm = _norm(choice)
+                best_idx = None
+                best_ratio = 0.0
+                for i, act in enumerate(actions):
+                    r = difflib.SequenceMatcher(None, choice_norm, _norm(act)).ratio()
+                    if r > best_ratio:
+                        best_ratio = r
+                        best_idx = i
 
-                플레이어의 입력이 위 [가능한 선택지] 중 어느 것과 가장 유사한지 판단해.
-                1. 선택지와 의미가 유사하면 해당 번호(0, 1, 2...)를 반환해.
-                2. 만약 선택지에 없는 돌발 행동이거나, 적대적인 행동, 혹은 전혀 다른 행동이라면 "UNEXPECTED"라고 반환해.
+                # Hostile / clearly out-of-scope keywords (Korean only)
+                hostile_kw = [
+                    "공격",
+                    "죽",
+                    "찔",
+                    "불태",
+                    "파괴",
+                    "살해",
+                    "도둑",
+                    "훔치",
+                    "팬다",
+                    "좆",
+                    "썅",
+                ]
 
-                오직 숫자 혹은 "UNEXPECTED" 만 출력해.
-                """
-                # 분류 실행
-                try:
-                    class_response = llm.invoke(
-                        [HumanMessage(content=classification_prompt)]
+                contains_hostile = any(kw in choice_norm for kw in hostile_kw)
+
+                if best_ratio >= 0.60 and best_idx is not None:
+                    idx = best_idx
+                    selected = choices[idx]
+                    print(
+                        f"[DEBUG] FUZZY_SELECTED idx={idx} ratio={best_ratio}: {selected}"
                     )
-                    class_result = class_response.content.strip()
-                    print(f"[DEBUG] Event Classification Result: {class_result}")
+                    matched_action = selected.get("action")
+                    r = (
+                        selected.get("reward_id")
+                        or selected.get("rewardId")
+                        or selected.get("reward")
+                    )
+                    reward_id = r
+                    p = (
+                        selected.get("penalty_id")
+                        or selected.get("penaltyId")
+                        or selected.get("penalty")
+                    )
+                    penalty_id = p
+                elif best_ratio < 0.35 and contains_hostile:
+                    # clearly out-of-scope / hostile: unexpected
+                    is_unexpected = True
+                else:
+                    # use LLM fallback for ambiguous cases
+                    classification_prompt = f"""
+                    [상황]
+                    {scenario_narrative}
 
-                    if class_result.isdigit():
-                        idx = int(class_result)
-                        if 0 <= idx < len(choices):
-                            selected = choices[idx]
-                            matched_action = selected.get("action")
+                    [가능한 선택지]
+                    {options_text}
+
+                    [플레이어 입력]
+                    {choice}
+
+                    플레이어의 입력이 위 [가능한 선택지] 중 어느 것과 가장 유사한지 판단해.
+                    1. 선택지와 의미가 유사하면 해당 번호(0, 1, 2...)를 반환해.
+                    2. 만약 선택지에 없는 돌발 행동이거나, 적대적인 행동, 혹은 전혀 다른 행동이라면 "UNEXPECTED"라고 반환해.
+
+                    오직 숫자 혹은 "UNEXPECTED" 만 출력해.
+                    """
+                    try:
+                        class_response = llm.invoke(
+                            [HumanMessage(content=classification_prompt)]
+                        )
+                        class_result = class_response.content.strip()
+                        print(f"[DEBUG] Event Classification Result: {class_result}")
+
+                        if class_result.isdigit():
+                            idx = int(class_result)
+                            if 0 <= idx < len(choices):
+                                selected = choices[idx]
+                                print(
+                                    f"[DEBUG] SELECTED_CHOICE (idx={idx}): {selected}"
+                                )
+                                matched_action = selected.get("action")
+                                r = (
+                                    selected.get("reward_id")
+                                    or selected.get("rewardId")
+                                    or selected.get("reward")
+                                )
+                                print(f"[DEBUG] EXTRACTED_REWARD_RAW: {r}")
+                                reward_id = r
+                                p = (
+                                    selected.get("penalty_id")
+                                    or selected.get("penaltyId")
+                                    or selected.get("penalty")
+                                )
+                                print(f"[DEBUG] EXTRACTED_PENALTY_RAW: {p}")
+                                penalty_id = p
+                            else:
+                                is_unexpected = True
                         else:
                             is_unexpected = True
-                    else:
+                    except Exception as e:
+                        print(f"[ERROR] 분류 중 오류 발생: {e}")
                         is_unexpected = True
-                except Exception as e:
-                    print(f"[ERROR] 분류 중 오류 발생: {e}")
-                    is_unexpected = True
 
             # 결과 서술 생성
             if is_unexpected:
@@ -1349,9 +1595,38 @@ class DungeonService:
             response = llm.invoke([HumanMessage(content=prompt)])
             outcome = response.content
 
+            reward_payload = normalize_reward_payload(reward_id)
+            penalty_payload = normalize_penalty_payload(penalty_id)
+
+            from agents.dungeon.event.event_rewards_penalties import (
+                select_best_reward,
+                select_best_penalty,
+            )
+
+            if is_unexpected:
+                if reward_payload is None:
+                    reward_payload = select_best_reward(
+                        reward_id, matched_action, scenario_narrative
+                    )
+                if penalty_payload is None:
+                    penalty_payload = select_best_penalty(
+                        penalty_id, matched_action, scenario_narrative
+                    )
+            else:
+                if reward_payload is None and reward_id is not None:
+                    reward_payload = select_best_reward(
+                        reward_id, matched_action, scenario_narrative
+                    )
+                if penalty_payload is None and penalty_id is not None:
+                    penalty_payload = select_best_penalty(
+                        penalty_id, matched_action, scenario_narrative
+                    )
+
             return {
                 "success": True,
                 "outcome": outcome,
+                "rewardId": reward_payload,
+                "penaltyId": penalty_payload,
             }
 
         except Exception as e:
@@ -1399,6 +1674,7 @@ class DungeonService:
             print(f"[DEBUG] event_state: {event_state}")
             event_graph = graph_builder.compile()
             event_result = event_graph.invoke(event_state)
+            print(f"[DEBUG] _create_event_for_floor - event_result: {event_result}")
 
             # 전체 이벤트 JSON 구성
             main_event = event_result.get("selected_main_event", {})
@@ -1413,6 +1689,19 @@ class DungeonService:
                 scenario_narrative = sub_event.get("narrative", "")
                 choices = sub_event.get("choices", [])
                 expected_outcome = sub_event.get("expected_outcome", "")
+
+            if not isinstance(sub_event, dict) or not choices:
+                print(
+                    f"[WARN] _create_event_for_floor - missing sub_event or empty choices for room {room_id}, main_event={main_event}"
+                )
+                scenario_narrative = scenario_narrative or main_event.get(
+                    "scenario_text", ""
+                )
+
+                choices = [
+                    {"action": "조용히 관찰한다", "reward": None, "penalty": None},
+                    {"action": "상호작용을 시도한다", "reward": None, "penalty": None},
+                ]
 
             event_json = {
                 "room_id": room_id,
@@ -1448,6 +1737,10 @@ class DungeonService:
             return False
         try:
             # 리스트인지 단일 객체인지 확인하여 JSON 변환
+            try:
+                self._strip_applied_actions(event_data)
+            except Exception:
+                pass
             event_json_str = (
                 json.dumps(event_data)
                 if isinstance(event_data, (dict, list))
