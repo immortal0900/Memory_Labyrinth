@@ -681,6 +681,8 @@ JSON 배열로 출력하세요:
                     "speaker_name": persona1.get("name", "히로인"),
                     "text": "...",
                     "emotion": 0,  # neutral
+                    "emotion_intensity": 1.0,
+
                 }
             ]
         print(f"[TIMING] NPC-NPC JSON 파싱: {time.time() - t:.3f}s")
