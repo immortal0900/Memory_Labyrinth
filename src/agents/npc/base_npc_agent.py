@@ -50,7 +50,7 @@ class BaseNPCAgent(ABC):
             model_name: 사용할 LLM 모델명 (기본: gpt-4o-mini)
         """
         # 일반 LLM (전체 응답을 한번에 받음)
-        self.llm = init_chat_model(model=model_name, temperature=0.7)
+        self.llm = init_chat_model(model=model_name, temperature=1, max_tokens=150)
 
         # 스트리밍 LLM (토큰 단위로 받음)
         self.streaming_llm = init_chat_model(

@@ -11,7 +11,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pgroonga;
 
 -- 기존 테이블 삭제 (개발용)
-DROP TABLE IF EXISTS user_memories CASCADE;
+-- DROP TABLE IF EXISTS user_memories CASCADE;
 
 -- ============================================
 -- 메인 테이블

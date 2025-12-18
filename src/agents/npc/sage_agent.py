@@ -138,9 +138,11 @@ class SageAgent(BaseNPCAgent):
             model_name: 사용할 LLM 모델명
         """
         super().__init__(model_name)
+        
+        self.llm = init_chat_model(model=model_name, temperature=1, max_tokens=200)
 
         # 의도 분류용 LLM (temperature=0으로 일관된 분류)
-        self.intent_llm = init_chat_model(model=model_name, temperature=0)
+        self.intent_llm = init_chat_model(model=model_name, temperature=0, max_tokens=20)
 
         # LangGraph 빌드 (비스트리밍용)
         self.graph = self._build_graph()

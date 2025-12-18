@@ -13,11 +13,12 @@
 3. [대현자 대화](#3-대현자-대화)
 4. [히로인간 대화](#4-히로인간-대화)
 5. [길드 시스템](#5-길드-시스템)
-6. [스트리밍 응답 처리](#6-스트리밍-응답-처리)
-7. [호출 흐름도](#7-호출-흐름도)
-8. [세션/디버그 API](#8-세션디버그-api)
-9. [에러 응답](#9-에러-응답)
-10. [프로토콜 요약표](#10-프로토콜-요약표)
+6. [TTS 음성 엔드포인트](#6-tts-음성-엔드포인트)
+7. [스트리밍 응답 처리](#7-스트리밍-응답-처리)
+8. [호출 흐름도](#8-호출-흐름도)
+9. [세션/디버그 API](#9-세션디버그-api)
+10. [에러 응답](#10-에러-응답)
+11. [프로토콜 요약표](#11-프로토콜-요약표)
 
 ---
 
@@ -692,7 +693,242 @@ User가 길드에 있는 동안 NPC들이 자동으로 대화합니다.
 
 ---
 
-## 6. 스트리밍 응답 처리
+## 6. TTS 음성 엔드포인트
+
+기존 대화 엔드포인트에 **TTS 음성(audio_base64)**이 포함된 버전입니다.
+
+### 왜 WAV 파일이 아닌 Base64인가?
+
+| 이유 | 설명 |
+|------|------|
+| **JSON 호환성** | HTTP JSON 응답에 바이너리 파일을 직접 포함할 수 없음 |
+| **단일 응답** | 텍스트 + 상태 + 음성을 하나의 JSON으로 전달 가능 |
+| **언리얼 호환** | 언리얼 엔진에서 Base64 디코딩 후 바로 재생 가능 |
+| **전송 안정성** | 텍스트 기반이므로 인코딩 문제 없음 |
+
+### Base64 → WAV 변환 방법
+
+**언리얼 엔진 (C++):**
+```cpp
+// Base64 디코딩
+TArray<uint8> WavData;
+FBase64::Decode(AudioBase64String, WavData);
+
+// USoundWave로 변환 후 재생
+USoundWave* SoundWave = NewObject<USoundWave>();
+// ... WavData를 SoundWave에 로드
+```
+
+**Python (유틸리티 스크립트):**
+```python
+from src.tools.audio.base64_to_wav import save_base64_as_wav
+
+# Base64 문자열을 WAV 파일로 저장
+save_base64_as_wav(audio_base64_string, "output.wav")
+```
+
+---
+
+### 음성 매핑 (NPC별 Typecast Voice)
+
+| NPC ID | 이름 | Typecast Voice |
+|--------|------|----------------|
+| 0 | 사트라 (대현자) | Yubin (유빈) |
+| 1 | 레티아 | Mio (미오) |
+| 2 | 루파메스 | Sora (소라) |
+| 3 | 로코 | Saeron (새론) |
+
+---
+
+### POST /api/npc/heroine/chat/sync/voice
+
+히로인과 대화합니다. **텍스트 응답 + TTS 음성**이 포함됩니다.
+
+#### Request
+
+```json
+{
+    "playerId": "10001",
+    "heroineId": 1,
+    "text": "안녕, 오늘 기분이 어때?"
+}
+```
+
+**Request 필드:**
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| playerId | string | 플레이어 ID |
+| heroineId | int | 대화할 히로인 ID |
+| text | string | 플레이어 메시지 |
+
+#### Response
+
+```json
+{
+    "text": "...별로야.",
+    "emotion": 0,
+    "emotion_intensity": 1.0,
+    "affection": 50,
+    "sanity": 85,
+    "memoryProgress": 35,
+    "audio_base64": "UklGRv..."
+}
+```
+
+**Response 필드:**
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| text | string | NPC 응답 텍스트 |
+| emotion | int | 감정 상태 (0-6) |
+| emotion_intensity | float | 감정 강도 (0.5-2.0, 1.0=보통) |
+| affection | int | 변경된 호감도 |
+| sanity | int | 변경된 정신력 |
+| memoryProgress | int | 변경된 기억 진척도 |
+| audio_base64 | string | WAV 오디오 (Base64 인코딩) |
+
+---
+
+### POST /api/npc/sage/chat/sync/voice
+
+대현자 사트라와 대화합니다. **텍스트 응답 + TTS 음성**이 포함됩니다.
+
+#### Request
+
+```json
+{
+    "playerId": "10001",
+    "text": "이 세계에 대해 알려줘"
+}
+```
+
+**Request 필드:**
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| playerId | string | 플레이어 ID |
+| text | string | 플레이어 메시지 |
+
+#### Response
+
+```json
+{
+    "text": "이 세계는 디멘시움이라는 물질로 인해...",
+    "emotion": 6,
+    "emotion_intensity": 1.2,
+    "scenarioLevel": 3,
+    "infoRevealed": true,
+    "audio_base64": "UklGRv..."
+}
+```
+
+**Response 필드:**
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| text | string | NPC 응답 텍스트 |
+| emotion | int | 감정 상태 (0-6) |
+| emotion_intensity | float | 감정 강도 (0.5-2.0, 1.0=보통) |
+| scenarioLevel | int | 현재 시나리오 레벨 |
+| infoRevealed | bool | 정보 공개 여부 |
+| audio_base64 | string | WAV 오디오 (Base64 인코딩) |
+
+---
+
+### POST /api/npc/heroine-conversation/generate/voice
+
+두 히로인 사이의 대화를 생성합니다. **각 턴마다 개별 TTS 음성**이 포함됩니다.
+
+#### Request
+
+```json
+{
+    "playerId": "player_10001",
+    "heroine1Id": 1,
+    "heroine2Id": 2,
+    "situation": "길드 휴게실에서 쉬는 중",
+    "turnCount": 10
+}
+```
+
+**Request 필드:**
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| playerId | string | O | 플레이어 ID |
+| heroine1Id | int | O | 첫 번째 히로인 ID |
+| heroine2Id | int | O | 두 번째 히로인 ID |
+| situation | string | X | 상황 설명 (없으면 자동 생성) |
+| turnCount | int | X | 대화 턴 수 (기본값 10) |
+
+#### Response
+
+```json
+{
+    "id": "uuid-string",
+    "heroine1_id": 1,
+    "heroine2_id": 2,
+    "situation": "길드 휴게실에서 쉬는 중",
+    "conversation": [
+        {
+            "speaker_id": 1,
+            "speaker_name": "레티아",
+            "text": "...뭐해.",
+            "emotion": 0,
+            "emotion_intensity": 1.0,
+            "audio_base64": "UklGRv..."
+        },
+        {
+            "speaker_id": 2,
+            "speaker_name": "루파메스",
+            "text": "아 심심해서 왔지~",
+            "emotion": 1,
+            "emotion_intensity": 1.5,
+            "audio_base64": "UklGRv..."
+        }
+    ],
+    "importance_score": 5,
+    "timestamp": "2025-01-15T10:30:00.000Z"
+}
+```
+
+**Response 필드:**
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| id | string | 대화 고유 ID (UUID) |
+| heroine1_id | int | 첫 번째 히로인 ID |
+| heroine2_id | int | 두 번째 히로인 ID |
+| situation | string | 대화 상황 |
+| conversation | array | 대화 배열 (각 턴에 음성 포함) |
+| conversation[].speaker_id | int | 발화자 히로인 ID |
+| conversation[].speaker_name | string | 발화자 이름 |
+| conversation[].text | string | 대사 내용 |
+| conversation[].emotion | int | 감정 (0-6) |
+| conversation[].emotion_intensity | float | 감정 강도 (0.5-2.0) |
+| conversation[].audio_base64 | string | WAV 오디오 (Base64 인코딩) |
+| importance_score | int | 중요도 (1-10) |
+| timestamp | string | 생성 시각 (ISO 8601) |
+
+---
+
+### 감정 강도 (emotion_intensity)
+
+TTS 음성의 감정 표현 강도를 조절합니다. Typecast API의 `emotion_intensity` 파라미터에 매핑됩니다.
+
+| 값 | 의미 | 예시 |
+|----|------|------|
+| 0.5 | 약한 감정 | 살짝 기쁜 |
+| 1.0 | 보통 (기본값) | 일반적인 감정 표현 |
+| 1.5 | 강한 감정 | 매우 기쁜 |
+| 2.0 | 극도로 강한 감정 | 환호하며 기뻐하는 |
+
+> **참고**: LLM이 대화 컨텍스트를 분석하여 `emotion_intensity`를 자동으로 결정합니다.
+
+---
+
+## 7. 스트리밍 응답 처리
 
 ### 언리얼에서 SSE 처리 예시 (C++)
 
@@ -741,9 +977,9 @@ Request->ProcessRequest();
 
 ---
 
-## 7. 호출 흐름도
+## 8. 호출 흐름도
 
-### 7-1. 기본 흐름
+### 8-1. 기본 흐름
 
 ```
 [게임 시작]
@@ -782,7 +1018,7 @@ POST /api/npc/guild/leave
     +---> 백그라운드 NPC 대화 중단
 ```
 
-### 7-2. NPC-NPC 대화 인터럽트 흐름
+### 8-2. NPC-NPC 대화 인터럽트 흐름
 
 유저가 NPC-NPC 대화 중간에 끊고 들어왔을 때의 흐름입니다.
 
@@ -826,7 +1062,7 @@ POST /api/npc/heroine-conversation/interrupt
 
 ---
 
-## 8. 세션/디버그 API
+## 9. 세션/디버그 API
 
 ### GET /api/npc/session/{player_id}/{npc_id}
 
@@ -986,7 +1222,7 @@ NPC별 세션 정보를 조회합니다. (디버그용)
 
 ---
 
-## 9. 에러 응답
+## 10. 에러 응답
 
 ### 404 Not Found
 
@@ -1006,16 +1242,19 @@ NPC별 세션 정보를 조회합니다. (디버그용)
 
 ---
 
-## 10. 프로토콜 요약표
+## 11. 프로토콜 요약표
 
 | 기능 | Method | Endpoint | Request Body | Response |
 |------|--------|----------|--------------|----------|
 | 로그인 | POST | /api/npc/login | playerId, scenarioLevel, heroines[] | success, message |
 | 히로인 대화 (스트리밍) | POST | /api/npc/heroine/chat | playerId, heroineId, text | SSE 스트림 |
 | 히로인 대화 (비스트리밍) | POST | /api/npc/heroine/chat/sync | playerId, heroineId, text | text, emotion(int), affection, sanity, memoryProgress |
+| **히로인 대화 + 음성** | POST | /api/npc/heroine/chat/sync/voice | playerId, heroineId, text | text, emotion, emotion_intensity, audio_base64, ... |
 | 대현자 대화 (스트리밍) | POST | /api/npc/sage/chat | playerId, text | SSE 스트림 |
 | 대현자 대화 (비스트리밍) | POST | /api/npc/sage/chat/sync | playerId, text | text, emotion(int), scenarioLevel, infoRevealed |
+| **대현자 대화 + 음성** | POST | /api/npc/sage/chat/sync/voice | playerId, text | text, emotion, emotion_intensity, audio_base64, ... |
 | 히로인간 대화 생성 | POST | /api/npc/heroine-conversation/generate | playerId, heroine1Id, heroine2Id, situation?, turnCount? | id, content, conversation[] |
+| **히로인간 대화 + 음성** | POST | /api/npc/heroine-conversation/generate/voice | playerId, heroine1Id, heroine2Id, situation?, turnCount? | conversation[] (각 턴에 audio_base64 포함) |
 | 히로인간 대화 스트리밍 | POST | /api/npc/heroine-conversation/stream | playerId, heroine1Id, heroine2Id, situation?, turnCount? | SSE 스트림 |
 | 히로인간 대화 조회 | GET | /api/npc/heroine-conversation | player_id, heroine1_id?, heroine2_id?, limit? | conversations[] |
 | 히로인간 대화 인터럽트 | POST | /api/npc/heroine-conversation/interrupt | playerId, conversationId, interruptedTurn, heroine1Id, heroine2Id | success, message, interrupted_turn |
