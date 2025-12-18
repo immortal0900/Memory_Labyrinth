@@ -5,6 +5,7 @@ from agents.dungeon.monster.monster_database import MONSTER_DATABASE, MonsterDat
 from core.game_dto.StatData import StatData
 from typing import Dict, List, Tuple, Any
 import random
+from agents.dungeon.monster.monster_tags import KEYWORD_MAP, keywords_to_tags
 
 llm = init_chat_model(model=LLM.GPT5_MINI, temperature=0.7)
 
@@ -73,15 +74,33 @@ def calculate_combat_score_node(state: DungeonMonsterState) -> DungeonMonsterSta
 
 def _calculate_single_combat_score(stat: StatData) -> float:
     """개별 히로인의 전투력을 계산하는 헬퍼 함수"""
-    hp_score = stat.hp * 0.3
-    attack_score = (stat.strength + stat.dexterity) * 0.4
-    attack_speed_score = stat.attackSpeed * 15.0
-    crit_score = stat.critChance * 0.1
-    skill_damage_score = stat.skillDamageMultiplier * 5.0
+    # 기본 가중치
+    hp_score = stat.hp * 0.25
+    attack_score = (stat.strength + stat.dexterity) * 0.45
+    attack_speed_score = stat.attackSpeed * 12.0
+    crit_score = stat.critChance * 0.12
+    skill_damage_score = stat.skillDamageMultiplier * 6.0
 
-    return (
-        hp_score + attack_score + attack_speed_score + crit_score + skill_damage_score
-    )
+    base = hp_score + attack_score + attack_speed_score + crit_score + skill_damage_score
+
+    # 추가: 스킬/키워드 보정 (stat.keywords: List[str] 또는 stat.skill_keywords)
+    bonus = 0.0
+    hero_keywords = []
+    if hasattr(stat, "keywords") and stat.keywords:
+        hero_keywords = list(stat.keywords)
+    elif hasattr(stat, "skill_keywords") and stat.skill_keywords:
+        hero_keywords = list(stat.skill_keywords)
+
+    # 간단한 규칙: 원거리/근거리/빠른공격 등 키워드에 따라 보정
+    hero_keywords_lower = [k.lower() for k in hero_keywords]
+    if any("fast" in k or "빠른" in k for k in hero_keywords_lower):
+        bonus += attack_speed_score * 0.15
+    if any("strong" in k or "한방" in k or "강한" in k for k in hero_keywords_lower):
+        bonus += attack_score * 0.15
+    if any("many" in k or "타수" in k for k in hero_keywords_lower):
+        bonus += skill_damage_score * 0.1
+
+    return base + bonus
 
 
 def _ensure_stat_dict(stat: dict) -> dict:
@@ -99,6 +118,9 @@ def _ensure_stat_dict(stat: dict) -> dict:
     s.setdefault("attackSpeed", 1.0)
     s.setdefault("critChance", 0.0)
     s.setdefault("skillDamageMultiplier", 1.0)
+    # optional: skill/keyword list provided by caller
+    s.setdefault("keywords", [])
+    s.setdefault("skill_keywords", [])
     return s
 
 
@@ -274,8 +296,23 @@ def select_monsters_node(state: DungeonMonsterState) -> DungeonMonsterState:
     print(f"[select_monsters_node] 회피 조건: {avoid_conditions}")
 
     # 일반 몬스터 선택 (전투방용)
+    # 히로인 키워드 추출 (가능한 경우)
+    hero_tags = []
+    heroine_stat_state = state.get("heroine_stat")
+    if isinstance(heroine_stat_state, list):
+        for hs in heroine_stat_state:
+            if isinstance(hs, dict):
+                hero_tags.extend([str(k).lower() for k in hs.get("keywords", [])])
+    elif isinstance(heroine_stat_state, dict):
+        hero_tags = [str(k).lower() for k in heroine_stat_state.get("keywords", [])]
+
     selected_monsters = _select_monsters_by_strategy(
-        monster_db, target_threat, preferred_tags, monster_preferences, avoid_conditions
+        monster_db,
+        target_threat,
+        preferred_tags,
+        monster_preferences,
+        avoid_conditions,
+        hero_tags,
     )
 
     # 던전 데이터에 몬스터 배치
@@ -339,6 +376,7 @@ def _select_monsters_by_strategy(
     preferred_tags: List[str],
     monster_preferences: List[Dict[str, Any]] = None,
     avoid_conditions: List[str] = None,
+    hero_tags: List[str] = None,
 ) -> List[MonsterData]:
     # 일반 몬스터만 사용 (보스는 별도 처리)
     all_normal_monsters = [m for m in monster_db.values() if m.monster_type == 0]
@@ -371,8 +409,10 @@ def _select_monsters_by_strategy(
     )
 
     while current_threat < min_threat and attempts < max_attempts:
-        # 가중치 기반 몬스터 선택
-        monster = _select_weighted_monster(filtered_monsters, monster_preferences or [])
+        # 가중치 기반 몬스터 선택 (히로인 키워드 반영)
+        monster = _select_weighted_monster(
+            filtered_monsters, monster_preferences or [], hero_tags or []
+        )
 
         # 추가했을 때 max_threat를 너무 초과하지 않는지 확인
         if current_threat + monster.threat_level <= max_threat * 1.2:
@@ -474,10 +514,19 @@ def _matches_preference(monster: MonsterData, preference: Dict[str, Any]) -> boo
 
 
 def _select_weighted_monster(
-    monsters: List[MonsterData], preferences: List[Dict[str, Any]]
+    monsters: List[MonsterData], preferences: List[Dict[str, Any]], hero_tags: List[str]
 ) -> MonsterData:
     """가중치를 고려하여 몬스터 선택"""
     if not preferences:
+        # 히로인 태그가 있으면 약점이 있는 몬스터 우선
+        if hero_tags:
+            candidates = []
+            for m in monsters:
+                m_tags = keywords_to_tags(m.weaknesses) if getattr(m, "weaknesses", None) else []
+                if any(ht.lower() in [t.lower() for t in m_tags] for ht in hero_tags):
+                    candidates.append(m)
+            if candidates:
+                return random.choice(candidates)
         return random.choice(monsters)
 
     # 각 몬스터의 가중치 계산
@@ -487,6 +536,23 @@ def _select_weighted_monster(
         for pref in preferences:
             if _matches_preference(monster, pref):
                 weight += pref.get("weight", 1.0)
+
+        # 히로인 태그와 몬스터 약점/강점으로 가중치 보정
+        try:
+            monster_weak_tags = keywords_to_tags(monster.weaknesses) if getattr(monster, "weaknesses", None) else []
+            monster_strong_tags = keywords_to_tags(monster.strengths) if getattr(monster, "strengths", None) else []
+        except Exception:
+            monster_weak_tags = []
+            monster_strong_tags = []
+
+        if hero_tags:
+            # 약점과 일치하면 가중치 상승
+            if any(ht.lower() in [t.lower() for t in monster_weak_tags] for ht in hero_tags):
+                weight *= 1.6 if weight > 0 else 1.6
+            # 강점과 일치하면 가중치 감소
+            if any(ht.lower() in [t.lower() for t in monster_strong_tags] for ht in hero_tags):
+                weight *= 0.6
+
         weights.append(weight if weight > 0 else 0.1)  # 최소 가중치
 
     # 가중치 기반 랜덤 선택

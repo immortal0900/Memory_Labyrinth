@@ -195,12 +195,23 @@ class DungeonService:
                         )
                     """
                     )
-                    player_id = player_ids[0] if player_ids else None
-                    player_id_str = str(player_id) if player_id is not None else None
-                    result = conn.execute(
-                        check_sql, {"floor": floor_num, "player_id": player_id_str}
-                    )
-                    row = result.fetchone()
+                    # Try to find an existing dungeon row for any provided player id (normalize to str)
+                    row = None
+                    if player_ids:
+                        for pid in player_ids:
+                            try:
+                                pid_str = str(pid) if pid is not None else None
+                                res = conn.execute(
+                                    check_sql,
+                                    {"floor": floor_num, "player_id": pid_str},
+                                )
+                                row = res.fetchone()
+                                if row:
+                                    break
+                            except Exception as _e:
+                                print(
+                                    f"[WARN] entrance select failed for pid={pid}: {_e}"
+                                )
                     if row:
                         floor_id = row[0]
                         existing_event = row[1]
@@ -211,6 +222,8 @@ class DungeonService:
                         existing_event = None
                     floor_ids.append(floor_id)
 
+                    # Always generate events for this floor (do not prefer existing DB event)
+                    events_for_this_floor = []
                     # 이벤트 생성 (이벤트 방이 있는 경우에만)
                     event_rooms = [
                         room
@@ -218,7 +231,6 @@ class DungeonService:
                         if room.get("room_type") == "event"
                         or room.get("event_type", 0) != 0
                     ]
-                    events_for_this_floor = []
                     # 병렬 생성: 메인 이벤트들을 병렬로 요청한 뒤,
                     # 필요 시 각 플레이어에 대해 개인화 이벤트를 병렬로 생성합니다.
                     used_events_snapshot = list(used_events) if used_events else []
@@ -306,32 +318,22 @@ class DungeonService:
                     summary_info_value = self._generate_raw_map_summary(
                         normalized_raw_map
                     )
-                    if not existing_event:
-                        # Strip transient applied_actions before persisting
-                        try:
-                            self._strip_applied_actions(events_for_this_floor)
-                        except Exception:
-                            pass
-                        conn.execute(
-                            text(
-                                "UPDATE dungeon SET event = :event, summary_info = :summary_info WHERE id = :id"
-                            ),
-                            {
-                                "event": json.dumps(events_for_this_floor),
-                                "summary_info": summary_info_value,
-                                "id": floor_id,
-                            },
-                        )
-                    else:
-                        conn.execute(
-                            text(
-                                "UPDATE dungeon SET summary_info = :summary_info WHERE id = :id"
-                            ),
-                            {
-                                "summary_info": summary_info_value,
-                                "id": floor_id,
-                            },
-                        )
+                    # Always overwrite the stored event with the newly generated events_for_this_floor
+                    # Strip transient applied_actions before persisting
+                    try:
+                        self._strip_applied_actions(events_for_this_floor)
+                    except Exception:
+                        pass
+                    conn.execute(
+                        text(
+                            "UPDATE dungeon SET event = :event, summary_info = :summary_info WHERE id = :id"
+                        ),
+                        {
+                            "event": json.dumps(events_for_this_floor),
+                            "summary_info": summary_info_value,
+                            "id": floor_id,
+                        },
+                    )
                     events_list.extend(events_for_this_floor)
         except Exception as e:
             print(f"[ERROR] entrance 트랜잭션 실패: {e}")
@@ -374,12 +376,25 @@ class DungeonService:
                     )
                     """
                 )
-                player_id = str(player_ids[0]) if player_ids else None
-                print(f"[DEBUG] next_floor_entrance: player_id_str={player_id}")
-                result = conn.execute(
-                    check_sql, {"floor": floor_num, "player_id": player_id}
-                )
-                row = result.fetchone()
+                # Try to find existing row by any player in player_ids (string-normalized)
+                row = None
+                if player_ids:
+                    for pid in player_ids:
+                        try:
+                            pid_str = str(pid)
+                            print(
+                                f"[DEBUG] next_floor_entrance: trying player_id={pid_str}"
+                            )
+                            res = conn.execute(
+                                check_sql, {"floor": floor_num, "player_id": pid_str}
+                            )
+                            row = res.fetchone()
+                            if row:
+                                break
+                        except Exception as _e:
+                            print(
+                                f"[WARN] next_floor_entrance select failed for pid={pid}: {_e}"
+                            )
                 print(f"[DEBUG] next_floor_entrance: select row={row}")
                 if row:
                     floor_id = row[0]
@@ -387,6 +402,22 @@ class DungeonService:
                     print(
                         f"[DEBUG] next_floor_entrance: row exists, floor_id={floor_id}"
                     )
+                    # If an event payload already exists in DB for this floor, return it immediately
+                    if existing_event not in [None, "", "{}", "null", []]:
+                        try:
+                            parsed = (
+                                json.loads(existing_event)
+                                if isinstance(existing_event, str)
+                                else existing_event
+                            )
+                        except Exception:
+                            parsed = []
+                        if isinstance(parsed, dict):
+                            parsed = [parsed]
+                        print(
+                            f"[DEBUG] next_floor_entrance: returning existing DB events for floor {floor_num}"
+                        )
+                        return {"floor_id": floor_id, "events": parsed}
                 else:
                     print(
                         f"[DEBUG] next_floor_entrance: inserting new floor {floor_num}"
@@ -512,29 +543,39 @@ class DungeonService:
                 except Exception as _e:
                     print(f"[WARN] attach_in_memory_applications failed: {_e}")
                 summary_info_value = self._generate_raw_map_summary(normalized_raw_map)
-                # event/summary_info만 항상 업데이트, raw_map은 새 row(INSERT)일 때만 저장
 
+                # Strip transient applied_actions before persisting
+                try:
+                    self._strip_applied_actions(events_for_this_floor)
+                except Exception:
+                    pass
+
+                # Always update the dungeon.row with generated events and summary_info
                 if row:
-                    # 기존 row: raw_map은 건드리지 않음
                     conn.execute(
                         text(
                             "UPDATE dungeon SET event = :event, summary_info = :summary_info WHERE id = :id"
                         ),
                         {
-                            "event": json.dumps(events_for_this_floor),
+                            "event": json.dumps(
+                                events_for_this_floor, ensure_ascii=False
+                            ),
                             "summary_info": summary_info_value,
                             "id": floor_id,
                         },
                     )
                 else:
-                    # 새 row: raw_map 포함 전체 저장 (INSERT 내부에서 처리)
                     conn.execute(
                         text(
                             "UPDATE dungeon SET raw_map = :raw_map, event = :event, summary_info = :summary_info WHERE id = :id"
                         ),
                         {
-                            "raw_map": json.dumps(normalized_raw_map),
-                            "event": json.dumps(events_for_this_floor),
+                            "raw_map": json.dumps(
+                                normalized_raw_map, ensure_ascii=False
+                            ),
+                            "event": json.dumps(
+                                events_for_this_floor, ensure_ascii=False
+                            ),
                             "summary_info": summary_info_value,
                             "id": floor_id,
                         },
@@ -677,7 +718,9 @@ class DungeonService:
                         ),
                         "event": (
                             json.dumps(
-                                (lambda e: (self._strip_applied_actions(e), e)[1])(event)
+                                (lambda e: (self._strip_applied_actions(e), e)[1])(
+                                    event
+                                )
                             )
                             if isinstance(event, (dict, list))
                             else event
@@ -891,6 +934,7 @@ class DungeonService:
             ):
                 if drop_key in ev:
                     ev.pop(drop_key, None)
+
     def balance_dungeon(
         self,
         first_player_id: str,
@@ -1007,21 +1051,31 @@ class DungeonService:
                     and isinstance(player_ids_list, list)
                     and len(player_ids_list) > 0
                 ):
-                    first_player_id_str = str(player_ids_list[0])
+                    # Try each provided player id and match against any player column
+                    next_floor_id = None
                     next_dungeon_query = """
-                        SELECT id FROM dungeon 
-                        WHERE floor = :next_floor 
-                        AND player1 = :player1
+                        SELECT id FROM dungeon
+                        WHERE floor = :next_floor
                         AND is_finishing = FALSE
+                        AND (
+                            player1 = :pid OR player2 = :pid OR player3 = :pid OR player4 = :pid
+                        )
                         LIMIT 1
                     """
-                    next_result = conn.execute(
-                        text(next_dungeon_query),
-                        {"next_floor": next_floor, "player1": first_player_id_str},
-                    ).fetchone()
-
-                    if next_result:
-                        next_floor_id = next_result[0]
+                    for pid in player_ids_list:
+                        try:
+                            pid_str = str(pid) if pid is not None else None
+                            next_result = conn.execute(
+                                text(next_dungeon_query),
+                                {"next_floor": next_floor, "pid": pid_str},
+                            ).fetchone()
+                            if next_result:
+                                next_floor_id = next_result[0]
+                                break
+                        except Exception as _e:
+                            print(
+                                f"[WARN] next_floor lookup failed for pid={pid}: {_e}"
+                            )
 
             if not next_floor_id:
                 return {
@@ -1029,10 +1083,31 @@ class DungeonService:
                     "error": f"다음 층({next_floor}층)을 찾을 수 없습니다.",
                 }
 
-            # 다음 층을 위한 raw_map 생성 (현재 층 구조 복사 + 몬스터 초기화)
-            next_floor_raw_map = json.loads(json.dumps(raw_map))  # Deep copy
-            for room in next_floor_raw_map.get("rooms", []):
-                room["monsters"] = []
+            # 다음 층의 raw_map을 DB에서 우선 조회하여 사용
+            next_floor_raw_map = None
+            with self.repo.engine.connect() as conn:
+                next_row = conn.execute(
+                    text("SELECT raw_map FROM dungeon WHERE id = :id"),
+                    {"id": next_floor_id},
+                ).fetchone()
+                if next_row:
+                    next_raw_val = next_row[0]
+                    if next_raw_val not in [None, "", "{}", "null"]:
+                        try:
+                            next_floor_raw_map = (
+                                json.loads(next_raw_val)
+                                if isinstance(next_raw_val, str)
+                                else next_raw_val
+                            )
+                        except Exception:
+                            # 파싱 실패 시 무시하고 fallback 사용
+                            next_floor_raw_map = None
+
+            # DB에 다음 층 raw_map이 없으면 현재 층 구조를 복사해 몬스터만 초기화하여 사용
+            if not next_floor_raw_map:
+                next_floor_raw_map = json.loads(json.dumps(raw_map))  # Deep copy
+                for room in next_floor_raw_map.get("rooms", []):
+                    room["monsters"] = []
 
             agent_state = {
                 "dungeon_base_data": {
@@ -1149,7 +1224,9 @@ class DungeonService:
 
             return {
                 "success": True,
-                "dungeon_id": dungeon_id,  # 요청한 던전 ID (현재 층)
+                "dungeon_id": next_floor_id,  # 밸런싱된 던전 ID (다음 층)
+                "balanced_floor": next_floor,
+                "source_dungeon_id": dungeon_id,  # 요청한 던전 ID (현재 층)
                 "agent_result": final_json,
                 "summary": summary_info,
                 "monster_placements": monster_placements,
@@ -1595,6 +1672,34 @@ class DungeonService:
             response = llm.invoke([HumanMessage(content=prompt)])
             outcome = response.content
 
+            # If reward/penalty ids are missing, attempt to extract tokens from the matched action text
+            if (reward_id is None or penalty_id is None) and matched_action:
+                try:
+                    import re
+
+                    tokens = re.findall(r"(drop_[a-zA-Z0-9_]+)", matched_action)
+                    for t in tokens:
+                        tl = t.lower()
+                        # heuristics: cursed tokens -> penalty, others -> reward
+                        if (
+                            ("cursed" in tl)
+                            or ("curse" in tl)
+                            or ("drop_cursed" in tl)
+                            or ("pen_" in tl)
+                            or ("penalty" in tl)
+                        ):
+                            if penalty_id is None:
+                                penalty_id = t
+                        else:
+                            if reward_id is None:
+                                reward_id = t
+                    if tokens:
+                        print(
+                            f"[DEBUG] select_event - extracted tokens from action: {tokens}, reward_id={reward_id}, penalty_id={penalty_id}"
+                        )
+                except Exception as e:
+                    print(f"[WARN] select_event - token extraction failed: {e}")
+
             reward_payload = normalize_reward_payload(reward_id)
             penalty_payload = normalize_penalty_payload(penalty_id)
 
@@ -1622,11 +1727,52 @@ class DungeonService:
                         penalty_id, matched_action, scenario_narrative
                     )
 
+            # Ensure reward/penalty payloads expose full change_stat/item/monster info
+            try:
+                from agents.dungeon.event.event_rewards_penalties import (
+                    get_reward_dict,
+                    get_penalty_dict,
+                    _to_client_payload,
+                )
+
+                def _resolve_payload(p):
+                    if p is None:
+                        return None
+                    # list of payloads (penalties may be list)
+                    if isinstance(p, list):
+                        out = []
+                        for it in p:
+                            if isinstance(it, dict) and "id" in it and len(it) == 1:
+                                r = get_reward_dict(it["id"]) or get_penalty_dict(
+                                    it["id"]
+                                )
+                                out.append(_to_client_payload(r) if r else it)
+                            else:
+                                out.append(it)
+                        return out
+                    # dict with only id -> try to expand
+                    if isinstance(p, dict) and "id" in p and len(p) == 1:
+                        rid = p["id"]
+                        r = get_reward_dict(rid)
+                        if r:
+                            return _to_client_payload(r)
+                        rp = get_penalty_dict(rid)
+                        if rp:
+                            return _to_client_payload(rp)
+                        return p
+                    return p
+
+                reward_full = _resolve_payload(reward_payload)
+                penalty_full = _resolve_payload(penalty_payload)
+            except Exception:
+                reward_full = reward_payload
+                penalty_full = penalty_payload
+
             return {
                 "success": True,
                 "outcome": outcome,
-                "rewardId": reward_payload,
-                "penaltyId": penalty_payload,
+                "rewardId": reward_full,
+                "penaltyId": penalty_full,
             }
 
         except Exception as e:

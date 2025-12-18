@@ -866,45 +866,115 @@ def parse_expected_outcome_to_choices(eo_text: str) -> List[Dict[str, Any]]:
     if not eo_text or not isinstance(eo_text, str):
         return []
 
-    parts = re.split(r"\s*(?:\d+\)|\d+\.)\s*", eo_text)
+    # Split into numbered or newline-separated candidate outcomes
+    parts = re.split(r"\s*(?:\d+\)|\d+\.|\n\- )\s*", eo_text)
     choices: List[Dict[str, Any]] = []
+
+    # token pattern for internal ids like drop_accessory_100, pen_spawn_monster_0, hp_down_10
+    token_pat = re.compile(r"([A-Za-z0-9_]+(?:_[A-Za-z0-9_]+)*)")
 
     for part in parts:
         part = part.strip()
         if not part:
             continue
 
-        first_line = part.splitlines()[0].strip()
-        action_label = first_line if first_line else None
-
-        parens = re.findall(r"\(([^)]+)\)", part)
-        candidate = None
-        for p in parens:
-            m = re.search(r"([A-Za-z0-9_]+(?:_[A-Za-z0-9_]+)*)", p)
-            if m:
-                candidate = m.group(1)
-                break
+        # action label — prefer text before ':' or first sentence
+        if ":" in part:
+            action_label = part.split(":", 1)[0].strip()
+        else:
+            # first sentence ending with '.' or ')' or end
+            m_sent = re.match(r"^(.{1,120}?)[\.|\)|$]", part)
+            action_label = (
+                m_sent.group(1).strip() if m_sent and m_sent.group(1) else part[:80]
+            )
 
         reward_id = None
         penalty_id = None
-        if candidate:
-            low = candidate.lower()
-            penalty_indicators = (
-                "damage",
-                "hp",
-                "decrease",
-                "debuff",
-                "penalty",
-                "slow",
-                "weakness",
-                "instant",
-                "curse",
-                "attack",
-            )
-            if any(k in low for k in penalty_indicators):
-                penalty_id = candidate
+
+        # 1) Look for explicit token patterns anywhere in the part
+        tokens = token_pat.findall(part)
+        # Heuristic classification of tokens
+        for t in tokens:
+            tl = t.lower()
+            # skip generic Korean words captured by token_pat by requiring underscore or known prefixes
+            if not (
+                "_" in tl
+                or tl.startswith("drop")
+                or tl.startswith("pen")
+                or tl.startswith("hp")
+                or tl.startswith("atk")
+                or tl.startswith("spawn")
+            ):
+                continue
+
+            if (
+                any(
+                    k in tl
+                    for k in (
+                        "cursed",
+                        "curse",
+                        "pen_",
+                        "penalty",
+                        "hp_down",
+                        "down",
+                        "atk_down",
+                        "spawn_pen",
+                        "pen_spawn",
+                    )
+                )
+                or tl.startswith("pen_")
+                or tl.startswith("penalty_")
+            ):
+                if penalty_id is None:
+                    penalty_id = t
+            elif (
+                any(
+                    k in tl
+                    for k in (
+                        "drop_",
+                        "dropaccessory",
+                        "dropweapon",
+                        "drop_item",
+                        "drop",
+                        "spawn",
+                        "drop_accessory",
+                        "drop_weapon",
+                    )
+                )
+                or tl.startswith("drop_")
+                or tl.startswith("spawn_")
+            ):
+                if reward_id is None:
+                    reward_id = t
             else:
-                reward_id = candidate
+                # fallback: treat as reward first
+                if reward_id is None:
+                    reward_id = t
+
+        # 2) If no explicit tokens, try to identify text markers indicating reward/penalty
+        if reward_id is None and penalty_id is None:
+            low = part.lower()
+            # simple keyword heuristics
+            if any(
+                k in low
+                for k in ("획득", "획득 가능", "드랍", "얻", "보상", "획득함", "획득할")
+            ):
+                # mark as generic reward placeholder
+                reward_id = "drop_item_unknown"
+            if any(
+                k in low
+                for k in (
+                    "저주",
+                    "감염",
+                    "hp -",
+                    "hp -10",
+                    "피해",
+                    "피해를",
+                    "패널티",
+                    "벌",
+                )
+            ):
+                penalty_id = penalty_id or "hp_down_10"
 
         choices.append(
             {
