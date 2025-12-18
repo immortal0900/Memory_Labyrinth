@@ -1,0 +1,3 @@
+NPC: heroine_lupames
+Emotion: 2
+Text: 하, 별똥별? 재미있네! 나도 봤어. 저기 저 별들 보면서, 토끼가 뛰노는 상상해봐. 귀엽지 않아?

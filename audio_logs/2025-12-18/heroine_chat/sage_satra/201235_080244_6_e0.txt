@@ -1,0 +1,3 @@
+NPC: sage_satra
+Emotion: 0
+Text: 아직 먹지 않았습니다. 왜 물어보시나요?

@@ -400,6 +400,7 @@ class SageAgent(BaseNPCAgent):
     "thought": "(내면의 생각 - 플레이어에게 보이지 않음)",
     "text": "(실제 대화 내용)",
     "emotion": "neutral|joy|fun|sorrow|angry|surprise|mysterious",
+    "emotion_intensity": 0.5~2.0 사이의 실수 (0.5=약한 감정, 1.0=보통, 1.5=강함, 2.0=극도로 강함),
     "info_revealed": true 또는 false
 }"""
 
@@ -723,14 +724,17 @@ class SageAgent(BaseNPCAgent):
                 "thought": "",
                 "text": response.content,
                 "emotion": "neutral",
+                "emotion_intensity": 1.0,
                 "info_revealed": False,
             }
 
         emotion_str = result.get("emotion", "neutral")
+        emotion_intensity = result.get("emotion_intensity", 1.0)
         print(f"[TIMING] generate 노드 총합: {time.time() - total_start:.3f}s")
         return {
             "response_text": result.get("text", ""),
             "emotion": sage_emotion_to_int(emotion_str),
+            "emotion_intensity": emotion_intensity,
             "info_revealed": result.get("info_revealed", False),
         }
 

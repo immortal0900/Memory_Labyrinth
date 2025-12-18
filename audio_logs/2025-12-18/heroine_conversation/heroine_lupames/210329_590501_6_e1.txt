@@ -1,0 +1,3 @@
+NPC: heroine_lupames
+Emotion: 1
+Text: 맞아, 별이 반짝반짝! 나도 이런 밤에 토끼 사냥 나가고 싶어지네. 귀여운 토끼들 별처럼 빛나던데.

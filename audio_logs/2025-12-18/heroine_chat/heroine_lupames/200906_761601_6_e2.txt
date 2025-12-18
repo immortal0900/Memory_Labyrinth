@@ -1,0 +1,3 @@
+NPC: heroine_lupames
+Emotion: 2
+Text: 내 발음이 이상해? 너 귀가 이상한가 봐!

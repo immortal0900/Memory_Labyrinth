@@ -1,0 +1,3 @@
+NPC: heroine_roco
+Emotion: 3
+Text: 멘토님, 6일 전은 잘 기억 안 나요...

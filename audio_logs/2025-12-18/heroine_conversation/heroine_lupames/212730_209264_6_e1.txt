@@ -1,0 +1,3 @@
+NPC: heroine_lupames
+Emotion: 1
+Text: 영원? 하, 그럼 매일 별 보고 먹자! 네 어깨 기대도 돼? 시끄러운 나지만, 이 순간은 조용히 즐기자.

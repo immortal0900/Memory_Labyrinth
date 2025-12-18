@@ -1,0 +1,3 @@
+NPC: heroine_lupames
+Emotion: 2
+Text: 아까? 최고 동료라며! 그게 이상해?

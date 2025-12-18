@@ -1,0 +1,3 @@
+NPC: heroine_lupames
+Emotion: 1
+Text: 레티아? 최고의 동료야!

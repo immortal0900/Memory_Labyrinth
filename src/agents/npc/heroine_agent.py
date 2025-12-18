@@ -553,7 +553,8 @@ class HeroineAgent(BaseNPCAgent):
 {
     "thought": "(내면의 생각 - 플레이어에게 보이지 않음)",
     "text": "(실제 대화 내용)",
-    "emotion": "neutral|joy|fun|sorrow|angry|surprise|mysterious"
+    "emotion": "neutral|joy|fun|sorrow|angry|surprise|mysterious",
+    "emotion_intensity": 0.5~2.0 사이의 실수 (0.5=약한 감정, 1.0=보통, 1.5=강함, 2.0=극도로 강함)
 }"""
 
         time_since_last_chat = self.get_time_since_last_chat(state["player_id"], npc_id)
@@ -661,7 +662,7 @@ class HeroineAgent(BaseNPCAgent):
 
         # 변화량
         affection_delta = context.get("affection_delta", 0)
-        sanity_delta = affection_delta 
+        sanity_delta = affection_delta
         # if affection_delta > 0 else 0
 
         print(
@@ -980,14 +981,21 @@ class HeroineAgent(BaseNPCAgent):
                 content = content.split("```")[1].split("```")[0]
             result = json.loads(content.strip())
         except (json.JSONDecodeError, IndexError):
-            result = {"thought": "", "text": response.content, "emotion": "neutral"}
+            result = {
+                "thought": "",
+                "text": response.content,
+                "emotion": "neutral",
+                "emotion_intensity": 1.0,
+            }
 
         emotion_str = result.get("emotion", "neutral")
+        emotion_intensity = result.get("emotion_intensity", 1.0)
         print(f"[TIMING] generate 노드 총합: {time.time() - total_start:.3f}s")
         return {
             "response_text": result.get("text", ""),
             "emotion": heroine_emotion_to_int(emotion_str),
             "emotion_str": emotion_str,
+            "emotion_intensity": emotion_intensity,
         }
 
     async def _post_process_node(self, state: HeroineState) -> dict:

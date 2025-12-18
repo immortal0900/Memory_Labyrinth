@@ -1,0 +1,3 @@
+NPC: heroine_retia
+Emotion: 0
+Text: 별들이 정말 밝네요. 이런 밤하늘을 보니, 평범한 일상이 소중하다는 생각이 들어요.

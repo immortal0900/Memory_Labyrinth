@@ -1,0 +1,3 @@
+NPC: heroine_retia
+Emotion: 0
+Text: 루파메스는 제 동료예요. 왜요?

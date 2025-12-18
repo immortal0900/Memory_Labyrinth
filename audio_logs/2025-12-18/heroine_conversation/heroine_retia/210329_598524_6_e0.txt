@@ -1,0 +1,3 @@
+NPC: heroine_retia
+Emotion: 0
+Text: 먹는 거... 맞아요. 오늘 저녁 메뉴가 생각나네요. 당신이랑 먹으면 더 맛있을 것 같아요.

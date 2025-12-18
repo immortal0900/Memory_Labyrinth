@@ -1,0 +1,3 @@
+NPC: heroine_retia
+Emotion: 0
+Text: 맛있는 거... 좋아요. 먹여주는 것도요. 당신처럼 시끄러운 동료가 있어서 다행이에요.
