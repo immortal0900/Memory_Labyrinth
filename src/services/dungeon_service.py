@@ -134,6 +134,25 @@ class DungeonService:
                         normalized_heroines.append(
                             _normalize_heroine_data(heroine_data)
                         )
+                # 동일 플레이어로 재입장 시 이전 미완료 던전이 DB에 남아있으면
+                # 충돌을 방지하기 위해 모두 완료 처리(is_finishing = TRUE) 합니다.
+                if player_ids:
+                    for _pid in player_ids:
+                        try:
+                            conn.execute(
+                                text(
+                                    """
+                                    UPDATE dungeon
+                                    SET is_finishing = TRUE
+                                    WHERE is_finishing = FALSE
+                                    AND (player1 = :pid OR player2 = :pid OR player3 = :pid OR player4 = :pid)
+                                    """
+                                ),
+                                {"pid": str(_pid)},
+                            )
+                        except Exception as e:
+                            # 실패 시 로그만 남기고 진행 (DB 상태에 따라 다르게 처리 가능)
+                            print(f"[WARN] failed to mark previous dungeons finished for pid={_pid}: {e}")
                 for idx, raw_map in enumerate(raw_maps):
                     floor_num = idx + 1
                     if floor_num > 2:
