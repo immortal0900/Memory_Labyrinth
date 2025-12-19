@@ -540,6 +540,252 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
 
         return results
 
+    # ============================================
+    # 시간 기반 기억 조회 메서드
+    # ============================================
+
+    def get_valid_memories_sync(
+        self, player_id: str, npc_id: int, limit: int = 50
+    ) -> List[dict]:
+        """현재 유효한 기억만 조회
+
+        Args:
+            player_id: 플레이어 ID
+            npc_id: NPC ID (숫자)
+            limit: 최대 결과 수
+
+        Returns:
+            기억 dict 리스트
+        """
+        heroine_id = NPC_ID_TO_HEROINE.get(npc_id, "letia")
+
+        sql = text(
+            """
+            SELECT * FROM get_valid_memories(:player_id, :heroine_id, :limit)
+        """
+        )
+
+        results = []
+
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                sql,
+                {"player_id": player_id, "heroine_id": heroine_id, "limit": limit},
+            )
+
+            for row in result:
+                results.append(
+                    {
+                        "memory": row.content,
+                        "text": row.content,
+                        "metadata": {
+                            "speaker": row.speaker,
+                            "subject": row.subject,
+                            "content_type": row.content_type,
+                        },
+                    }
+                )
+
+        return results
+
+    def get_memories_at_point_sync(
+        self, player_id: str, npc_id: int, point_in_time: datetime, limit: int = 50
+    ) -> List[dict]:
+        """특정 시점에 유효했던 기억 조회
+
+        Args:
+            player_id: 플레이어 ID
+            npc_id: NPC ID (숫자)
+            point_in_time: 조회 시점
+            limit: 최대 결과 수
+
+        Returns:
+            기억 dict 리스트
+        """
+        heroine_id = NPC_ID_TO_HEROINE.get(npc_id, "letia")
+
+        sql = text(
+            """
+            SELECT * FROM get_memories_at_point(:player_id, :heroine_id, :point_in_time, :limit)
+        """
+        )
+
+        results = []
+
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                sql,
+                {
+                    "player_id": player_id,
+                    "heroine_id": heroine_id,
+                    "point_in_time": point_in_time,
+                    "limit": limit,
+                },
+            )
+
+            for row in result:
+                results.append(
+                    {
+                        "memory": row.content,
+                        "text": row.content,
+                        "metadata": {
+                            "speaker": row.speaker,
+                            "subject": row.subject,
+                            "content_type": row.content_type,
+                        },
+                    }
+                )
+
+        return results
+
+    def get_preference_history_sync(
+        self, player_id: str, npc_id: int, keyword: str
+    ) -> List[dict]:
+        """취향 변화 이력 조회
+
+        Args:
+            player_id: 플레이어 ID
+            npc_id: NPC ID (숫자)
+            keyword: 검색 키워드
+
+        Returns:
+            기억 dict 리스트 (시간순)
+        """
+        heroine_id = NPC_ID_TO_HEROINE.get(npc_id, "letia")
+
+        sql = text(
+            """
+            SELECT * FROM get_preference_history(:player_id, :heroine_id, :keyword)
+        """
+        )
+
+        results = []
+
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                sql,
+                {"player_id": player_id, "heroine_id": heroine_id, "keyword": keyword},
+            )
+
+            for row in result:
+                results.append(
+                    {
+                        "memory": row.content,
+                        "text": row.content,
+                        "valid_at": row.valid_at,
+                        "invalid_at": row.invalid_at,
+                        "metadata": {
+                            "speaker": row.speaker,
+                            "subject": row.subject,
+                            "content_type": row.content_type,
+                        },
+                    }
+                )
+
+        return results
+
+    def get_recent_memories_sync(
+        self, player_id: str, npc_id: int, days: int, limit: int = 50
+    ) -> List[dict]:
+        """최근 N일 동안 생성된 기억 조회
+
+        Args:
+            player_id: 플레이어 ID
+            npc_id: NPC ID (숫자)
+            days: 최근 N일
+            limit: 최대 결과 수
+
+        Returns:
+            기억 dict 리스트
+        """
+        heroine_id = NPC_ID_TO_HEROINE.get(npc_id, "letia")
+
+        sql = text(
+            """
+            SELECT * FROM get_recent_memories(:player_id, :heroine_id, :days, :limit)
+        """
+        )
+
+        results = []
+
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                sql,
+                {
+                    "player_id": player_id,
+                    "heroine_id": heroine_id,
+                    "days": days,
+                    "limit": limit,
+                },
+            )
+
+            for row in result:
+                results.append(
+                    {
+                        "memory": row.content,
+                        "text": row.content,
+                        "created_at": row.created_at,
+                        "metadata": {
+                            "speaker": row.speaker,
+                            "subject": row.subject,
+                            "content_type": row.content_type,
+                        },
+                    }
+                )
+
+        return results
+
+    def get_memories_days_ago_sync(
+        self, player_id: str, npc_id: int, days_ago: int, limit: int = 50
+    ) -> List[dict]:
+        """N일 전에 했던 이야기 조회
+
+        Args:
+            player_id: 플레이어 ID
+            npc_id: NPC ID (숫자)
+            days_ago: N일 전 (1=어제, 2=그제)
+            limit: 최대 결과 수
+
+        Returns:
+            기억 dict 리스트
+        """
+        heroine_id = NPC_ID_TO_HEROINE.get(npc_id, "letia")
+
+        sql = text(
+            """
+            SELECT * FROM get_memories_days_ago(:player_id, :heroine_id, :days_ago, :limit)
+        """
+        )
+
+        results = []
+
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                sql,
+                {
+                    "player_id": player_id,
+                    "heroine_id": heroine_id,
+                    "days_ago": days_ago,
+                    "limit": limit,
+                },
+            )
+
+            for row in result:
+                results.append(
+                    {
+                        "memory": row.content,
+                        "text": row.content,
+                        "created_at": row.created_at,
+                        "metadata": {
+                            "speaker": row.speaker,
+                            "subject": row.subject,
+                            "content_type": row.content_type,
+                        },
+                    }
+                )
+
+        return results
+
 
 # 싱글톤 인스턴스
 user_memory_manager = UserMemoryManager()

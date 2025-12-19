@@ -224,3 +224,208 @@ CREATE TRIGGER trigger_user_memories_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at();
 
+-- ============================================
+-- 시간 기반 기억 조회 함수들
+-- ============================================
+
+-- 1. 현재 유효한 사실만 조회
+CREATE OR REPLACE FUNCTION get_valid_memories(
+    p_player_id TEXT,
+    p_heroine_id TEXT,
+    p_limit INTEGER DEFAULT 50
+) RETURNS TABLE (
+    id UUID,
+    player_id TEXT,
+    heroine_id TEXT,
+    speaker TEXT,
+    subject TEXT,
+    content TEXT,
+    content_type TEXT,
+    importance INT,
+    valid_at TIMESTAMPTZ,
+    invalid_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ
+)
+LANGUAGE SQL AS $$
+    SELECT 
+        m.id,
+        m.player_id,
+        m.heroine_id,
+        m.speaker,
+        m.subject,
+        m.content,
+        m.content_type,
+        m.importance,
+        m.valid_at,
+        m.invalid_at,
+        m.created_at
+    FROM user_memories m
+    WHERE m.player_id = p_player_id
+      AND m.heroine_id = p_heroine_id
+      AND m.invalid_at IS NULL
+    ORDER BY m.created_at DESC
+    LIMIT p_limit;
+$$;
+
+-- 2. 특정 시점에 유효했던 사실 조회 (Bi-temporal)
+CREATE OR REPLACE FUNCTION get_memories_at_point(
+    p_player_id TEXT,
+    p_heroine_id TEXT,
+    p_point_in_time TIMESTAMPTZ,
+    p_limit INTEGER DEFAULT 50
+) RETURNS TABLE (
+    id UUID,
+    player_id TEXT,
+    heroine_id TEXT,
+    speaker TEXT,
+    subject TEXT,
+    content TEXT,
+    content_type TEXT,
+    importance INT,
+    valid_at TIMESTAMPTZ,
+    invalid_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ
+)
+LANGUAGE SQL AS $$
+    SELECT 
+        m.id,
+        m.player_id,
+        m.heroine_id,
+        m.speaker,
+        m.subject,
+        m.content,
+        m.content_type,
+        m.importance,
+        m.valid_at,
+        m.invalid_at,
+        m.created_at
+    FROM user_memories m
+    WHERE m.player_id = p_player_id
+      AND m.heroine_id = p_heroine_id
+      AND m.valid_at <= p_point_in_time
+      AND (m.invalid_at IS NULL OR m.invalid_at > p_point_in_time)
+    ORDER BY m.created_at DESC
+    LIMIT p_limit;
+$$;
+
+-- 3. 취향 변화 이력 조회 (content 패턴 기반)
+CREATE OR REPLACE FUNCTION get_preference_history(
+    p_player_id TEXT,
+    p_heroine_id TEXT,
+    p_keyword TEXT
+) RETURNS TABLE (
+    id UUID,
+    player_id TEXT,
+    heroine_id TEXT,
+    speaker TEXT,
+    subject TEXT,
+    content TEXT,
+    content_type TEXT,
+    importance INT,
+    valid_at TIMESTAMPTZ,
+    invalid_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ
+)
+LANGUAGE SQL AS $$
+    SELECT 
+        m.id,
+        m.player_id,
+        m.heroine_id,
+        m.speaker,
+        m.subject,
+        m.content,
+        m.content_type,
+        m.importance,
+        m.valid_at,
+        m.invalid_at,
+        m.created_at
+    FROM user_memories m
+    WHERE m.player_id = p_player_id
+      AND m.heroine_id = p_heroine_id
+      AND m.content &@~ p_keyword
+    ORDER BY m.valid_at ASC;
+$$;
+
+-- 4. 최근 N일 동안 생성된 기억
+CREATE OR REPLACE FUNCTION get_recent_memories(
+    p_player_id TEXT,
+    p_heroine_id TEXT,
+    p_days INTEGER,
+    p_limit INTEGER DEFAULT 50
+) RETURNS TABLE (
+    id UUID,
+    player_id TEXT,
+    heroine_id TEXT,
+    speaker TEXT,
+    subject TEXT,
+    content TEXT,
+    content_type TEXT,
+    importance INT,
+    valid_at TIMESTAMPTZ,
+    invalid_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ
+)
+LANGUAGE SQL AS $$
+    SELECT 
+        m.id,
+        m.player_id,
+        m.heroine_id,
+        m.speaker,
+        m.subject,
+        m.content,
+        m.content_type,
+        m.importance,
+        m.valid_at,
+        m.invalid_at,
+        m.created_at
+    FROM user_memories m
+    WHERE m.player_id = p_player_id
+      AND m.heroine_id = p_heroine_id
+      AND m.created_at >= NOW() - (p_days || ' days')::INTERVAL
+      AND m.invalid_at IS NULL
+    ORDER BY m.created_at DESC
+    LIMIT p_limit;
+$$;
+
+-- 5. N일 전에 했던 이야기 조회
+CREATE OR REPLACE FUNCTION get_memories_days_ago(
+    p_player_id TEXT,
+    p_heroine_id TEXT,
+    p_days_ago INTEGER,
+    p_limit INTEGER DEFAULT 50
+) RETURNS TABLE (
+    id UUID,
+    player_id TEXT,
+    heroine_id TEXT,
+    speaker TEXT,
+    subject TEXT,
+    content TEXT,
+    content_type TEXT,
+    importance INT,
+    valid_at TIMESTAMPTZ,
+    invalid_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ
+)
+LANGUAGE SQL AS $$
+    SELECT 
+        m.id,
+        m.player_id,
+        m.heroine_id,
+        m.speaker,
+        m.subject,
+        m.content,
+        m.content_type,
+        m.importance,
+        m.valid_at,
+        m.invalid_at,
+        m.created_at
+    FROM user_memories m
+    WHERE m.player_id = p_player_id
+      AND m.heroine_id = p_heroine_id
+      AND m.created_at >= NOW() - (p_days_ago || ' days')::INTERVAL
+      AND m.created_at < NOW() - ((p_days_ago - 1) || ' days')::INTERVAL
+      AND m.invalid_at IS NULL
+    ORDER BY m.created_at DESC
+    LIMIT p_limit;
+$$;
+

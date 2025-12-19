@@ -174,25 +174,6 @@ class HeroineHeroineAgent:
         }
         return relationships.get((heroine1_id, heroine2_id), "동료 관계")
 
-    def _is_valid_situation(self, situation: str) -> bool:
-        """situation이 유효한 값인지 확인
-
-        None, 빈 문자열, "string" 같은 기본값은 무효로 처리
-
-        Args:
-            situation: 검사할 상황 문자열
-
-        Returns:
-            유효하면 True, 아니면 False
-        """
-        if situation is None:
-            return False
-        if not situation.strip():
-            return False
-        if situation.strip().lower() == "string":
-            return False
-        return True
-
     async def generate_situation(self) -> str:
         """대화 상황 자동 생성
 
@@ -237,8 +218,6 @@ class HeroineHeroineAgent:
         for_streaming: bool = False,
         memory_progress_1: int = 0,
         memory_progress_2: int = 0,
-        sanity_1: int = 100,
-        sanity_2: int = 100,
         recent_turns: Optional[List[Dict[str, Any]]] = None,
         unlocked_1_text: str = "없음",
         unlocked_2_text: str = "없음",
@@ -280,39 +259,6 @@ class HeroineHeroineAgent:
         name1 = persona1.get("name", "히로인1")
         name2 = persona2.get("name", "히로인2")
 
-        # liked_keywords 가져오기
-        liked_keywords_1 = persona1.get("liked_keywords", [])
-        liked_keywords_2 = persona2.get("liked_keywords", [])
-        liked_text_1 = ", ".join(liked_keywords_1[:5]) if liked_keywords_1 else "없음"
-        liked_text_2 = ", ".join(liked_keywords_2[:5]) if liked_keywords_2 else "없음"
-
-        # sanity에 따른 대사 예시 선택
-        # sanity가 0이면 sanity_responses.zero 사용, 아니면 affection_responses.mid 사용
-        if sanity_1 == 0:
-            sanity_resp_1 = persona1.get("sanity_responses", {}).get("zero", {})
-            examples_1 = sanity_resp_1.get("examples", [])
-            sanity_status_1 = "우울 (sanity 0)"
-        else:
-            affection_resp_1 = persona1.get("affection_responses", {}).get("mid", {})
-            examples_1 = affection_resp_1.get("examples", [])
-            sanity_status_1 = "정상"
-
-        if sanity_2 == 0:
-            sanity_resp_2 = persona2.get("sanity_responses", {}).get("zero", {})
-            examples_2 = sanity_resp_2.get("examples", [])
-            sanity_status_2 = "우울 (sanity 0)"
-        else:
-            affection_resp_2 = persona2.get("affection_responses", {}).get("mid", {})
-            examples_2 = affection_resp_2.get("examples", [])
-            sanity_status_2 = "정상"
-
-        example_text_1 = (
-            ", ".join([f'"{e}"' for e in examples_1[:3]]) if examples_1 else "없음"
-        )
-        example_text_2 = (
-            ", ".join([f'"{e}"' for e in examples_2[:3]]) if examples_2 else "없음"
-        )
-
         # memoryProgress에 따른 아주 단순한 규칙 텍스트
         unlocked_rule = "해금되지 않은 과거/비밀은 말하지 않는다."
         min_progress = (
@@ -346,25 +292,28 @@ class HeroineHeroineAgent:
             output_format = f"""[출력 형식]
 JSON 배열로 출력하세요:
 [
-    {{"speaker_id": {heroine1_id}, "speaker_name": "{name1}", "text": "대사", "emotion": "neutral|joy|fun|sorrow|angry|surprise|mysterious", "emotion_intensity": 0.5~2.0}},
-    {{"speaker_id": {heroine2_id}, "speaker_name": "{name2}", "text": "대사", "emotion": "neutral|joy|fun|sorrow|angry|surprise|mysterious", "emotion_intensity": 0.5~2.0}},
+    {{"speaker_id": {heroine1_id}, "speaker_name": "{name1}", "text": "대사", "emotion": "neutral|joy|fun|sorrow|angry|surprise|mysterious"}},
+    {{"speaker_id": {heroine2_id}, "speaker_name": "{name2}", "text": "대사", "emotion": "neutral|joy|fun|sorrow|angry|surprise|mysterious"}},
     ...
-]
-(emotion_intensity: 0.5=약한 감정, 1.0=보통, 1.5=강함, 2.0=극도로 강함)"""
+]"""
 
         prompt = f"""두 NPC 사이의 자연스러운 대화를 생성해주세요.
 
 [규칙]
 - 각 히로인의 성격과 말투를 일관되게 유지
 - 서로의 관계를 반영한 자연스러운 대화
-- [상황]에 맞게 다양한 주제와 흐름으로 대화 생성 (매번 같은 패턴 금지)
-- 각 히로인의 [좋아하는 것]을 대화 소재로 자연스럽게 활용
-- [대사 예시]의 톤과 스타일을 참고하되, 내용은 새롭게 생성
+- [전용 정보]는 [상황]이 기억에 대해 물어보는 경우 사용(평소에는 참고하지 않음)
+- 다른 정보보다 [상황]을 가장 우선시하세요
 - {unlocked_rule}
+- 전용 정보는 해당 화자만 참고 (예: {name1}의 대사에는 "{name1}만 사용" 섹션만, {name2}도 동일)
 - 총 {turn_count}번의 대화 턴 (각 히로인이 번갈아 말함)
 
 [상황]
 {situation}
+
+[현재 상태]
+- {name1} memoryProgress: {memory_progress_1}
+- {name2} memoryProgress: {memory_progress_2}
 
 [전용 정보 - {name1}만 사용]
 {unlocked_1_text}
@@ -372,21 +321,18 @@ JSON 배열로 출력하세요:
 [전용 정보 - {name2}만 사용]
 {unlocked_2_text}
 
+[최근 대화(세션)]
+{recent_text}
+
 [히로인 1: {name1}]
 - 성격: {persona1.get('personality', {}).get('base', '')}
 - 말투: {honorific1}
-- 현재 상태: {sanity_status_1}
 - {name2}에 대한 관계: {relationship1to2}
-- 좋아하는 것: {liked_text_1}
-- 대사 예시: {example_text_1}
 
 [히로인 2: {name2}]
 - 성격: {persona2.get('personality', {}).get('base', '')}
 - 말투: {honorific2}
-- 현재 상태: {sanity_status_2}
 - {name1}에 대한 관계: {relationship2to1}
-- 좋아하는 것: {liked_text_2}
-- 대사 예시: {example_text_2}
 
 {output_format}"""
 
@@ -448,7 +394,6 @@ JSON 배열로 출력하세요:
                     "speaker_name": speaker_name,
                     "text": text,
                     "emotion": heroine_emotion_to_int(emotion),
-                    "emotion_intensity": 1.0,
                 }
             )
 
@@ -580,15 +525,13 @@ JSON 배열로 출력하세요:
 
         total_start = time.time()
 
-        if not self._is_valid_situation(situation):
+        if situation is None:
             t = time.time()
             situation = await self.generate_situation()
             print(f"[TIMING] NPC-NPC 상황 생성: {time.time() - t:.3f}s")
 
         memory_progress_1 = 0
         memory_progress_2 = 0
-        sanity_1 = 100
-        sanity_2 = 100
         recent_turns: List[Dict[str, Any]] = []
         unlocked_1_text = "없음"
         unlocked_2_text = "없음"
@@ -603,10 +546,6 @@ JSON 배열로 출력하세요:
 
             # 히로인: memoryProgress로 "가장 최근 해금 시나리오 1개" 무조건 주입
             # 사트라(0): scenarioLevel로 "가장 최근 해금 세계관 1개" 무조건 주입
-            # sanity 값 가져오기 (NPC-NPC 대화에도 sanity 반영)
-            sanity_1 = int(state1.get("sanity", 100))
-            sanity_2 = int(state2.get("sanity", 100))
-
             t = time.time()
             if heroine1_id == 0:
                 scenario_level = int(state1.get("scenarioLevel", 1) or 1)
@@ -658,8 +597,6 @@ JSON 배열로 출력하세요:
             for_streaming=False,
             memory_progress_1=memory_progress_1,
             memory_progress_2=memory_progress_2,
-            sanity_1=sanity_1,
-            sanity_2=sanity_2,
             recent_turns=recent_turns,
             unlocked_1_text=unlocked_1_text,
             unlocked_2_text=unlocked_2_text,
@@ -681,25 +618,10 @@ JSON 배열로 출력하세요:
                 content = content.split("```")[1].split("```")[0]
             conversation = json.loads(content.strip())
 
-            # speaker_name을 기준으로 올바른 speaker_id 할당
-            persona1 = self._get_persona(heroine1_id)
-            persona2 = self._get_persona(heroine2_id)
-            name_to_id = {
-                persona1.get("name"): heroine1_id,
-                persona2.get("name"): heroine2_id,
-            }
-
-            # emotion 문자열을 정수로 변환, speaker_id 보정, emotion_intensity 기본값 설정
+            # emotion 문자열을 정수로 변환
             for msg in conversation:
-                # speaker_name으로 올바른 speaker_id 할당
-                speaker_name = msg.get("speaker_name")
-                if speaker_name in name_to_id:
-                    msg["speaker_id"] = name_to_id[speaker_name]
-
                 if "emotion" in msg and isinstance(msg["emotion"], str):
                     msg["emotion"] = heroine_emotion_to_int(msg["emotion"])
-                if "emotion_intensity" not in msg:
-                    msg["emotion_intensity"] = 1.0
         except (json.JSONDecodeError, IndexError):
             persona1 = self._get_persona(heroine1_id)
             conversation = [
@@ -708,8 +630,6 @@ JSON 배열로 출력하세요:
                     "speaker_name": persona1.get("name", "히로인"),
                     "text": "...",
                     "emotion": 0,  # neutral
-                    "emotion_intensity": 1.0,
-
                 }
             ]
         print(f"[TIMING] NPC-NPC JSON 파싱: {time.time() - t:.3f}s")
@@ -740,7 +660,7 @@ JSON 배열로 출력하세요:
         Returns:
             저장 결과 (id, heroine1_id, heroine2_id, content, conversation, timestamp)
         """
-        if not self._is_valid_situation(situation):
+        if situation is None:
             situation = await self.generate_situation()
 
         # 대화 생성
@@ -758,11 +678,17 @@ JSON 배열로 출력하세요:
             importance_score,
         )
 
+        # 대화 내용 텍스트
+        content_parts = []
+        for msg in conversation:
+            content_parts.append(f"{msg['speaker_name']}: {msg['text']}")
+        content_text = "\n".join(content_parts)
+
         return {
             "id": conv_id,
             "heroine1_id": heroine1_id,
             "heroine2_id": heroine2_id,
-            "situation": situation,
+            "content": content_text,
             "conversation": conversation,
             "importance_score": importance_score,
             "timestamp": datetime.now().isoformat(),
@@ -795,15 +721,13 @@ JSON 배열로 출력하세요:
 
         total_start = time.time()
 
-        if not self._is_valid_situation(situation):
+        if situation is None:
             t = time.time()
             situation = await self.generate_situation()
             print(f"[TIMING] NPC-NPC(스트림) 상황 생성: {time.time() - t:.3f}s")
 
         memory_progress_1 = 0
         memory_progress_2 = 0
-        sanity_1 = 100
-        sanity_2 = 100
         recent_turns: List[Dict[str, Any]] = []
         unlocked_1_text = "없음"
         unlocked_2_text = "없음"
@@ -814,10 +738,6 @@ JSON 배열로 출력하세요:
         state1 = session1.get("state", {}) if isinstance(session1, dict) else {}
         state2 = session2.get("state", {}) if isinstance(session2, dict) else {}
         print(f"[TIMING] NPC-NPC(스트림) Redis 세션 로드: {time.time() - t:.3f}s")
-
-        # sanity 값 가져오기 (NPC-NPC 대화에도 sanity 반영)
-        sanity_1 = int(state1.get("sanity", 100))
-        sanity_2 = int(state2.get("sanity", 100))
 
         t = time.time()
         if heroine1_id == 0:
@@ -866,8 +786,6 @@ JSON 배열로 출력하세요:
             for_streaming=True,
             memory_progress_1=memory_progress_1,
             memory_progress_2=memory_progress_2,
-            sanity_1=sanity_1,
-            sanity_2=sanity_2,
             recent_turns=recent_turns,
             unlocked_1_text=unlocked_1_text,
             unlocked_2_text=unlocked_2_text,

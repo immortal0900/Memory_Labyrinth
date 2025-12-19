@@ -22,6 +22,7 @@
 import json
 import yaml
 import asyncio
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import AsyncIterator, Dict, Any, Tuple
@@ -37,6 +38,26 @@ from db.user_memory_manager import user_memory_manager
 from db.session_checkpoint_manager import session_checkpoint_manager
 from services.sage_scenario_service import sage_scenario_service
 from enums.LLM import LLM
+
+# ============================================
+# 시간 기반 기억 검색용 상수/헬퍼
+# ============================================
+
+WEEKDAY_MAP = {
+    "월요일": 0, "화요일": 1, "수요일": 2, "목요일": 3,
+    "금요일": 4, "토요일": 5, "일요일": 6
+}
+
+
+def _get_last_weekday(weekday: int, weeks_ago: int = 1) -> datetime:
+    """지난주/지지난주 특정 요일의 날짜 계산"""
+    today = datetime.now()
+    days_since = (today.weekday() - weekday) % 7
+    if days_since == 0:
+        days_since = 7
+    target = today - timedelta(days=days_since + (weeks_ago - 1) * 7)
+    return target
+
 
 # ============================================
 # 페르소나 데이터 로드
@@ -138,11 +159,9 @@ class SageAgent(BaseNPCAgent):
             model_name: 사용할 LLM 모델명
         """
         super().__init__(model_name)
-        
-        self.llm = init_chat_model(model=model_name, temperature=1, max_tokens=200)
 
         # 의도 분류용 LLM (temperature=0으로 일관된 분류)
-        self.intent_llm = init_chat_model(model=model_name, temperature=0, max_tokens=20)
+        self.intent_llm = init_chat_model(model=model_name, temperature=0)
 
         # LangGraph 빌드 (비스트리밍용)
         self.graph = self._build_graph()
@@ -261,6 +280,29 @@ class SageAgent(BaseNPCAgent):
         level_key = f"level_{scenario_level}"
         return info_rules.get(level_key, info_rules.get("level_1", {}))
 
+    def _extract_recent_user_questions(self, conversation_buffer: list) -> str:
+        """최근 대화에서 유저 질문만 추출하여 요약
+
+        Args:
+            conversation_buffer: 대화 버퍼 리스트
+
+        Returns:
+            유저 질문 요약 문자열
+        """
+        user_messages = []
+        for item in conversation_buffer:
+            if item.get("role") == "user":
+                content = item.get("content", "")
+                if content:
+                    user_messages.append(content)
+
+        if not user_messages:
+            return "없음"
+
+        # 최근 5개만 추출
+        recent = user_messages[-5:]
+        return ", ".join(recent)
+
     # ============================================
     # 컨텍스트 준비 메서드 (스트리밍/비스트리밍 공통)
     # ============================================
@@ -270,9 +312,8 @@ class SageAgent(BaseNPCAgent):
 
         사용자 메시지의 의도를 분류합니다:
         - general: 일반 대화
+        - memory_recall: 과거 대화 질문 (User Memory 검색)
         - worldview_inquiry: 세계관 질문 (시나리오 DB 검색)
-        - personal_inquiry: 대현자 개인 질문
-        - player_inquiry: 플레이어 관련 질문 (시나리오 DB 검색)
 
         Args:
             state: 현재 상태
@@ -292,27 +333,107 @@ class SageAgent(BaseNPCAgent):
 {user_message}
 
 [분류 기준]
-- general: 일상 대화, 안부, 농담
-- worldview_inquiry: 세계관, 국가, 종족, 던전, 디멘시움 등에 대한 질문
-- personal_inquiry: 사트라 본인에 대한 질문 (정체, 나이, 능력 등)
-- player_inquiry: 플레이어(멘토) 본인에 대한 질문 (과거, 능력 등)
+- general: 일상 대화, 안부, 농담, 사트라 본인에 대한 질문
+- memory_recall: "우리 전에 뭐 얘기했지?", "어제 뭐 했어?", "기억나?" 등 플레이어와 대현자가 함께 나눈 과거 대화/경험 질문
+- worldview_inquiry: 세계관, 국가, 종족, 던전, 디멘시움, 플레이어(멘토)의 과거/능력 등에 대한 질문
 
-반드시 general, worldview_inquiry, personal_inquiry, player_inquiry 중 하나만 출력하세요."""
+반드시 general, memory_recall, worldview_inquiry 중 하나만 출력하세요."""
 
         response = await self.intent_llm.ainvoke(prompt)
         intent = response.content.strip().lower()
 
         # 유효하지 않으면 기본값
-        valid_intents = [
-            "general",
-            "worldview_inquiry",
-            "personal_inquiry",
-            "player_inquiry",
-        ]
+        valid_intents = ["general", "memory_recall", "worldview_inquiry"]
         if intent not in valid_intents:
             intent = "general"
 
         return intent
+
+    async def _retrieve_memory(self, state: SageState) -> str:
+        """기억 검색 (시간 키워드 분석)
+
+        Args:
+            state: 현재 상태
+
+        Returns:
+            검색된 기억 텍스트
+        """
+        user_message = state["messages"][-1].content
+        player_id = state["player_id"]
+        npc_id = "sage"
+
+        facts_parts = []
+
+        # 시간 키워드 분석 (정규식)
+        days_ago_match = re.search(r"(\d+)\s*일\s*전", user_message)
+
+        if "어제" in user_message:
+            print("[MEMORY_FUNC] get_memories_days_ago_sync(1)")
+            user_memories = user_memory_manager.get_memories_days_ago_sync(
+                player_id, npc_id, 1, limit=5
+            )
+        elif "그제" in user_message or "그저께" in user_message:
+            print("[MEMORY_FUNC] get_memories_days_ago_sync(2)")
+            user_memories = user_memory_manager.get_memories_days_ago_sync(
+                player_id, npc_id, 2, limit=5
+            )
+        elif days_ago_match:
+            days = int(days_ago_match.group(1))
+            print(f"[MEMORY_FUNC] get_memories_days_ago_sync({days})")
+            user_memories = user_memory_manager.get_memories_days_ago_sync(
+                player_id, npc_id, days, limit=5
+            )
+        elif re.search(r"(최근|요즘|며칠)", user_message):
+            print("[MEMORY_FUNC] get_recent_memories_sync(7)")
+            user_memories = user_memory_manager.get_recent_memories_sync(
+                player_id, npc_id, 7, limit=5
+            )
+        elif re.search(r"(바뀌|변하|전에는|바꼈|바뀐|변했)", user_message):
+            print("[MEMORY_FUNC] get_preference_history_sync")
+            user_memories = user_memory_manager.get_preference_history_sync(
+                player_id, npc_id, user_message
+            )
+        elif re.search(r"(전부|다\s|모든|기억하는\s*거)", user_message):
+            print("[MEMORY_FUNC] get_valid_memories_sync")
+            user_memories = user_memory_manager.get_valid_memories_sync(
+                player_id, npc_id, limit=10
+            )
+        elif date_match := re.search(r"(\d{1,2})월\s*(\d{1,2})일", user_message):
+            month = int(date_match.group(1))
+            day = int(date_match.group(2))
+            year = datetime.now().year
+            point_in_time = datetime(year, month, day)
+            print(f"[MEMORY_FUNC] get_memories_at_point_sync({month}/{day})")
+            user_memories = user_memory_manager.get_memories_at_point_sync(
+                player_id, npc_id, point_in_time, limit=5
+            )
+        elif week_match := re.search(r"지지난주\s*(월|화|수|목|금|토|일)요일", user_message):
+            weekday = WEEKDAY_MAP[week_match.group(1) + "요일"]
+            point_in_time = _get_last_weekday(weekday, weeks_ago=2)
+            print(f"[MEMORY_FUNC] get_memories_at_point_sync(지지난주 {week_match.group(1)}요일)")
+            user_memories = user_memory_manager.get_memories_at_point_sync(
+                player_id, npc_id, point_in_time, limit=5
+            )
+        elif week_match := re.search(r"지난주\s*(월|화|수|목|금|토|일)요일", user_message):
+            weekday = WEEKDAY_MAP[week_match.group(1) + "요일"]
+            point_in_time = _get_last_weekday(weekday, weeks_ago=1)
+            print(f"[MEMORY_FUNC] get_memories_at_point_sync(지난주 {week_match.group(1)}요일)")
+            user_memories = user_memory_manager.get_memories_at_point_sync(
+                player_id, npc_id, point_in_time, limit=5
+            )
+        else:
+            print("[MEMORY_FUNC] search_memory_sync (hybrid)")
+            user_memories = user_memory_manager.search_memory_sync(
+                player_id, npc_id, user_message, limit=3
+            )
+
+        if user_memories:
+            facts_parts.append("[플레이어와의 기억]")
+            for m in user_memories:
+                memory_text = m.get("memory", m.get("text", ""))
+                facts_parts.append(f"- {memory_text}")
+
+        return "\n".join(facts_parts) if facts_parts else "관련 기억 없음"
 
     async def _retrieve_scenario(self, state: SageState) -> str:
         """시나리오 DB 검색
@@ -360,15 +481,19 @@ class SageAgent(BaseNPCAgent):
 
         # 2. 의도에 따른 검색
         unlocked_scenarios = "없음"
+        retrieved_facts = "없음"
 
-        if intent in ["worldview_inquiry", "player_inquiry"]:
-            # 세계관 또는 플레이어 질문 -> 시나리오 DB 검색
+        if intent == "memory_recall":
+            t2 = time.time()
+            retrieved_facts = await self._retrieve_memory(state)
+            print(f"[TIMING] 기억 검색: {time.time() - t2:.3f}s")
+        elif intent == "worldview_inquiry":
             t2 = time.time()
             unlocked_scenarios = await self._retrieve_scenario(state)
             print(f"[TIMING] 시나리오 검색: {time.time() - t2:.3f}s")
 
         print(f"[TIMING] 컨텍스트 준비 총합: {time.time() - total_start:.3f}s")
-        return {"intent": intent, "unlocked_scenarios": unlocked_scenarios}
+        return {"intent": intent, "unlocked_scenarios": unlocked_scenarios, "retrieved_facts": retrieved_facts}
 
     def _build_full_prompt(
         self, state: SageState, context: Dict[str, Any], for_streaming: bool = False
@@ -402,7 +527,6 @@ class SageAgent(BaseNPCAgent):
     "thought": "(내면의 생각 - 플레이어에게 보이지 않음)",
     "text": "(실제 대화 내용)",
     "emotion": "neutral|joy|fun|sorrow|angry|surprise|mysterious",
-    "emotion_intensity": 0.5~2.0 사이의 실수 (0.5=약한 감정, 1.0=보통, 1.5=강함, 2.0=극도로 강함),
     "info_revealed": true 또는 false
 }"""
 
@@ -413,6 +537,38 @@ class SageAgent(BaseNPCAgent):
         world_context = PERSONA_DATA.get("world_context", {})
 
         prompt = f"""당신은 대현자 사트라(Satra)입니다.
+
+[핵심 목표]
+- 최근 대화는 '맥락 파악'에만 사용합니다.
+- 같은 질문이 반복되어도 과거 답변 문장을 그대로 복사하지 않습니다.
+- 반드시 [현재 레벨 태도], [페르소나], [정보 공개 규칙], [장기 기억 (검색 결과)], [해금된 세계관 정보], [플레이어 메시지]를 근거로 새로 답합니다.
+
+[답변 결정 절차 - 반드시 준수]
+1) 질문 유형 판별 (두 가지로 구분)
+A) 플레이어와의 대화/경험 질문: "N일 전에 뭐 했지?", "어제 뭐 얘기했지?", "우리 전에 뭐 얘기했지?" 등
+B) 세계관/정보 질문: "던전이 뭐야?", "히로인들은 누구야?" 등
+
+2) [장기 기억] 우선 적용 규칙 (가장 중요!)
+- [장기 기억 (검색 결과)]에 "없음"이 아닌 내용이 있으면, 반드시 그 내용을 text에 포함해야 합니다.
+- 예: [장기 기억]에 "송파구", "귤 이야기"가 있으면 => "송파구랑 귤 이야기 했었지." 처럼 반드시 언급
+- <raw_recent_dialogue_do_not_quote>에서 "기억 안 나"라고 했어도, [장기 기억]에 내용이 있으면 이번엔 기억난 것처럼 답합니다.
+- 이 규칙은 다른 모든 규칙보다 우선합니다.
+
+3) '정보 없음' 처리 (B유형 질문 + 두 조건 모두 충족시에만)
+- [플레이어 메시지]가 B유형(세계관/정보) 질문이고,
+- [해금된 세계관 정보]가 "없음"이며,
+- [장기 기억 (검색 결과)]도 "없음" 또는 관련 없는 내용이면
+=> text에 회피 응답을 사용합니다(30자 이내).
+- 주의: A유형(플레이어와의 대화 질문)에는 이 규칙을 적용하지 않습니다!
+
+4) 최근대화 '비복사' 규칙(실패 조건)
+- <raw_recent_dialogue_do_not_quote> 안의 문장/구문을 그대로 복사하면 실패입니다.
+- "기억 안 나", "희미해" 같은 표현은 [장기 기억]에 내용이 있으면 절대 사용하지 않습니다.
+
+5) 출력/말투 규칙
+- 기품 있는 하대 어조를 유지합니다.
+- text는 반드시 30자 이내로 답합니다.
+- `멘토`는 현재 당신에게 말을 거는 플레이어입니다.
 
 [세계관 컨텍스트 - 당신이 알고 있는 기본 정보]
 - 길드: {world_context.get('guild', '셀레파이스 길드')}
@@ -436,25 +592,31 @@ class SageAgent(BaseNPCAgent):
 - 금지 정보 질문시 회피: "{evasion_response}"
 
 [페르소나 규칙]
-- [세계관 컨텍스트]는 당신이 현재 알고 있는 정보입니다. 이 정보를 통해 당신은 이곳에 왜 있는지 플레이어가 누군지 알 수 있습니다.
+- [세계관 컨텍스트]는 당신이 현재 알고 있는 정보입니다.
 - [해금된 세계관 정보]는 시나리오 레벨에 따라 공개할 수 있는 정보입니다.
 - 해금되지 않은 정보는 절대 말하지 않습니다. 회피 응답을 사용하세요.
 - 기본적으로 하대하며 기품 있는 어조를 유지합니다.
 - 감정을 크게 드러내지 않고 항상 알 수 없는 미소를 띱니다.
 - 거짓말은 하지 않지만, 말하지 않을 수는 있습니다.
-- text는 반드시 30자 이내로 짧게 답합니다.
-- `멘토`는 현재 당신에게 말을 거는 플레이어입니다.
-- [최근 대화 기록]에서는 대화했던 맥락만 파악하고 [현재 레벨 태도], [페르소나], [정보 공개 규칙], [해금된 세계관 정보]에 맞게 대답하세요.
-- [최근 대화 기록]보다 [현재 레벨 태도], [페르소나], [정보 공개 규칙], [해금된 세계관 정보]가 훨씬 중요합니다.
+
+[장기 기억 (검색 결과)]
+{context.get('retrieved_facts', '없음')}
 
 [해금된 세계관 정보]
 {context.get('unlocked_scenarios', '없음')}
 
 [최근 대화 요약]
-{state.get('short_term_summary', '없음')}
+{state.get('short_term_summary', '')}
 
-[최근 대화 기록]
+<recent_context_observations>
+- 목적: 최근 대화의 흐름(반복 질문/주제/막힌 지점) 파악용입니다.
+- 규칙: 아래 정보는 '참고용'이며 문장/구문을 그대로 인용하지 않습니다.
+- 최근 유저 질문(요약/리스트): {self._extract_recent_user_questions(state.get('conversation_buffer', []))}
+</recent_context_observations>
+
+<raw_recent_dialogue_do_not_quote>
 {self.format_conversation_history(state.get('conversation_buffer', []))}
+</raw_recent_dialogue_do_not_quote>
 
 [플레이어 메시지]
 {state['messages'][-1].content}
@@ -630,9 +792,8 @@ class SageAgent(BaseNPCAgent):
         START -> router
         router -> (분기)
             - general -> generate
+            - memory_recall -> memory_retrieve -> generate
             - worldview_inquiry -> scenario_retrieve -> generate
-            - personal_inquiry -> generate
-            - player_inquiry -> scenario_retrieve -> generate
         generate -> post_process -> END
 
         Returns:
@@ -642,6 +803,7 @@ class SageAgent(BaseNPCAgent):
 
         # 노드 추가
         graph.add_node("router", self._router_node)
+        graph.add_node("memory_retrieve", self._memory_retrieve_node)
         graph.add_node("scenario_retrieve", self._scenario_retrieve_node)
         graph.add_node("generate", self._generate_node)
         graph.add_node("post_process", self._post_process_node)
@@ -655,12 +817,12 @@ class SageAgent(BaseNPCAgent):
             self._route_by_intent,
             {
                 "general": "generate",
+                "memory_recall": "memory_retrieve",
                 "worldview_inquiry": "scenario_retrieve",
-                "personal_inquiry": "generate",
-                "player_inquiry": "scenario_retrieve",
             },
         )
 
+        graph.add_edge("memory_retrieve", "generate")
         graph.add_edge("scenario_retrieve", "generate")
         graph.add_edge("generate", "post_process")
         graph.add_edge("post_process", END)
@@ -684,6 +846,15 @@ class SageAgent(BaseNPCAgent):
         """의도에 따라 라우팅"""
         return state.get("intent", "general")
 
+    async def _memory_retrieve_node(self, state: SageState) -> dict:
+        """기억 검색 노드"""
+        import time
+
+        t = time.time()
+        facts = await self._retrieve_memory(state)
+        print(f"[TIMING] 기억 검색: {time.time() - t:.3f}s")
+        return {"retrieved_facts": facts}
+
     async def _scenario_retrieve_node(self, state: SageState) -> dict:
         """시나리오 DB 검색 노드"""
         import time
@@ -700,7 +871,10 @@ class SageAgent(BaseNPCAgent):
         total_start = time.time()
 
         # 컨텍스트 구성
-        context = {"unlocked_scenarios": state.get("unlocked_scenarios", "없음")}
+        context = {
+            "unlocked_scenarios": state.get("unlocked_scenarios", "없음"),
+            "retrieved_facts": state.get("retrieved_facts", "없음"),
+        }
 
         # 프롬프트 생성 및 LLM 호출
         t1 = time.time()
@@ -726,17 +900,14 @@ class SageAgent(BaseNPCAgent):
                 "thought": "",
                 "text": response.content,
                 "emotion": "neutral",
-                "emotion_intensity": 1.0,
                 "info_revealed": False,
             }
 
         emotion_str = result.get("emotion", "neutral")
-        emotion_intensity = result.get("emotion_intensity", 1.0)
         print(f"[TIMING] generate 노드 총합: {time.time() - total_start:.3f}s")
         return {
             "response_text": result.get("text", ""),
             "emotion": sage_emotion_to_int(emotion_str),
-            "emotion_intensity": emotion_intensity,
             "info_revealed": result.get("info_revealed", False),
         }
 
