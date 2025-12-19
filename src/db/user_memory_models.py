@@ -149,6 +149,7 @@ NPC_ID_TO_HEROINE = {0: "sage", 1: "letia", 2: "lupames", 3: "roco"}
 
 # heroine_id -> Speaker Enum 변환
 HEROINE_TO_SPEAKER = {
+    "sage": Speaker.SAGE,
     "letia": Speaker.LETIA,
     "lupames": Speaker.LUPAMES,
     "roco": Speaker.ROCO,
