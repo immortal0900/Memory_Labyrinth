@@ -244,7 +244,7 @@ MONSTER_INFOS = [
     {
         "monsterId": 1000,
         "monsterType": 2,
-        "monsterName": "광란의 골렘",
+        "monsterName": "광란",
         "hp": 3500,
         "speed": 300,
         "attack": 45,
@@ -264,7 +264,7 @@ MONSTER_INFOS = [
     {
         "monsterId": 1001,
         "monsterType": 2,
-        "monsterName": "육승찬",
+        "monsterName": "공포",
         "hp": 8000,
         "speed": 350,
         "attack": 100,
@@ -1073,6 +1073,7 @@ HEROINE_INFOS = [
 # 하나의 순환 구조로 맞물린 **서브컬쳐형 로그라이크 RPG**의 형태가 완성됨.
 
 # """
+
 GAME_SYSTEM_INFO = """
 # Game System Overview
 
@@ -1168,7 +1169,7 @@ Below are the basic controls for the player character.
 | Keyboard Left Shift  | Run (toggle)                     |
 | Keyboard Q           | Targeting                        |
 | Keyboard E           | Weapon skill                     |
-| Keyboard R           | '고유' skill             |
+| Keyboard R           | '고유' skill                      |
 | Keyboard F           | Interact (events / item pickup)  |
 | Keyboard Tab         | Inventory                        |
 
