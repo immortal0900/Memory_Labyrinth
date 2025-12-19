@@ -740,7 +740,7 @@ JSON 배열로 출력하세요:
             importance_score: 중요도 (1-10)
 
         Returns:
-            저장 결과 (id, heroine1_id, heroine2_id, content, conversation, timestamp)
+            저장 결과 (id, heroine1_id, heroine2_id, content, situation, conversation, importance_score, timestamp)
         """
         if not self._is_valid_situation(situation):
             situation = await self.generate_situation()
@@ -759,8 +759,6 @@ JSON 배열로 출력하세요:
             situation,
             importance_score,
         )
-
-
 
         return {
             "id": conv_id,
