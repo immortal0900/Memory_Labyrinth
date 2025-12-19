@@ -88,19 +88,28 @@ class BalanceRequest(BaseModel):
 
 class MonsterPlacement(BaseModel):
     """몬스터 배치 정보"""
-
     roomId: int
     monsterId: int
     count: int
 
 
+class MonsterCount(BaseModel):
+    monsterId: int
+    count: int
+
+
+class RoomMonsterPlacement(BaseModel):
+    roomId: int
+    monsters: List[MonsterCount]
+
+
 class BalanceResponse(BaseModel):
-    """밸런싱 응답"""
+    """밸런싱 응답 (room별 그룹화된 몬스터 배치)"""
 
     success: bool
     message: str
     firstPlayerId: str
-    monsterPlacements: List[MonsterPlacement] = []
+    monsterPlacements: List[RoomMonsterPlacement] = []
 
 
 class ClearRequest(BaseModel):
@@ -298,14 +307,36 @@ def balance_dungeon(request: BalanceRequest):
         if not result["success"]:
             raise Exception(result.get("error", "Unknown error"))
 
-        # 몬스터 배치 정보 매핑
+        # 몬스터 배치 정보 매핑 (항상 room별 그룹 형태로 반환)
+        grouped_out: List[Dict[str, Any]] = []
+        raw_mp = result.get("monster_placements", []) or []
+
+        # If service already returned grouped format, normalize directly
+        if all(isinstance(x, dict) and "monsters" in x for x in raw_mp):
+            grouped_out = raw_mp
+        else:
+            # raw_mp is flat list [{roomId, monsterId, count}, ...] -> group by room
+            grouped_map: Dict[Any, Dict[str, Any]] = {}
+            for mp in raw_mp:
+                try:
+                    rid = mp.get("roomId")
+                    mid = mp.get("monsterId")
+                    cnt = mp.get("count", 0)
+                except Exception:
+                    continue
+                if rid not in grouped_map:
+                    grouped_map[rid] = {"roomId": rid, "monsters": []}
+                grouped_map[rid]["monsters"].append({"monsterId": mid, "count": cnt})
+            grouped_out = list(grouped_map.values())
+
+        # Convert to Pydantic RoomMonsterPlacement list
         monster_placements = []
-        for mp in result.get("monster_placements", []):
-            monster_placements.append(
-                MonsterPlacement(
-                    roomId=mp["roomId"], monsterId=mp["monsterId"], count=mp["count"]
-                )
-            )
+        for g in grouped_out:
+            monsters_list = [
+                MonsterCount(monsterId=m.get("monsterId"), count=m.get("count", 0))
+                for m in g.get("monsters", [])
+            ]
+            monster_placements.append(RoomMonsterPlacement(roomId=g.get("roomId"), monsters=monsters_list))
 
         # 다음 층 이벤트 정보 매핑
         next_event_data = None
