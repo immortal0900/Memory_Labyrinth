@@ -8,7 +8,7 @@ class DungeonEvent(BaseModel):
     event_code: str
     scenario_text: str
     scenario_narrative: str
-    choices: List[Dict[str, Any]]
+    choices: List[Dict[str, Any]] = []
     expected_outcome: str
     
 class DungeonRow(BaseModel):
