@@ -50,7 +50,6 @@ def _rdb_fairy_messages_bg(user_args, ai_args):
         rdb_repository.insert_fairy_message(**user_args)
         rdb_repository.insert_fairy_message(**ai_args)
     except Exception as e:
-        # 로그만 남기고 흐름은 막지 않음
         print("fairy_message insert failed:", e)
 
 
@@ -78,11 +77,6 @@ async def dungeon_navigator(dungeon_row: DungeonRow, curr_room_id: int):
     dungeon_prompt = describe_dungeon_row(
         curr_room_id, dungeon_row.balanced_map, dungeon_row.floor
     )
-    # dungeon_map_prompt = f"        <던전맵>\n{dungeon_prompt}\n        </던전맵>"
-    # dungeon_summary_prompt = f"        <던전요약>\n{summary_info}\n        </던전요약>"
-    # dungeon_current_prompt = (
-    #     f"        <현재 Room Id>\n{curr_room_id}\n        </현재 Room Id>"
-    # )
     dungeon_map_prompt = (
         f"        <DUNGEON_MAP>\n" f"{dungeon_prompt}\n" f"        </DUNGEON_MAP>"
     )
@@ -106,7 +100,6 @@ async def dungeon_navigator(dungeon_row: DungeonRow, curr_room_id: int):
 
 async def create_interaction(inventory_ids):
     item_prompt = item_spec_prompt.format(items_json=get_inventory_items(inventory_ids))
-    # inventory_prompt = f"        <인벤토리 내의 아이템 설명>\n{item_prompt}\n        </인벤토리 내의 아이템 설명>"
     inventory_prompt = (
         f"        <INVENTORY_ITEMS>\n" f"{item_prompt}\n" f"        </INVENTORY_ITEMS>"
     )
@@ -119,7 +112,6 @@ async def get_system_info():
 
 
 async def _clarify_intent(query) -> FairyDungeonIntentOutput:
-
     intent_prompt = PromptManager(FairyPromptType.FAIRY_DUNGEON_INTENT).get_prompt()
     messages = [SystemMessage(content=intent_prompt), HumanMessage(content=query)]
     parser_llm = intent_llm.with_structured_output(FairyDungeonIntentOutput)
@@ -189,14 +181,6 @@ async def fairy_action(state: FairyDungeonState):
         ),
         FairyDungeonIntentType.USAGE_GUIDE: get_system_info,
     }
-
-    # INTENT_LABELS = {
-    #     FairyDungeonIntentType.MONSTER_GUIDE: "몬스터 정보",
-    #     FairyDungeonIntentType.EVENT_GUIDE: "이벤트",
-    #     FairyDungeonIntentType.DUNGEON_NAVIGATOR: "던전 안내",
-    #     FairyDungeonIntentType.INTERACTION_HANDLER: "상호작용",
-    #     FairyDungeonIntentType.USAGE_GUIDE: "사용 방법·조작 안내",
-    # }
     INTENT_LABELS = {
         FairyDungeonIntentType.MONSTER_GUIDE: "MONSTER_GUIDE",
         FairyDungeonIntentType.EVENT_GUIDE: "EVENT_GUIDE",

@@ -64,12 +64,19 @@ class MockFactory:
             activeSkillLevel=random.randint(1, 4)
         )
 
-    # 디폴트는 레어 쌍검 기준으로 맞춤
     @staticmethod
     def create_weapon():
         return WeaponData(
             weaponId=22, weaponType=2, weaponName="레어 쌍검",
             rarity=2, attackPower=11, staggerPower=1,
+            modifier={"strength": 0.1, "dexterity": 0.8, "intelligence": 0.1}
+        )
+
+    @staticmethod
+    def create_sub_weapon():
+        return WeaponData(
+            weaponId=20, weaponType=2, weaponName="일반 쌍검",
+            rarity=0, attackPower=6, staggerPower=1,
             modifier={"strength": 0.1, "dexterity": 0.8, "intelligence": 0.1}
         )
 

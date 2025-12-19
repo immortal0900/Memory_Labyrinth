@@ -17,6 +17,8 @@ from core.common import get_inventory_items, get_inventory_item
 
 
 router = APIRouter(prefix="/api/fairy", tags=["Fairy"])
+
+
 class DungeonPlayerDto(BaseModel):
     playerId: str
     heroineId: int
@@ -26,6 +28,7 @@ class DungeonPlayerDto(BaseModel):
     moveSpeed: float = (1,)
     attackSpeed: float = (1.0,)
     weaponId: int = None
+    subWeaponId: int = None
     inventory: List[int] = []
 
 
@@ -86,6 +89,8 @@ class InteractionRequest(BaseModel):
         description="인벤토리 아이템 id 목록",
         example=[21, 47],
     )
+    weapon_id: Optional[int] = None
+    sub_weapon_id: Optional[int] = None
     question: str = Field(..., description="사용자의 질문", example="현재 방 불좀 켜봐")
 
 
@@ -99,6 +104,13 @@ class InteractionResponse(BaseModel):
         ..., description="사용 하려는 아이템 (정령 행동 필요 없으면 Null)", example=None
     )
 
+def _weapon_id_to_data(weapon_id:Optional[int]) -> Optional[WeaponData]:
+    weapon = None
+    weapon_id = weapon_id
+    item: Optional[ItemData] = get_inventory_item(weapon_id)
+    if item is not None:
+        weapon = item.weapon    
+    return weapon
 
 def dungeon_player_dto_to_state(player_dto: DungeonPlayerDto) -> DungeonPlayerState:
     playerId = player_dto.playerId
@@ -109,13 +121,8 @@ def dungeon_player_dto_to_state(player_dto: DungeonPlayerDto) -> DungeonPlayerSt
     moveSpeed = player_dto.moveSpeed
     attackSpeed = player_dto.attackSpeed
     inventory = player_dto.inventory
-
-    weapon = None
-    weaponId = player_dto.weaponId
-    item: Optional[ItemData] = get_inventory_item(weaponId)
-    if item is not None:
-        weapon = item.weapon
-
+    weapon = _weapon_id_to_data(player_dto.weaponId)
+    sub_weapon = _weapon_id_to_data(player_dto.subWeaponId)
     return DungeonPlayerState(
         playerId=playerId,
         heroineId=heroineId,
@@ -126,7 +133,9 @@ def dungeon_player_dto_to_state(player_dto: DungeonPlayerDto) -> DungeonPlayerSt
         attackSpeed=attackSpeed,
         inventory=inventory,
         weapon=weapon,
+        sub_weapon=sub_weapon,
     )
+
 
 
 @router.post("/dungeon/talk", response_model=TalkResponse)
@@ -150,10 +159,13 @@ def interaction(request: InteractionRequest):
     """정령 - 던전 인터렉션 요청"""
     question = request.question
     inventory = request.inventory
-    response = fairy_interaction(inventory, question)
+    weapon = _weapon_id_to_data(request.weapon_id)
+    sub_weapon = _weapon_id_to_data(request.sub_weapon_id)
+    response = fairy_interaction(inventory, question, weapon, sub_weapon)
 
     useItemId = response["useItemId"]
     roomLight = response["roomLight"]
+    
 
     return InteractionResponse(
         useItemId=useItemId,

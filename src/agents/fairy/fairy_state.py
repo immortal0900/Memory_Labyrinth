@@ -14,6 +14,7 @@ class DungeonPlayerState(BaseModel):
     moveSpeed: float = 1,
     attackSpeed: float = 1.0,
     weapon: Optional[WeaponData] = None
+    sub_weapon:Optional[WeaponData] = None
     inventory: List[int] = []
 
 class FairyDungeonIntentType(StrEnum):
@@ -52,6 +53,8 @@ class FairyInterationIntentOutput(BaseModel):
 
 class FairyInteractionState(MessagesState):
     inventory: List[int] = []
+    weapon: Optional[WeaponData] = None
+    sub_weapon:Optional[WeaponData] = None
     # 0 은 미행동, 1은 불키기, 2은 불끄기
     roomLight: int = 0
     useItemId: Optional[int] = None
