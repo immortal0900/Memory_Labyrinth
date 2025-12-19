@@ -92,6 +92,24 @@ def _normalize_heroine_data(data: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
+def _remove_message_recursive(obj: Any) -> Any:
+    """Recursively remove 'message' keys from dicts/lists in the object."""
+    try:
+        if isinstance(obj, dict):
+            obj = {
+                k: _remove_message_recursive(v)
+                for k, v in obj.items()
+                if k != "message"
+            }
+            return obj
+        elif isinstance(obj, list):
+            return [_remove_message_recursive(v) for v in obj]
+        else:
+            return obj
+    except Exception:
+        return obj
+
+
 _dungeon_graph = None
 
 
@@ -338,11 +356,18 @@ class DungeonService:
         except Exception as e:
             print(f"[ERROR] entrance 트랜잭션 실패: {e}")
             raise
-        return {
+        result = {
             "first_player_id": player_ids[0] if player_ids else 0,
             "floor_ids": floor_ids,
             "events": events_list,
         }
+        return _remove_message_recursive(result)
+        result = {
+            "first_player_id": player_ids[0] if player_ids else 0,
+            "floor_ids": floor_ids,
+            "events": events_list,
+        }
+        return _remove_message_recursive(result)
 
     def next_floor_entrance(
         self,
@@ -1106,7 +1131,12 @@ class DungeonService:
                             next_floor_raw_map = None
 
                     # If raw_map missing, try balanced_map (agent-produced)
-                    if not next_floor_raw_map and next_balanced_val not in [None, "", "{}", "null"]:
+                    if not next_floor_raw_map and next_balanced_val not in [
+                        None,
+                        "",
+                        "{}",
+                        "null",
+                    ]:
                         try:
                             parsed_bal = (
                                 json.loads(next_balanced_val)
@@ -1116,7 +1146,10 @@ class DungeonService:
                             # balanced map may wrap rooms under 'dungeon_data' or be direct
                             if isinstance(parsed_bal, dict) and "rooms" in parsed_bal:
                                 next_floor_raw_map = parsed_bal
-                            elif isinstance(parsed_bal, dict) and "dungeon_data" in parsed_bal:
+                            elif (
+                                isinstance(parsed_bal, dict)
+                                and "dungeon_data" in parsed_bal
+                            ):
                                 next_floor_raw_map = parsed_bal.get("dungeon_data")
                         except Exception:
                             next_floor_raw_map = None
@@ -1159,7 +1192,9 @@ class DungeonService:
                     f"[DEBUG] Using next_floor_raw_map for balancing: dungeon_id={next_floor_id}, rooms_count={len(rooms_preview)}"
                 )
                 for i, r in enumerate(rooms_preview):
-                    print(f"  - room {i}: type={r.get('room_type') or r.get('type') or r.get('roomType')}, monsters={r.get('monsters', [])}")
+                    print(
+                        f"  - room {i}: type={r.get('room_type') or r.get('type') or r.get('roomType')}, monsters={r.get('monsters', [])}"
+                    )
             except Exception:
                 print("[DEBUG] next_floor_raw_map preview failed")
             dungeon_graph = get_dungeon_graph()
@@ -1249,9 +1284,11 @@ class DungeonService:
                 for m_id, count in monster_counts.items():
                     mons_list.append({"monsterId": m_id, "count": count})
 
-                monster_placements_grouped.append({"roomId": room_id, "monsters": mons_list})
+                monster_placements_grouped.append(
+                    {"roomId": room_id, "monsters": mons_list}
+                )
 
-            return {
+            result = {
                 "success": True,
                 "dungeon_id": next_floor_id,
                 "balanced_floor": next_floor,
@@ -1261,6 +1298,7 @@ class DungeonService:
                 "monster_placements": monster_placements_grouped,
                 "next_floor_event": next_floor_events,
             }
+            return _remove_message_recursive(result)
         except Exception as e:
             print(f"[ERROR] 던전 밸런싱 실패: {e}")
             import traceback
@@ -1340,7 +1378,8 @@ class DungeonService:
                         {"event": json.dumps(events), "id": next_floor_id},
                     )
 
-            return {"success": True, "next_floor_id": next_floor_id, "events": events}
+            result = {"success": True, "next_floor_id": next_floor_id, "events": events}
+            return _remove_message_recursive(result)
 
         except Exception as e:
             print(f"[ERROR] 다음 층 준비 실패: {e}")
@@ -1390,6 +1429,18 @@ class DungeonService:
                 if balanced_map_value
                 else {}
             )
+
+            # Remove any transient/display 'message' fields from DB row before returning
+            try:
+                if isinstance(finished, dict) and "message" in finished:
+                    finished.pop("message", None)
+            except Exception:
+                pass
+            try:
+                if isinstance(balanced_map, dict) and "message" in balanced_map:
+                    balanced_map.pop("message", None)
+            except Exception:
+                pass
 
             return {
                 "success": True,
@@ -1737,24 +1788,21 @@ class DungeonService:
                 select_best_penalty,
             )
 
-            if is_unexpected:
-                if reward_payload is None:
+            if reward_payload is None:
+                try:
                     reward_payload = select_best_reward(
                         reward_id, matched_action, scenario_narrative
                     )
-                if penalty_payload is None:
+                except Exception:
+                    reward_payload = None
+
+            if penalty_payload is None:
+                try:
                     penalty_payload = select_best_penalty(
                         penalty_id, matched_action, scenario_narrative
                     )
-            else:
-                if reward_payload is None and reward_id is not None:
-                    reward_payload = select_best_reward(
-                        reward_id, matched_action, scenario_narrative
-                    )
-                if penalty_payload is None and penalty_id is not None:
-                    penalty_payload = select_best_penalty(
-                        penalty_id, matched_action, scenario_narrative
-                    )
+                except Exception:
+                    penalty_payload = None
 
             # Ensure reward/penalty payloads expose full change_stat/item/monster info
             try:

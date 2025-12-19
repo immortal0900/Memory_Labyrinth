@@ -502,6 +502,18 @@ def _select_monsters_by_strategy(
         f"[_select_monsters_by_strategy] 타겟: {target_threat:.2f}, 필터된 몬스터 수: {len(filtered_monsters)}"
     )
 
+    try:
+        print("[_select_monsters_by_strategy] 후보 몬스터 목록 (id, name, threat, hp, attack, speed):")
+        for m in filtered_monsters:
+            try:
+                print(
+                    f"  - {m.monster_id}, {m.monster_name}, threat={m.threat_level:.2f}, hp={m.hp}, atk={m.attack}, spd={m.speed}"
+                )
+            except Exception:
+                print(f"  - {getattr(m,'monster_id', '?')} (failed to print details)")
+    except Exception:
+        pass
+
     while current_threat < min_threat and attempts < max_attempts:
         # 가중치 기반 몬스터 선택 (히로인 키워드 반영)
         monster = _select_weighted_monster(
@@ -514,6 +526,21 @@ def _select_monsters_by_strategy(
             current_threat += monster.threat_level
 
         attempts += 1
+
+    if not selected:
+        sorted_monsters = sorted(filtered_monsters, key=lambda m: m.threat_level)
+        for m in sorted_monsters:
+            if current_threat >= min_threat:
+                break
+            selected.append(m)
+            current_threat += m.threat_level
+
+        try:
+            print("[_select_monsters_by_strategy] Fallback 적용: 작은 위협도 몬스터로 채움")
+            for m in selected:
+                print(f"  -> {m.monster_id} {m.monster_name} threat={m.threat_level:.2f}")
+        except Exception:
+            pass
 
     return selected
 

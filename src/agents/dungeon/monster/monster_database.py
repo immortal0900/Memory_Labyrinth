@@ -14,7 +14,7 @@ class MonsterData:
     attack: int
     attack_speed: float
     attack_range: float
-    stagger_gage: int  # 일시정으로 비틀거리며 공격이 캔슬되고, 행동이 제한되는 상태
+    stagger_gage: int  # 일시적으로 비틀거리며 공격이 캔슬되고, 행동이 제한되는 상태
     weaknesses: Optional[List[int]] = None  # 약점 속성 ID 리스트
     strengths: Optional[List[int]] = None  # 강점 속성 ID 리스트
 
@@ -30,7 +30,6 @@ class MonsterData:
 
 
 # ===== 몬스터 데이터베이스 =====
-# 프로토타입용: 일반 몬스터 1종, 보스 몬스터 1종만 존재
 MONSTER_DATABASE: Dict[int, MonsterData] = {
     0: MonsterData(
         monster_id=0,
@@ -42,6 +41,8 @@ MONSTER_DATABASE: Dict[int, MonsterData] = {
         attack_speed=1.0,
         attack_range=300.0,
         stagger_gage=10,
+        weaknesses=None,
+        strengths=None,
     ),
     1: MonsterData(
         monster_id=1,
@@ -53,6 +54,10 @@ MONSTER_DATABASE: Dict[int, MonsterData] = {
         attack_speed=1.0,
         attack_range=250.0,
         stagger_gage=50,
+        # TSV: 넉백, 빠른 이동속도, 강한 한방
+        weaknesses=[10, 2, 6],
+        # TSV: 타격
+        strengths=[12],
     ),
     # 일반 몬스터 2
     2: MonsterData(
@@ -65,6 +70,10 @@ MONSTER_DATABASE: Dict[int, MonsterData] = {
         attack_speed=0.7,
         attack_range=200.0,
         stagger_gage=100,
+        # TSV: 타격
+        weaknesses=[12],
+        # TSV: 넉백, 느린 이동속도
+        strengths=[10, 3],
     ),
     # 일반 몬스터 3
     4: MonsterData(
@@ -77,20 +86,8 @@ MONSTER_DATABASE: Dict[int, MonsterData] = {
         attack_speed=1.0,
         attack_range=2000.0,
         stagger_gage=10,
-    ),
-    # 보스 몬스터 1
-    100: MonsterData(
-        monster_id=100,
-        monster_type=2,
-        monster_name="오우거 보스",
-        hp=1200,
-        speed=180,
-        attack=40,
-        attack_speed=1.3,
-        attack_range=120.0,
-        stagger_gage=60,
-        weaknesses=[1, 2],
-        strengths=[3],
+        weaknesses=None,
+        strengths=None,
     ),
     # ======================
     # 엘리트 몬스터
@@ -105,6 +102,10 @@ MONSTER_DATABASE: Dict[int, MonsterData] = {
         attack_speed=1.5,
         attack_range=170.0,
         stagger_gage=100,
+        # TSV: 넉백
+        weaknesses=[10],
+        # TSV: 타격, 느린 공격속도
+        strengths=[12, 5],
     ),
     # ======================
     # 보스 몬스터
@@ -112,24 +113,28 @@ MONSTER_DATABASE: Dict[int, MonsterData] = {
     1000: MonsterData(
         monster_id=1000,
         monster_type=2,
-        monster_name="광란의 골렘",
+        monster_name="광란",
         hp=3500,
         speed=300,
         attack=45,
         attack_speed=2.0,
         attack_range=500.0,
         stagger_gage=55,
+        weaknesses=None,
+        strengths=None,
     ),
     1001: MonsterData(
         monster_id=1001,
         monster_type=2,
-        monster_name="육승찬",
+        monster_name="공포",
         hp=8000,
         speed=350,
         attack=100,
         attack_speed=1.0,
         attack_range=500.0,
         stagger_gage=100,
+        weaknesses=None,
+        strengths=None,
     ),
 }
 
