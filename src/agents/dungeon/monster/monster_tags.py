@@ -15,7 +15,7 @@ KEYWORD_MAP = {
     11: "knockdown",
     12: "impact",
     13: "piercing",
-    14: "high_defense",  # duplicate mapping per spec
+    14: "high_defense",
     15: "low_defense",
     16: "high_hp",
     17: "low_hp",
@@ -25,7 +25,6 @@ KEYWORD_MAP = {
 
 
 def keywords_to_tags(keyword_ids):
-    """Convert list of numeric keyword ids to tag strings."""
     if not keyword_ids:
         return []
     return [KEYWORD_MAP.get(k, f"unknown_{k}") for k in keyword_ids]
