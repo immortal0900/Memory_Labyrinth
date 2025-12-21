@@ -44,8 +44,13 @@ from enums.LLM import LLM
 # ============================================
 
 WEEKDAY_MAP = {
-    "월요일": 0, "화요일": 1, "수요일": 2, "목요일": 3,
-    "금요일": 4, "토요일": 5, "일요일": 6
+    "월요일": 0,
+    "화요일": 1,
+    "수요일": 2,
+    "목요일": 3,
+    "금요일": 4,
+    "토요일": 5,
+    "일요일": 6,
 }
 
 
@@ -162,7 +167,9 @@ class SageAgent(BaseNPCAgent):
         self.llm = init_chat_model(model=model_name, temperature=1, max_tokens=200)
 
         # 의도 분류용 LLM (temperature=0으로 일관된 분류)
-        self.intent_llm = init_chat_model(model=model_name, temperature=0, max_tokens=20)
+        self.intent_llm = init_chat_model(
+            model=model_name, temperature=0, max_tokens=20
+        )
 
         # LangGraph 빌드 (비스트리밍용)
         self.graph = self._build_graph()
@@ -361,7 +368,7 @@ class SageAgent(BaseNPCAgent):
         """
         user_message = state["messages"][-1].content
         player_id = state["player_id"]
-        npc_id = 0 # sage
+        npc_id = 0  # sage
 
         facts_parts = []
 
@@ -408,17 +415,25 @@ class SageAgent(BaseNPCAgent):
             user_memories = user_memory_manager.get_memories_at_point_sync(
                 player_id, npc_id, point_in_time, limit=5
             )
-        elif week_match := re.search(r"지지난주\s*(월|화|수|목|금|토|일)요일", user_message):
+        elif week_match := re.search(
+            r"지지난주\s*(월|화|수|목|금|토|일)요일", user_message
+        ):
             weekday = WEEKDAY_MAP[week_match.group(1) + "요일"]
             point_in_time = _get_last_weekday(weekday, weeks_ago=2)
-            print(f"[MEMORY_FUNC] get_memories_at_point_sync(지지난주 {week_match.group(1)}요일)")
+            print(
+                f"[MEMORY_FUNC] get_memories_at_point_sync(지지난주 {week_match.group(1)}요일)"
+            )
             user_memories = user_memory_manager.get_memories_at_point_sync(
                 player_id, npc_id, point_in_time, limit=5
             )
-        elif week_match := re.search(r"지난주\s*(월|화|수|목|금|토|일)요일", user_message):
+        elif week_match := re.search(
+            r"지난주\s*(월|화|수|목|금|토|일)요일", user_message
+        ):
             weekday = WEEKDAY_MAP[week_match.group(1) + "요일"]
             point_in_time = _get_last_weekday(weekday, weeks_ago=1)
-            print(f"[MEMORY_FUNC] get_memories_at_point_sync(지난주 {week_match.group(1)}요일)")
+            print(
+                f"[MEMORY_FUNC] get_memories_at_point_sync(지난주 {week_match.group(1)}요일)"
+            )
             user_memories = user_memory_manager.get_memories_at_point_sync(
                 player_id, npc_id, point_in_time, limit=5
             )
@@ -494,7 +509,11 @@ class SageAgent(BaseNPCAgent):
             print(f"[TIMING] 시나리오 검색: {time.time() - t2:.3f}s")
 
         print(f"[TIMING] 컨텍스트 준비 총합: {time.time() - total_start:.3f}s")
-        return {"intent": intent, "unlocked_scenarios": unlocked_scenarios, "retrieved_facts": retrieved_facts}
+        return {
+            "intent": intent,
+            "unlocked_scenarios": unlocked_scenarios,
+            "retrieved_facts": retrieved_facts,
+        }
 
     def _build_full_prompt(
         self, state: SageState, context: Dict[str, Any], for_streaming: bool = False
@@ -528,6 +547,7 @@ class SageAgent(BaseNPCAgent):
     "thought": "(내면의 생각 - 플레이어에게 보이지 않음)",
     "text": "(실제 대화 내용)",
     "emotion": "neutral|joy|fun|sorrow|angry|surprise|mysterious",
+    "emotion_intensity": 0.5~2.0 사이의 실수 (0.5=약한 감정, 1.0=보통, 1.5=강함, 2.0=극도로 강함),
     "info_revealed": true 또는 false
 }"""
 
@@ -901,14 +921,17 @@ B) 세계관/정보 질문: "던전이 뭐야?", "히로인들은 누구야?" �
                 "thought": "",
                 "text": response.content,
                 "emotion": "neutral",
+                "emotion_intensity": 1.0,
                 "info_revealed": False,
             }
 
         emotion_str = result.get("emotion", "neutral")
+        emotion_intensity = result.get("emotion_intensity", 1.0)
         print(f"[TIMING] generate 노드 총합: {time.time() - total_start:.3f}s")
         return {
             "response_text": result.get("text", ""),
             "emotion": sage_emotion_to_int(emotion_str),
+            "emotion_intensity": emotion_intensity,
             "info_revealed": result.get("info_revealed", False),
         }
 
