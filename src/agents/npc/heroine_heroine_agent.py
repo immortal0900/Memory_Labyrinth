@@ -346,10 +346,11 @@ class HeroineHeroineAgent:
             output_format = f"""[출력 형식]
 JSON 배열로 출력하세요:
 [
-    {{"speaker_id": {heroine1_id}, "speaker_name": "{name1}", "text": "대사", "emotion": "neutral|joy|fun|sorrow|angry|surprise|mysterious"}},
-    {{"speaker_id": {heroine2_id}, "speaker_name": "{name2}", "text": "대사", "emotion": "neutral|joy|fun|sorrow|angry|surprise|mysterious"}},
+    {{"speaker_id": {heroine1_id}, "speaker_name": "{name1}", "text": "대사", "emotion": "neutral|joy|fun|sorrow|angry|surprise|mysterious", "emotion_intensity": 0.5~2.0}},
+    {{"speaker_id": {heroine2_id}, "speaker_name": "{name2}", "text": "대사", "emotion": "neutral|joy|fun|sorrow|angry|surprise|mysterious", "emotion_intensity": 0.5~2.0}},
     ...
-]"""
+]
+(emotion_intensity: 0.5=약한 감정, 1.0=보통, 1.5=강함, 2.0=극도로 강함)"""
 
         prompt = f"""두 NPC 사이의 자연스러운 대화를 생성해주세요.
 
@@ -455,6 +456,7 @@ JSON 배열로 출력하세요:
                     "speaker_name": speaker_name,
                     "text": text,
                     "emotion": heroine_emotion_to_int(emotion),
+                    "emotion_intensity": 1.0,
                 }
             )
 
@@ -704,6 +706,8 @@ JSON 배열로 출력하세요:
 
                 if "emotion" in msg and isinstance(msg["emotion"], str):
                     msg["emotion"] = heroine_emotion_to_int(msg["emotion"])
+                if "emotion_intensity" not in msg:
+                    msg["emotion_intensity"] = 1.0
         except (json.JSONDecodeError, IndexError):
             persona1 = self._get_persona(heroine1_id)
             conversation = [
