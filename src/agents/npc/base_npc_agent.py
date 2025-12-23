@@ -25,7 +25,7 @@ from db.redis_manager import redis_manager
 from db.user_memory_manager import user_memory_manager
 from db.session_checkpoint_manager import session_checkpoint_manager
 from agents.npc.npc_state import NPCState
-
+from enums.LLM import LLM
 
 class BaseNPCAgent(ABC):
     """NPC Agent 기본 클래스 (추상 클래스)
@@ -43,7 +43,7 @@ class BaseNPCAgent(ABC):
                 return {"player_id": player_id, ...}
     """
 
-    def __init__(self, model_name: str = "gpt-4o-mini"):
+    def __init__(self, model_name: str = LLM.GPT5_MINI):
         """초기화
 
         Args:

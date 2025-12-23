@@ -28,7 +28,6 @@ from agents.npc.sage_agent import sage_agent
 from agents.npc.heroine_heroine_agent import heroine_heroine_agent
 from tools.audio.tts_typecast import typecast_tts_service
 
-
 # ============================================
 # TTS 음성 파일 로컬 저장 (디버그/피드백용)
 # ============================================
@@ -88,6 +87,54 @@ def save_audio_file_background(
 
 router = APIRouter(prefix="/api/npc", tags=["NPC"])
 
+# ============================================
+# 음성 포함 Response 모델 (TTS)
+# ============================================
+
+
+class ChatResponseWithVoice(BaseModel):
+    """히로인 대화 응답 (음성 포함)"""
+    text: str
+    emotion: int
+    emotion_intensity: float
+    affection: int
+    sanity: int
+    memoryProgress: int
+    audio_base64: str
+
+
+class SageChatResponseWithVoice(BaseModel):
+    """대현자 대화 응답 (음성 포함)"""
+    text: str
+    emotion: int
+    emotion_intensity: float
+    scenarioLevel: int
+    infoRevealed: bool
+    audio_base64: str
+
+
+class ConversationTurnWithVoice(BaseModel):
+    """히로인간 대화 턴 (음성 포함)"""
+    speaker_id: int
+    speaker_name: str
+    text: str
+    emotion: int
+    emotion_intensity: float
+    audio_base64: str
+
+
+class HeroineConversationResponseWithVoice(BaseModel):
+    """히로인간 대화 응답 (음성 포함)"""
+    id: str
+    heroine1_id: int
+    heroine2_id: int
+    situation: str
+    conversation: List[ConversationTurnWithVoice]
+    importance_score: int
+    timestamp: str
+
+
+
 # 백그라운드 NPC 대화 태스크 관리
 _background_tasks: Dict[int, asyncio.Task] = {}
 
@@ -139,53 +186,6 @@ class SageChatResponse(BaseModel):
     emotion: int
     scenarioLevel: int
     infoRevealed: bool
-
-
-# ============================================
-# 음성 포함 Response 모델 (TTS)
-# ============================================
-
-
-class ChatResponseWithVoice(BaseModel):
-    """히로인 대화 응답 (음성 포함)"""
-    text: str
-    emotion: int
-    emotion_intensity: float
-    affection: int
-    sanity: int
-    memoryProgress: int
-    audio_base64: str
-
-
-class SageChatResponseWithVoice(BaseModel):
-    """대현자 대화 응답 (음성 포함)"""
-    text: str
-    emotion: int
-    emotion_intensity: float
-    scenarioLevel: int
-    infoRevealed: bool
-    audio_base64: str
-
-
-class ConversationTurnWithVoice(BaseModel):
-    """히로인간 대화 턴 (음성 포함)"""
-    speaker_id: int
-    speaker_name: str
-    text: str
-    emotion: int
-    emotion_intensity: float
-    audio_base64: str
-
-
-class HeroineConversationResponseWithVoice(BaseModel):
-    """히로인간 대화 응답 (음성 포함)"""
-    id: str
-    heroine1_id: int
-    heroine2_id: int
-    situation: str
-    conversation: List[ConversationTurnWithVoice]
-    importance_score: int
-    timestamp: str
 
 
 class HeroineConversationRequest(BaseModel):
@@ -788,7 +788,6 @@ async def get_active_npc_conversation(player_id: str):
     if conv is None:
         return {"active": False, "conversation": None}
     return {"active": True, "conversation": conv}
-
 
 # ============================================
 # TTS 음성 포함 엔드포인트

@@ -144,11 +144,12 @@ class UserMemory:
 # 히로인 ID 매핑
 # ============================================
 
-# NPC ID (숫자) -> heroine_id (문자열) 변환
-NPC_ID_TO_HEROINE = {1: "letia", 2: "lupames", 3: "roco"}
+# NPC ID (숫자) -> npc_id (문자열) 변환
+NPC_ID_TO_HEROINE = {0: "sage", 1: "letia", 2: "lupames", 3: "roco"}
 
 # heroine_id -> Speaker Enum 변환
 HEROINE_TO_SPEAKER = {
+    "sage": Speaker.SAGE,
     "letia": Speaker.LETIA,
     "lupames": Speaker.LUPAMES,
     "roco": Speaker.ROCO,

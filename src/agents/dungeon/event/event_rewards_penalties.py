@@ -1,11 +1,6 @@
 from typing import List, Dict, Any, Optional
 import random
 
-
-# Static reward / penalty pools (snapshot generated)
-# All rewards/penalties target all players (`target: "all"`)
-
-# Spawnable monsters
 SPAWN_MONSTER_REWARDS: List[Dict[str, Any]] = [
     {
         "id": "spawn_monster_0",
@@ -58,7 +53,6 @@ SPAWN_MONSTER_REWARDS: List[Dict[str, Any]] = [
 ]
 
 
-# Item drops (weapons + accessories)
 DROP_ITEM_REWARDS: List[Dict[str, Any]] = [
     {
         "id": "drop_weapon_0",
@@ -351,7 +345,6 @@ DROP_ITEM_REWARDS: List[Dict[str, Any]] = [
 ]
 
 
-# Accessories
 DROP_ITEM_REWARDS += [
     {
         "id": "drop_accessory_100",
@@ -446,7 +439,6 @@ DROP_ITEM_REWARDS += [
 ]
 
 
-# Stat change rewards
 CHANGE_STAT_REWARDS: List[Dict[str, Any]] = [
     {
         "id": "hp_up_10",
@@ -712,7 +704,6 @@ def _to_client_payload(entry: Dict[str, Any]) -> Any:
                 "duration": entry.get("duration", 0),
             }
         }
-    # fallback: expose internal id
     if "id" in entry:
         return {"id": entry.get("id")}
     return entry
@@ -724,31 +715,39 @@ def normalize_reward_payload(raw: Any) -> Any:
     """
     if raw is None:
         return None
-    # If it's already in client payload shape (contains keys like monsterId/weaponId)
     if isinstance(raw, dict) and (
         "monsterId" in raw or "weaponId" in raw or "accessoryId" in raw or "stat" in raw
     ):
         return raw
 
-    # If it's a list of numeric ids for monsters
     if isinstance(raw, list):
-        # assume monster ids
         return {"monsterId": raw}
 
-    # If it's a string id mapping to internal reward
     if isinstance(raw, str):
+        if raw == "drop_item_unknown":
+            item = pick_random_reward(kind="item")
+            if item:
+                return _to_client_payload(item)
+            return {"id": raw}
+
         r = get_reward_dict(raw)
         if r:
             return _to_client_payload(r)
-        # unknown string: return as id wrapper
+        rl = (raw or "").strip().lower()
+        try:
+            if rl.startswith("hp"):
+                candidates = [c for c in CHANGE_STAT_REWARDS if c.get("stat") == "hp"]
+                if candidates:
+                    best = max(candidates, key=lambda x: x.get("value", 0))
+                    return _to_client_payload(best)
+        except Exception:
+            pass
         return {"id": raw}
 
-    # If it's a dict with an 'id' key
     if isinstance(raw, dict) and "id" in raw:
         r = get_reward_dict(raw.get("id"))
         if r:
             return _to_client_payload(r)
-        # if contains type-like fields, try to convert directly
         return _to_client_payload(raw)
 
     return None
@@ -765,9 +764,7 @@ def normalize_penalty_payload(raw: Any) -> Any:
     if isinstance(raw, list):
         return {"monsterId": raw}
     if isinstance(raw, str):
-        # special token: deterministic default penalty for unexpected actions
         if raw == "penalty_unexpected_action":
-            # Default: apply HP -10 and spawn 1 skeleton (both target: all)
             default_stat = get_penalty_dict("hp_down_10")
             default_spawn = get_penalty_dict("pen_spawn_monster_0")
             payloads = []
@@ -775,7 +772,6 @@ def normalize_penalty_payload(raw: Any) -> Any:
                 payloads.append(_to_client_payload(default_stat))
             if default_spawn:
                 payloads.append(_to_client_payload(default_spawn))
-            # Return list so client can process multiple applied penalties
             return payloads if payloads else {"id": raw}
         p = get_penalty_dict(raw)
         if p:
@@ -803,22 +799,17 @@ def select_best_reward(raw: Any, action_text: str = "", scenario_text: str = "")
     ATTACK_KW = ["공격", "죽", "찔", "타격", "팬다", "좆", "썅"]
     INVEST_KW = ["조사", "살펴", "확인", "검사"]
 
-    # Prefer kinds: item > stat > monster (for rewards)
     try:
         if any(k in act for k in HELP_KW + INVEST_KW):
-            # stat buff
             return _to_client_payload(pick_random_reward(kind="stat"))
         if any(k in act for k in TRADE_KW + LOOT_KW):
-            # drop item preferred
             return _to_client_payload(pick_random_reward(kind="item"))
         if any(k in act for k in ATTACK_KW):
-            # attacking may yield items (loot) first, then stat
             item = pick_random_reward(kind="item")
             if item:
                 return _to_client_payload(item)
             return _to_client_payload(pick_random_reward(kind="stat"))
 
-        # default: prefer item, fallback to stat
         item = pick_random_reward(kind="item")
         if item:
             return _to_client_payload(item)
@@ -841,7 +832,6 @@ def select_best_penalty(
 
     try:
         if any(k in act for k in HOSTILE_KW):
-            # spawn monster + small stat down
             spawn = pick_random_penalty(kind="monster")
             stat = get_penalty_dict("hp_down_10")
             payloads = []
@@ -851,10 +841,8 @@ def select_best_penalty(
                 payloads.append(_to_client_payload(stat))
             return payloads if payloads else None
         if any(k in act for k in CARELESS_KW):
-            # minor stat down
             return _to_client_payload(get_penalty_dict("hp_down_10"))
 
-        # default: small stat down
         return _to_client_payload(get_penalty_dict("hp_down_10"))
     except Exception:
         return None
@@ -866,11 +854,9 @@ def parse_expected_outcome_to_choices(eo_text: str) -> List[Dict[str, Any]]:
     if not eo_text or not isinstance(eo_text, str):
         return []
 
-    # Split into numbered or newline-separated candidate outcomes
     parts = re.split(r"\s*(?:\d+\)|\d+\.|\n\- )\s*", eo_text)
     choices: List[Dict[str, Any]] = []
 
-    # token pattern for internal ids like drop_accessory_100, pen_spawn_monster_0, hp_down_10
     token_pat = re.compile(r"([A-Za-z0-9_]+(?:_[A-Za-z0-9_]+)*)")
 
     for part in parts:
@@ -878,11 +864,9 @@ def parse_expected_outcome_to_choices(eo_text: str) -> List[Dict[str, Any]]:
         if not part:
             continue
 
-        # action label — prefer text before ':' or first sentence
         if ":" in part:
             action_label = part.split(":", 1)[0].strip()
         else:
-            # first sentence ending with '.' or ')' or end
             m_sent = re.match(r"^(.{1,120}?)[\.|\)|$]", part)
             action_label = (
                 m_sent.group(1).strip() if m_sent and m_sent.group(1) else part[:80]
@@ -891,12 +875,9 @@ def parse_expected_outcome_to_choices(eo_text: str) -> List[Dict[str, Any]]:
         reward_id = None
         penalty_id = None
 
-        # 1) Look for explicit token patterns anywhere in the part
         tokens = token_pat.findall(part)
-        # Heuristic classification of tokens
         for t in tokens:
             tl = t.lower()
-            # skip generic Korean words captured by token_pat by requiring underscore or known prefixes
             if not (
                 "_" in tl
                 or tl.startswith("drop")
@@ -947,19 +928,14 @@ def parse_expected_outcome_to_choices(eo_text: str) -> List[Dict[str, Any]]:
                 if reward_id is None:
                     reward_id = t
             else:
-                # fallback: treat as reward first
                 if reward_id is None:
                     reward_id = t
-
-        # 2) If no explicit tokens, try to identify text markers indicating reward/penalty
         if reward_id is None and penalty_id is None:
             low = part.lower()
-            # simple keyword heuristics
             if any(
                 k in low
                 for k in ("획득", "획득 가능", "드랍", "얻", "보상", "획득함", "획득할")
             ):
-                # mark as generic reward placeholder
                 reward_id = "drop_item_unknown"
             if any(
                 k in low

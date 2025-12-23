@@ -81,7 +81,9 @@ def _calculate_single_combat_score(stat: StatData) -> float:
     crit_score = stat.critChance * 0.12
     skill_damage_score = stat.skillDamageMultiplier * 6.0
 
-    base = hp_score + attack_score + attack_speed_score + crit_score + skill_damage_score
+    base = (
+        hp_score + attack_score + attack_speed_score + crit_score + skill_damage_score
+    )
 
     # 추가: 스킬/키워드 보정 (stat.keywords: List[str] 또는 stat.skill_keywords)
     bonus = 0.0
@@ -244,8 +246,10 @@ def select_monsters_node(state: DungeonMonsterState) -> DungeonMonsterState:
 
     def _is_boss_room(room: Dict[str, Any]) -> bool:
         rt = room.get("room_type") or room.get("roomType") or room.get("type")
+        # Normalize and be permissive: accept 'boss', 'boss_room', numeric 4
         if isinstance(rt, str):
-            return rt.strip().lower() == "boss"
+            v = rt.strip().lower()
+            return v in ("boss", "boss_room", "b") or "boss" in v
         if isinstance(rt, int):
             return rt == 4
         return False
@@ -253,7 +257,10 @@ def select_monsters_node(state: DungeonMonsterState) -> DungeonMonsterState:
     def _is_monster_room(room: Dict[str, Any]) -> bool:
         rt = room.get("room_type") or room.get("roomType") or room.get("type")
         if isinstance(rt, str):
-            return rt.strip().lower() == "monster"
+            v = rt.strip().lower()
+            return (
+                v in ("monster", "combat", "battle") or "monster" in v or "combat" in v
+            )
         if isinstance(rt, int):
             return rt == 1
         return False
@@ -292,19 +299,99 @@ def select_monsters_node(state: DungeonMonsterState) -> DungeonMonsterState:
     if "avoid_conditions" in llm_strategy:
         avoid_conditions = llm_strategy["avoid_conditions"]
 
-    print(f"[select_monsters_node] 선호도 조건: {len(monster_preferences)}개")
-    print(f"[select_monsters_node] 회피 조건: {avoid_conditions}")
+    # preference and avoid-condition summary logging removed per user request
 
     # 일반 몬스터 선택 (전투방용)
-    # 히로인 키워드 추출 (가능한 경우)
+    # 히로인 키워드/라벨 추출 (숫자 ID 또는 문자열 모두 허용)
+    # 클라에서 제공한 라벨 ID(0..19)를 사용하려면 `keywords` 또는 `keyword_ids` 필드에 숫자 리스트를 넣어주세요.
     hero_tags = []
     heroine_stat_state = state.get("heroine_stat")
+
+    def _normalize_hero_keywords(raw):
+        out = []
+        if not raw:
+            return out
+        # list of ints or strings
+        for it in raw:
+            if isinstance(it, int):
+                # convert numeric id to tag via keywords_to_tags
+                mapped = keywords_to_tags([it])
+                if mapped:
+                    out.extend([m.lower() for m in mapped])
+            elif isinstance(it, str):
+                # try to parse numeric string
+                s = it.strip()
+                if s.isdigit():
+                    mapped = keywords_to_tags([int(s)])
+                    out.extend([m.lower() for m in mapped])
+                else:
+                    out.append(s.lower())
+        return out
+
     if isinstance(heroine_stat_state, list):
         for hs in heroine_stat_state:
             if isinstance(hs, dict):
-                hero_tags.extend([str(k).lower() for k in hs.get("keywords", [])])
+                # accept multiple possible field names from client
+                raw_kw = (
+                    hs.get("keywords")
+                    or hs.get("keyword_ids")
+                    or hs.get("tags")
+                    or hs.get("labels")
+                    or []
+                )
+                hero_tags.extend(_normalize_hero_keywords(raw_kw))
     elif isinstance(heroine_stat_state, dict):
-        hero_tags = [str(k).lower() for k in heroine_stat_state.get("keywords", [])]
+        raw_kw = (
+            heroine_stat_state.get("keywords")
+            or heroine_stat_state.get("keyword_ids")
+            or heroine_stat_state.get("tags")
+            or heroine_stat_state.get("labels")
+            or []
+        )
+        hero_tags = _normalize_hero_keywords(raw_kw)
+
+    # DEBUG: hero tag summary
+    try:
+        print(f"[select_monsters_node] hero_tags: {hero_tags}")
+    except Exception:
+        pass
+
+    # Analyze how hero_tags map to monster weaknesses/strengths across DB
+    try:
+        tag_weak_counts = {t: 0 for t in hero_tags}
+        tag_strong_counts = {t: 0 for t in hero_tags}
+        all_monsters = list(monster_db.values())
+        for m in all_monsters:
+            try:
+                m_weak = (
+                    keywords_to_tags(m.weaknesses)
+                    if getattr(m, "weaknesses", None)
+                    else []
+                )
+                m_strong = (
+                    keywords_to_tags(m.strengths)
+                    if getattr(m, "strengths", None)
+                    else []
+                )
+            except Exception:
+                m_weak = []
+                m_strong = []
+            m_weak_l = [x.lower() for x in m_weak]
+            m_strong_l = [x.lower() for x in m_strong]
+            for ht in hero_tags:
+                if ht in m_weak_l:
+                    tag_weak_counts[ht] = tag_weak_counts.get(ht, 0) + 1
+                if ht in m_strong_l:
+                    tag_strong_counts[ht] = tag_strong_counts.get(ht, 0) + 1
+
+        print(
+            f"[select_monsters_node] hero tag -> monster weakness counts: {tag_weak_counts}"
+        )
+        print(
+            f"[select_monsters_node] hero tag -> monster strength counts: {tag_strong_counts}"
+        )
+    except Exception:
+        pass
 
     selected_monsters = _select_monsters_by_strategy(
         monster_db,
@@ -341,6 +428,13 @@ def select_monsters_node(state: DungeonMonsterState) -> DungeonMonsterState:
         "ai_multiplier": difficulty_multiplier,
         "ai_reasoning": llm_strategy["reasoning"],
         "preferred_tags": preferred_tags,
+        "hero_tags": hero_tags,
+        "hero_tag_weakness_counts": (
+            tag_weak_counts if "tag_weak_counts" in locals() else {}
+        ),
+        "hero_tag_strength_counts": (
+            tag_strong_counts if "tag_strong_counts" in locals() else {}
+        ),
         "target_threat": target_threat,
         "actual_threat": actual_threat,
         "boss_threat": boss_threat,
@@ -408,6 +502,18 @@ def _select_monsters_by_strategy(
         f"[_select_monsters_by_strategy] 타겟: {target_threat:.2f}, 필터된 몬스터 수: {len(filtered_monsters)}"
     )
 
+    try:
+        print("[_select_monsters_by_strategy] 후보 몬스터 목록 (id, name, threat, hp, attack, speed):")
+        for m in filtered_monsters:
+            try:
+                print(
+                    f"  - {m.monster_id}, {m.monster_name}, threat={m.threat_level:.2f}, hp={m.hp}, atk={m.attack}, spd={m.speed}"
+                )
+            except Exception:
+                print(f"  - {getattr(m,'monster_id', '?')} (failed to print details)")
+    except Exception:
+        pass
+
     while current_threat < min_threat and attempts < max_attempts:
         # 가중치 기반 몬스터 선택 (히로인 키워드 반영)
         monster = _select_weighted_monster(
@@ -420,6 +526,21 @@ def _select_monsters_by_strategy(
             current_threat += monster.threat_level
 
         attempts += 1
+
+    if not selected:
+        sorted_monsters = sorted(filtered_monsters, key=lambda m: m.threat_level)
+        for m in sorted_monsters:
+            if current_threat >= min_threat:
+                break
+            selected.append(m)
+            current_threat += m.threat_level
+
+        try:
+            print("[_select_monsters_by_strategy] Fallback 적용: 작은 위협도 몬스터로 채움")
+            for m in selected:
+                print(f"  -> {m.monster_id} {m.monster_name} threat={m.threat_level:.2f}")
+        except Exception:
+            pass
 
     return selected
 
@@ -522,7 +643,11 @@ def _select_weighted_monster(
         if hero_tags:
             candidates = []
             for m in monsters:
-                m_tags = keywords_to_tags(m.weaknesses) if getattr(m, "weaknesses", None) else []
+                m_tags = (
+                    keywords_to_tags(m.weaknesses)
+                    if getattr(m, "weaknesses", None)
+                    else []
+                )
                 if any(ht.lower() in [t.lower() for t in m_tags] for ht in hero_tags):
                     candidates.append(m)
             if candidates:
@@ -539,18 +664,31 @@ def _select_weighted_monster(
 
         # 히로인 태그와 몬스터 약점/강점으로 가중치 보정
         try:
-            monster_weak_tags = keywords_to_tags(monster.weaknesses) if getattr(monster, "weaknesses", None) else []
-            monster_strong_tags = keywords_to_tags(monster.strengths) if getattr(monster, "strengths", None) else []
+            monster_weak_tags = (
+                keywords_to_tags(monster.weaknesses)
+                if getattr(monster, "weaknesses", None)
+                else []
+            )
+            monster_strong_tags = (
+                keywords_to_tags(monster.strengths)
+                if getattr(monster, "strengths", None)
+                else []
+            )
         except Exception:
             monster_weak_tags = []
             monster_strong_tags = []
 
         if hero_tags:
             # 약점과 일치하면 가중치 상승
-            if any(ht.lower() in [t.lower() for t in monster_weak_tags] for ht in hero_tags):
+            if any(
+                ht.lower() in [t.lower() for t in monster_weak_tags] for ht in hero_tags
+            ):
                 weight *= 1.6 if weight > 0 else 1.6
             # 강점과 일치하면 가중치 감소
-            if any(ht.lower() in [t.lower() for t in monster_strong_tags] for ht in hero_tags):
+            if any(
+                ht.lower() in [t.lower() for t in monster_strong_tags]
+                for ht in hero_tags
+            ):
                 weight *= 0.6
 
         weights.append(weight if weight > 0 else 0.1)  # 최소 가중치
@@ -600,8 +738,21 @@ def _place_monsters_in_rooms(
 
     # 전투방에 일반 몬스터 배치
     if not combat_rooms:
-        print("[_place_monsters_in_rooms] 전투방이 없습니다")
-        return filled_dungeon
+        # Fallback: detect rooms by numeric 'type' == 1 or 'roomType' == 1
+        fallback_combat = [
+            r
+            for r in filled_dungeon.get("rooms", [])
+            if r.get("type") == 1 or r.get("roomType") == 1
+        ]
+        if fallback_combat:
+            combat_rooms = fallback_combat
+            print(
+                "[_place_monsters_in_rooms] 전투방이 탐지되지 않아 'type==1' 룸들을 전투방으로 처리합니다",
+                [r.get("room_id") for r in combat_rooms],
+            )
+        else:
+            print("[_place_monsters_in_rooms] 전투방이 없습니다")
+            return filled_dungeon
 
     if not normal_monsters:
         print("[_place_monsters_in_rooms] 배치할 일반 몬스터가 없습니다")

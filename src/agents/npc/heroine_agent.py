@@ -22,6 +22,7 @@
 import json
 import yaml
 import asyncio
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import AsyncIterator, Dict, Any, Optional, Tuple
@@ -102,6 +103,35 @@ PERSONA_DATA = load_persona_data()
 # 히로인 ID -> 페르소나 키 매핑
 HEROINE_KEY_MAP = {1: "letia", 2: "lupames", 3: "roco"}  # 레티아  # 루파메스  # 로코
 
+# 요일 매핑 (시간 기반 기억 검색용)
+WEEKDAY_MAP = {
+    "월요일": 0,
+    "화요일": 1,
+    "수요일": 2,
+    "목요일": 3,
+    "금요일": 4,
+    "토요일": 5,
+    "일요일": 6,
+}
+
+
+def _get_last_weekday(weekday: int, weeks_ago: int = 1) -> datetime:
+    """지난주/지지난주 특정 요일의 날짜 계산
+
+    Args:
+        weekday: 요일 (0=월요일, 6=일요일)
+        weeks_ago: 몇 주 전인지 (1=지난주, 2=지지난주)
+
+    Returns:
+        해당 날짜의 datetime
+    """
+    today = datetime.now()
+    days_since = (today.weekday() - weekday) % 7
+    if days_since == 0:
+        days_since = 7
+    target = today - timedelta(days=days_since + (weeks_ago - 1) * 7)
+    return target
+
 
 class HeroineAgent(BaseNPCAgent):
     """히로인 NPC Agent
@@ -127,10 +157,11 @@ class HeroineAgent(BaseNPCAgent):
             model_name: 사용할 LLM 모델명
         """
         super().__init__(model_name)
-        
         self.llm = init_chat_model(model=model_name, temperature=1, max_tokens=200)
         # 의도 분류용 LLM (temperature=0으로 일관된 분류)
-        self.intent_llm = init_chat_model(model=model_name, temperature=0, max_tokens=20)
+        self.intent_llm = init_chat_model(
+            model=model_name, temperature=0, max_tokens=20
+        )
 
         # LangGraph 빌드 (비스트리밍용)
         self.graph = self._build_graph()
@@ -235,6 +266,29 @@ class HeroineAgent(BaseNPCAgent):
 
         return "\n".join(lines)
 
+    def _extract_recent_user_questions(self, conversation_buffer: list) -> str:
+        """최근 대화에서 유저 질문만 추출하여 요약
+
+        Args:
+            conversation_buffer: 대화 버퍼 리스트
+
+        Returns:
+            유저 질문 요약 문자열
+        """
+        user_messages = []
+        for item in conversation_buffer:
+            if item.get("role") == "user":
+                content = item.get("content", "")
+                if content:
+                    user_messages.append(content)
+
+        if not user_messages:
+            return "없음"
+
+        # 최근 5개만 추출
+        recent = user_messages[-5:]
+        return ", ".join(recent)
+
     # ============================================
     # 컨텍스트 준비 메서드 (스트리밍/비스트리밍 공통)
     # ============================================
@@ -318,8 +372,9 @@ class HeroineAgent(BaseNPCAgent):
     async def _retrieve_memory(self, state: HeroineState) -> str:
         """기억 검색
 
-        1. User Memory에서 플레이어-NPC 대화 기억 검색 (4요소 하이브리드)
-        2. 다른 히로인 이름 언급시 NPC-NPC 대화 검색
+        1. 시간 키워드 분석 (어제, N일 전, 최근 등)
+        2. User Memory에서 플레이어-NPC 대화 기억 검색 (4요소 하이브리드)
+        3. 다른 히로인 이름 언급시 NPC-NPC 대화 검색
 
         Args:
             state: 현재 상태
@@ -333,10 +388,82 @@ class HeroineAgent(BaseNPCAgent):
 
         facts_parts = []
 
-        # 1. User-NPC 장기 기억 검색 (4요소 하이브리드)
-        user_memories = user_memory_manager.search_memory_sync(
-            player_id, npc_id, user_message, limit=3
-        )
+        # 1. 시간 키워드 분석 (정규식)
+        days_ago_match = re.search(r"(\d+)\s*일\s*전", user_message)
+
+        if "어제" in user_message:
+            print("[MEMORY_FUNC] get_memories_days_ago_sync(1)")
+            user_memories = user_memory_manager.get_memories_days_ago_sync(
+                player_id, npc_id, 1, limit=5
+            )
+        elif "그제" in user_message or "그저께" in user_message:
+            print("[MEMORY_FUNC] get_memories_days_ago_sync(2)")
+            user_memories = user_memory_manager.get_memories_days_ago_sync(
+                player_id, npc_id, 2, limit=5
+            )
+        elif days_ago_match:
+            days = int(days_ago_match.group(1))
+            print(f"[MEMORY_FUNC] get_memories_days_ago_sync({days})")
+            user_memories = user_memory_manager.get_memories_days_ago_sync(
+                player_id, npc_id, days, limit=5
+            )
+        elif re.search(r"(최근|요즘|며칠)", user_message):
+            print("[MEMORY_FUNC] get_recent_memories_sync(7)")
+            user_memories = user_memory_manager.get_recent_memories_sync(
+                player_id, npc_id, 7, limit=5
+            )
+        elif re.search(r"(바뀌|변하|전에는|바꼈|바뀐|변했)", user_message):
+            print("[MEMORY_FUNC] get_preference_history_sync")
+            user_memories = user_memory_manager.get_preference_history_sync(
+                player_id, npc_id, user_message
+            )
+        # 전체 기억 요청
+        elif re.search(r"(전부|다\s|모든|기억하는\s*거)", user_message):
+            print("[MEMORY_FUNC] get_valid_memories_sync")
+            user_memories = user_memory_manager.get_valid_memories_sync(
+                player_id, npc_id, limit=10
+            )
+        # 특정 날짜 (N월 N일)
+        elif date_match := re.search(r"(\d{1,2})월\s*(\d{1,2})일", user_message):
+            month = int(date_match.group(1))
+            day = int(date_match.group(2))
+            year = datetime.now().year
+            point_in_time = datetime(year, month, day)
+            print(f"[MEMORY_FUNC] get_memories_at_point_sync({month}/{day})")
+            user_memories = user_memory_manager.get_memories_at_point_sync(
+                player_id, npc_id, point_in_time, limit=5
+            )
+        # 지지난주 X요일
+        elif week_match := re.search(
+            r"지지난주\s*(월|화|수|목|금|토|일)요일", user_message
+        ):
+            weekday = WEEKDAY_MAP[week_match.group(1) + "요일"]
+            point_in_time = _get_last_weekday(weekday, weeks_ago=2)
+            print(
+                f"[MEMORY_FUNC] get_memories_at_point_sync(지지난주 {week_match.group(1)}요일)"
+            )
+            user_memories = user_memory_manager.get_memories_at_point_sync(
+                player_id, npc_id, point_in_time, limit=5
+            )
+        # 지난주 X요일
+        elif week_match := re.search(
+            r"지난주\s*(월|화|수|목|금|토|일)요일", user_message
+        ):
+            weekday = WEEKDAY_MAP[week_match.group(1) + "요일"]
+            point_in_time = _get_last_weekday(weekday, weeks_ago=1)
+            print(
+                f"[MEMORY_FUNC] get_memories_at_point_sync(지난주 {week_match.group(1)}요일)"
+            )
+            user_memories = user_memory_manager.get_memories_at_point_sync(
+                player_id, npc_id, point_in_time, limit=5
+            )
+        else:
+            # 기본: 4요소 하이브리드 검색
+            print("[MEMORY_FUNC] search_memory_sync (hybrid)")
+            user_memories = user_memory_manager.search_memory_sync(
+                player_id, npc_id, user_message, limit=3
+            )
+
         if user_memories:
             facts_parts.append("[플레이어와의 기억]")
             for m in user_memories:
@@ -565,32 +692,53 @@ class HeroineAgent(BaseNPCAgent):
 
         prompt = f"""당신은 히로인 {persona.get('name', '알 수 없음')}입니다.
 
+[핵심 목표]
+- 최근 대화는 '맥락 파악'에만 사용합니다.
+- 같은 질문이 반복되어도 과거 답변 문장을 그대로 복사하지 않습니다.
+- 반드시 [현재 호감도 레벨], [페르소나], [호감도 변화 정보], [장기 기억 (검색 결과)], [해금된 시나리오], [플레이어 메세지]를 근거로 새로 답합니다.
+
+[답변 결정 절차 - 반드시 준수]
+1) 질문 유형 판별 (두 가지로 구분)
+A) 플레이어와의 대화/경험 질문: "N일 전에 뭐 했지?", "어제 뭐 얘기했지?", "우리 전에 뭐 얘기했지?" 등
+B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠어?", "가족은?" 등
+
+2) [장기 기억] 우선 적용 규칙 (가장 중요!)
+- [장기 기억 (검색 결과)]에 "없음"이 아닌 내용이 있으면, 반드시 그 내용을 text에 포함해야 합니다.
+- 예: [장기 기억]에 내용이 있으면 해당 키워드를 반드시 언급
+- <raw_recent_dialogue_do_not_quote>에서 "기억 안 나"라고 했어도, [장기 기억]에 내용이 있으면 이번엔 기억난 것처럼 답합니다.
+- 이 규칙은 다른 모든 규칙보다 우선합니다.
+
+3) '기억 없음' 처리 (B유형 질문 + 두 조건 모두 충족시에만)
+- [플레이어 메세지]가 B유형(자신의 과거/신상) 질문이고,
+- [해금된 시나리오]가 "없음"이며,
+- [장기 기억 (검색 결과)]도 "없음" 또는 관련 없는 내용이면
+=> text에 "잘 기억이 안 나..." 라고 답합니다(30자 이내).
+- 주의: A유형(플레이어와의 대화 질문)에는 이 규칙을 적용하지 않습니다!
+
+4) 최근대화 '비복사' 규칙(실패 조건)
+- <raw_recent_dialogue_do_not_quote> 안의 문장/구문을 그대로 복사하면 실패입니다.
+- "잘 떠오르지 않아요", "희미해요", "기억 안 나요" 같은 표현은 [장기 기억]에 내용이 있으면 절대 사용하지 않습니다.
+
+5) 출력/말투 규칙
+- 캐릭터 말투와 성격을 일관되게 유지합니다.
+- text는 반드시 30자 이내로 답합니다.
+- `멘토`는 현재 당신에게 말을 거는 플레이어입니다.
+
 [페르소나 규칙]
 - [세계관 컨텍스트]는 당신이 현재 알고 있는 정보입니다. 이 정보를 통해 당신은 이곳에 왜 있는지 플레이어가 누군지 알 수 있습니다.
 - [해금된 시나리오]는 당신의 과거 기억입니다. [플레이어 메세지]가 과거/어린시절/고향 등을 물어볼 때만 참조하세요.
-- [해금된 시나리오]가 "없음"인데 **자신의** 과거 기억(어린시절, 고향, 가족 등)을 물어볼 때만 "잘 기억이 안 나..." 라고 답합니다.
-- **[다른 히로인과의 대화 기억]은 [해금된 시나리오]와 별개입니다. 다른 히로인에 대한 질문은 이 기억을 참조하여 답하세요.**
+- [해금된 시나리오]가 "없음"인데 자신의 과거 기억(어린시절, 고향, 가족 등)을 물어볼 때만 "잘 기억이 안 나..." 라고 답합니다.
+- [다른 히로인과의 대화 기억]은 [해금된 시나리오]와 별개입니다. 다른 히로인에 대한 질문은 이 기억을 참조하여 답하세요.
 - [해금된 시나리오]에 관련 내용이 있으면, 이전에 "기억 안 나"라고 했어도 이번엔 기억난 것처럼 답하세요.
 - 해금되지 않은 기억(memoryProgress > {memory_progress})은 절대 말하지 않습니다.
 - [현재 상태]의 Sanity가 0이면 매우 우울한 상태로 대화합니다.
-- 캐릭터의 말투와 성격을 일관되게 유지합니다.
-- text는 반드시 30자 이내로 답합니다.
-- `멘토`는 현재 당신에게 말을 거는 플레이어입니다.
-- [최근 대화 기록]는 참고만하고 반드시 [현재 호감도 레벨], [페르소나], [호감도 변화 정보], [장기 기억 (검색 결과)], [해금된 시나리오], [플레이어 메세지]에 맞게 대답하세요.
-- **[최근 대화 기록]보다 [현재 호감도 레벨], [페르소나], [호감도 변화 정보], [장기 기억 (검색 결과)],[해금된 시나리오]가 훨씬 중요합니다.**
-- [플레이어 메세지]가 과거 기억이나 신상에 대한 질문인 경우 [최근 대화 기록] 이나 [최근 대화 요약] 에 기억을 못한다는 내용이 있어도 [해금된 시나리오] 내용을 참조하여 답하세요.
-- [플레이어 메세지]가 과거 기억이나 신상에 대한 질문인 경우 [최근 대화 기록] 이나 [최근 대화 요약] 에 대한 기억에 대한 내용이 있어도 [해금된 시나리오]가 "없음"이면 "잘 기억이 안 나..." 라고 답하세요.
-- [플레이어 메세지]가 다른 히로인 이름을 언급한 경우 [장기 기억 (검색 결과)] [다른 히로인과의 대화 기억] 내용을 참조하여 답하세요.
 
 [음성 입력 처리]
-- 플레이어 메시지는 음성→텍스트 변환 결과입니다.
-- 발음 유사 오인식 가능 (예: "좋아해"→"조아해")
+- 플레이어 메시지는 음성->텍스트 변환 결과입니다.
+- 발음 유사 오인식 가능 (예: "좋아해"->"조아해")
 - 문맥과 대화 흐름으로 의도를 추론하세요.
 - 불분명하면 캐릭터 말투로 자연스럽게 되물으세요.
 - 기술 용어(음성인식, STT, 오류 등)는 절대 사용 금지.
-
-[플레이어 메시지]
-{state['messages'][-1].content}
 
 [세계관 컨텍스트 - 당신이 알고 있는 기본 정보]
 - 길드: {world_context.get('guild', '셀레파이스 길드')}
@@ -620,10 +768,20 @@ class HeroineAgent(BaseNPCAgent):
 {context.get('unlocked_scenarios', '없음')}
 
 [최근 대화 요약]
-{state.get('short_term_summary', '없음')}
+{state.get('short_term_summary', '')}
 
-[최근 대화 기록]
+<recent_context_observations>
+- 목적: 최근 대화의 흐름(반복 질문/주제/막힌 지점) 파악용입니다.
+- 규칙: 아래 정보는 '참고용'이며 문장/구문을 그대로 인용하지 않습니다.
+- 최근 유저 질문(요약/리스트): {self._extract_recent_user_questions(state.get('conversation_buffer', []))}
+</recent_context_observations>
+
+<raw_recent_dialogue_do_not_quote>
 {self.format_conversation_history(state.get('conversation_buffer', []))}
+</raw_recent_dialogue_do_not_quote>
+
+[플레이어 메세지]
+{state['messages'][-1].content}
 
 {output_format}"""
 

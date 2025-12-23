@@ -29,6 +29,7 @@ from sqlalchemy import create_engine, text
 from langchain_openai import OpenAIEmbeddings
 from langchain.chat_models import init_chat_model
 from dotenv import load_dotenv
+from enums.LLM import LLM
 
 load_dotenv()
 
@@ -69,7 +70,7 @@ class UserMemoryManager:
         self.embeddings = OpenAIEmbeddings(model=embedding_model)
 
         # Fact 추출용 LLM (temperature=0으로 일관된 추출)
-        self.extract_llm = init_chat_model(model="gpt-4o-mini", temperature=0)
+        self.extract_llm = init_chat_model(model=LLM.GPT5_MINI)
 
         # 기본 검색 가중치
         self.default_weights = SearchWeights()
@@ -180,6 +181,10 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
     ) -> Optional[str]:
         """단일 fact 저장 (중복/충돌 처리 포함)
 
+        하이브리드 충돌 감지:
+        1. 90% 유사도: 완전 중복으로 바로 무효화
+        2. 65% 유사도 + 같은 content_type: LLM으로 충돌 판단
+
         Args:
             player_id: 플레이어 ID
             heroine_id: 히로인 ID
@@ -191,13 +196,28 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
         # 1. 임베딩 생성
         embedding = self.embeddings.embed_query(fact.content)
 
-        # 2. 중복 검사
+        # 2. 완전 중복 검사 (90% 유사도)
         similar = await self._find_similar_memory(player_id, heroine_id, embedding)
 
         if similar:
-            # 중복 발견 -> 기존 기억 무효화 후 새로 저장
             await self._invalidate_memory(similar["id"])
-            print(f"[INFO] 기존 기억 무효화: {similar['content'][:50]}...")
+            print(f"[INFO] 완전 중복 무효화: {similar['content'][:50]}...")
+        else:
+            # 3. 충돌 후보 검색 (65% 유사도 + 같은 content_type)
+            candidates = await self._find_conflict_candidates(
+                player_id, heroine_id, embedding, fact.content_type.value
+            )
+
+            # 4. LLM으로 충돌 판단
+            for candidate in candidates:
+                is_conflict = await self._check_conflict_with_llm(
+                    fact.content, candidate["content"]
+                )
+                if is_conflict:
+                    await self._invalidate_memory(candidate["id"])
+                    print(
+                        f"[INFO] 취향 변경 감지, 기존 무효화: {candidate['content'][:50]}..."
+                    )
 
         # 3. 새 기억 저장
         memory_id = str(uuid.uuid4())
@@ -474,6 +494,93 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
             conn.execute(sql, {"memory_id": memory_id})
             conn.commit()
 
+    async def _find_conflict_candidates(
+        self, player_id: str, heroine_id: str, embedding: list, content_type: str
+    ) -> List[dict]:
+        """충돌 후보 검색 (하이브리드 취향 변경 감지용)
+
+        임베딩 유사도 0.65 이상 + 같은 content_type인 기억들을 반환
+
+        Args:
+            player_id: 플레이어 ID
+            heroine_id: 히로인 ID
+            embedding: 새 fact의 임베딩
+            content_type: 콘텐츠 타입 (preference, trait 등)
+
+        Returns:
+            충돌 후보 dict 리스트
+        """
+        sql = text(
+            """
+            SELECT * FROM find_conflict_candidates(
+                :player_id,
+                :heroine_id,
+                CAST(:embedding AS vector),
+                :content_type,
+                :threshold
+            )
+        """
+        )
+
+        candidates = []
+
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                sql,
+                {
+                    "player_id": player_id,
+                    "heroine_id": heroine_id,
+                    "embedding": str(embedding),
+                    "content_type": content_type,
+                    "threshold": 0.65,
+                },
+            )
+
+            for row in result:
+                candidates.append(
+                    {
+                        "id": str(row.id),
+                        "content": row.content,
+                        "content_type": row.content_type,
+                        "similarity": row.similarity,
+                    }
+                )
+
+        return candidates
+
+    async def _check_conflict_with_llm(
+        self, new_content: str, existing_content: str
+    ) -> bool:
+        """LLM으로 두 기억이 충돌하는지 판단
+
+        Args:
+            new_content: 새로 저장하려는 기억
+            existing_content: 기존에 저장된 기억
+
+        Returns:
+            True면 충돌 (기존 기억 무효화 필요)
+        """
+        prompt = f"""다음 두 기억이 충돌하거나 대체 관계인지 판단하세요.
+
+[기존 기억]
+{existing_content}
+
+[새 기억]
+{new_content}
+
+[판단 기준]
+- 같은 주제에 대해 취향/선호도가 바뀌었으면 충돌
+- 새 기억이 기존 기억을 부정하거나 수정하면 충돌
+- 서로 다른 주제면 충돌 아님
+- 추가 정보면 충돌 아님
+
+충돌이면 "yes", 아니면 "no"만 응답하세요."""
+
+        response = await self.extract_llm.ainvoke(prompt)
+        answer = response.content.strip().lower()
+
+        return answer == "yes"
+
     # ============================================
     # 유틸리티 메서드
     # ============================================
@@ -534,6 +641,252 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
                             "subject": row.subject,
                             "content_type": row.content_type,
                             "importance": row.importance,
+                        },
+                    }
+                )
+
+        return results
+
+    # ============================================
+    # 시간 기반 기억 조회 메서드
+    # ============================================
+
+    def get_valid_memories_sync(
+        self, player_id: str, npc_id: int, limit: int = 50
+    ) -> List[dict]:
+        """현재 유효한 기억만 조회
+
+        Args:
+            player_id: 플레이어 ID
+            npc_id: NPC ID (숫자)
+            limit: 최대 결과 수
+
+        Returns:
+            기억 dict 리스트
+        """
+        heroine_id = NPC_ID_TO_HEROINE.get(npc_id, "letia")
+
+        sql = text(
+            """
+            SELECT * FROM get_valid_memories(:player_id, :heroine_id, :limit)
+        """
+        )
+
+        results = []
+
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                sql,
+                {"player_id": player_id, "heroine_id": heroine_id, "limit": limit},
+            )
+
+            for row in result:
+                results.append(
+                    {
+                        "memory": row.content,
+                        "text": row.content,
+                        "metadata": {
+                            "speaker": row.speaker,
+                            "subject": row.subject,
+                            "content_type": row.content_type,
+                        },
+                    }
+                )
+
+        return results
+
+    def get_memories_at_point_sync(
+        self, player_id: str, npc_id: int, point_in_time: datetime, limit: int = 50
+    ) -> List[dict]:
+        """특정 시점에 유효했던 기억 조회
+
+        Args:
+            player_id: 플레이어 ID
+            npc_id: NPC ID (숫자)
+            point_in_time: 조회 시점
+            limit: 최대 결과 수
+
+        Returns:
+            기억 dict 리스트
+        """
+        heroine_id = NPC_ID_TO_HEROINE.get(npc_id, "letia")
+
+        sql = text(
+            """
+            SELECT * FROM get_memories_at_point(:player_id, :heroine_id, :point_in_time, :limit)
+        """
+        )
+
+        results = []
+
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                sql,
+                {
+                    "player_id": player_id,
+                    "heroine_id": heroine_id,
+                    "point_in_time": point_in_time,
+                    "limit": limit,
+                },
+            )
+
+            for row in result:
+                results.append(
+                    {
+                        "memory": row.content,
+                        "text": row.content,
+                        "metadata": {
+                            "speaker": row.speaker,
+                            "subject": row.subject,
+                            "content_type": row.content_type,
+                        },
+                    }
+                )
+
+        return results
+
+    def get_preference_history_sync(
+        self, player_id: str, npc_id: int, keyword: str
+    ) -> List[dict]:
+        """취향 변화 이력 조회
+
+        Args:
+            player_id: 플레이어 ID
+            npc_id: NPC ID (숫자)
+            keyword: 검색 키워드
+
+        Returns:
+            기억 dict 리스트 (시간순)
+        """
+        heroine_id = NPC_ID_TO_HEROINE.get(npc_id, "letia")
+
+        sql = text(
+            """
+            SELECT * FROM get_preference_history(:player_id, :heroine_id, :keyword)
+        """
+        )
+
+        results = []
+
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                sql,
+                {"player_id": player_id, "heroine_id": heroine_id, "keyword": keyword},
+            )
+
+            for row in result:
+                results.append(
+                    {
+                        "memory": row.content,
+                        "text": row.content,
+                        "valid_at": row.valid_at,
+                        "invalid_at": row.invalid_at,
+                        "metadata": {
+                            "speaker": row.speaker,
+                            "subject": row.subject,
+                            "content_type": row.content_type,
+                        },
+                    }
+                )
+
+        return results
+
+    def get_recent_memories_sync(
+        self, player_id: str, npc_id: int, days: int, limit: int = 50
+    ) -> List[dict]:
+        """최근 N일 동안 생성된 기억 조회
+
+        Args:
+            player_id: 플레이어 ID
+            npc_id: NPC ID (숫자)
+            days: 최근 N일
+            limit: 최대 결과 수
+
+        Returns:
+            기억 dict 리스트
+        """
+        heroine_id = NPC_ID_TO_HEROINE.get(npc_id, "letia")
+
+        sql = text(
+            """
+            SELECT * FROM get_recent_memories(:player_id, :heroine_id, :days, :limit)
+        """
+        )
+
+        results = []
+
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                sql,
+                {
+                    "player_id": player_id,
+                    "heroine_id": heroine_id,
+                    "days": days,
+                    "limit": limit,
+                },
+            )
+
+            for row in result:
+                results.append(
+                    {
+                        "memory": row.content,
+                        "text": row.content,
+                        "created_at": row.created_at,
+                        "metadata": {
+                            "speaker": row.speaker,
+                            "subject": row.subject,
+                            "content_type": row.content_type,
+                        },
+                    }
+                )
+
+        return results
+
+    def get_memories_days_ago_sync(
+        self, player_id: str, npc_id: int, days_ago: int, limit: int = 50
+    ) -> List[dict]:
+        """N일 전에 했던 이야기 조회
+
+        Args:
+            player_id: 플레이어 ID
+            npc_id: NPC ID (숫자)
+            days_ago: N일 전 (1=어제, 2=그제)
+            limit: 최대 결과 수
+
+        Returns:
+            기억 dict 리스트
+        """
+        heroine_id = NPC_ID_TO_HEROINE.get(npc_id, "letia")
+
+        sql = text(
+            """
+            SELECT * FROM get_memories_days_ago(:player_id, :heroine_id, :days_ago, :limit)
+        """
+        )
+
+        results = []
+
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                sql,
+                {
+                    "player_id": player_id,
+                    "heroine_id": heroine_id,
+                    "days_ago": days_ago,
+                    "limit": limit,
+                },
+            )
+
+            for row in result:
+                results.append(
+                    {
+                        "memory": row.content,
+                        "text": row.content,
+                        "created_at": row.created_at,
+                        "metadata": {
+                            "speaker": row.speaker,
+                            "subject": row.subject,
+                            "content_type": row.content_type,
                         },
                     }
                 )

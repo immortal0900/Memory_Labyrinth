@@ -2,6 +2,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import json
+from agents.dungeon.monster.monster_database import MONSTER_DATABASE
+from agents.dungeon.monster.monster_tags import keywords_to_tags
 
 from services.dungeon_service import get_dungeon_service
 
@@ -65,7 +67,6 @@ class EntranceResponse(BaseModel):
     """던전 입장 응답 (클라 요구: 최상위 배열)"""
 
     success: bool
-    message: str
     playerIds: List[str]
     events: Optional[List[EventResponse]] = None
 
@@ -73,9 +74,8 @@ class EntranceResponse(BaseModel):
 class PlayerBalanceData(BaseModel):
     """플레이어별 밸런싱 데이터"""
 
-    heroineData: Dict[
-        str, Any
-    ]  # playerId, heroineStat, heroineMemories, dungeonPlayerData 포함
+    # `playerId`, `heroineId`, `heroineStat`, `weaponId`, `skillIds`, etc.
+    heroineData: Dict[str, Any]
 
 
 class BalanceRequest(BaseModel):
@@ -86,21 +86,17 @@ class BalanceRequest(BaseModel):
     usedEvents: Optional[List[Any]] = None
 
 
-class MonsterPlacement(BaseModel):
-    """몬스터 배치 정보"""
-
+class RoomMonsterPlacement(BaseModel):
     roomId: int
-    monsterId: int
-    count: int
+    monsterIds: List[int] = []
 
 
 class BalanceResponse(BaseModel):
-    """밸런싱 응답"""
+    """밸런싱 응답 (room별 그룹화된 몬스터 ID 배열)"""
 
     success: bool
-    message: str
     firstPlayerId: str
-    monsterPlacements: List[MonsterPlacement] = []
+    monsterPlacements: List[RoomMonsterPlacement] = []
 
 
 class ClearRequest(BaseModel):
@@ -113,7 +109,6 @@ class ClearResponse(BaseModel):
     """층 완료 응답"""
 
     success: bool
-    message: str
     finishedFloor: Optional[int] = None
 
 
@@ -152,7 +147,6 @@ class NextFloorResponse(BaseModel):
     """다음 층 입장 응답 (클라 요구: 최상위 배열)"""
 
     success: bool
-    message: str
     playerIds: List[str]
     events: Optional[List[EventResponse]] = None
 
@@ -271,7 +265,6 @@ def entrance(request: EntranceRequest):
         print(f"[TIMING] 던전 입장~이벤트 생성 전체 처리 시간: {total_elapsed:.3f}s")
         return EntranceResponse(
             success=True,
-            message="던전 입장 성공",
             playerIds=player_ids,
             events=events_list if events_list else None,
         )
@@ -285,46 +278,168 @@ def balance_dungeon(request: BalanceRequest):
         service = get_dungeon_service()
 
         # Monster DB 로드
-        from agents.dungeon.monster.monster_database import MONSTER_DATABASE
 
-        # 밸런싱 실행 (이벤트 생성 분리됨)
+        normalized_players: List[Dict[str, Any]] = []
+        for pd in request.playerDataList:
+            hd = pd.heroineData or {}
+            # prefer nested playerId inside heroineData
+            if isinstance(hd, dict) and "playerId" in hd:
+                player_id = hd.get("playerId")
+                hd_copy = hd.copy()
+                hd_copy.pop("playerId", None)
+            else:
+                # fallback: see if pd has top-level playerId attribute
+                player_id = getattr(pd, "playerId", None)
+                hd_copy = hd
+            # --- derive keyword ids from weaponId / skillIds (heuristic rules) ---
+            keyword_ids: List[int] = []
+            try:
+                wid = hd_copy.get("weaponId") if isinstance(hd_copy, dict) else None
+            except Exception:
+                wid = None
+            if isinstance(wid, int):
+                # dual blades (20-27) -> fast attack, many hits
+                if 20 <= wid <= 27:
+                    keyword_ids += [4, 7]
+                # greatswords (40-47) -> strong one-shot, slow attack
+                elif 40 <= wid <= 47:
+                    keyword_ids += [6, 5]
+                # hammers (60-67) -> high stagger, strong one-shot
+                elif 60 <= wid <= 67:
+                    keyword_ids += [8, 6]
+                # default: add based on attack power if available
+                else:
+                    try:
+                        # if weaponId is legendary high id, add strong_one_shot
+                        if wid >= 100:
+                            keyword_ids.append(6)
+                    except Exception:
+                        pass
+
+            # skills
+            try:
+                sids = hd_copy.get("skillIds") if isinstance(hd_copy, dict) else None
+            except Exception:
+                sids = None
+            if isinstance(sids, list):
+                for sid in sids:
+                    if not isinstance(sid, int):
+                        continue
+                    # heuristic mapping for common skills
+                    if sid in (0, 102):
+                        keyword_ids.append(1)  # low_defense
+                    elif sid in (1, 2):
+                        keyword_ids.append(2)  # fast_movement
+                    elif sid == 3:
+                        keyword_ids.append(4)  # fast_attack_speed
+                    elif sid >= 100:
+                        keyword_ids.append(16)  # high_hp (example)
+
+            keyword_ids = list(dict.fromkeys(keyword_ids))
+            if isinstance(hd_copy, dict):
+                hd_copy["keyword_ids"] = keyword_ids
+                hd_copy["tags"] = keywords_to_tags(keyword_ids)
+                # Ensure heroineStat also carries keyword information (service reads heroineStat)
+                try:
+                    hs = hd_copy.get("heroineStat")
+                    if hs is None:
+                        hd_copy["heroineStat"] = {
+                            "keyword_ids": keyword_ids,
+                            "tags": keywords_to_tags(keyword_ids),
+                        }
+                    elif isinstance(hs, dict):
+                        hs["keyword_ids"] = list(
+                            dict.fromkeys(hs.get("keyword_ids", []) + keyword_ids)
+                        )
+                        hs["tags"] = keywords_to_tags(
+                            hs.get("keyword_ids", []) + keyword_ids
+                        )
+                except Exception:
+                    pass
+
+            normalized_players.append({"playerId": player_id, "heroineData": hd_copy})
+
+        # 밸런싱 실행 (기존 service 인터페이스 호출)
         result = service.balance_dungeon(
             first_player_id=request.firstPlayerId,
-            player_data_list=[pd.dict() for pd in request.playerDataList],
+            player_data_list=normalized_players,
             monster_db=MONSTER_DATABASE,
             used_events=request.usedEvents,
         )
 
-        if not result["success"]:
+        if not result.get("success"):
             raise Exception(result.get("error", "Unknown error"))
 
-        # 몬스터 배치 정보 매핑
-        monster_placements = []
-        for mp in result.get("monster_placements", []):
-            monster_placements.append(
-                MonsterPlacement(
-                    roomId=mp["roomId"], monsterId=mp["monsterId"], count=mp["count"]
-                )
-            )
+        raw_mp = result.get("monster_placements", []) or []
+        grouped_out: List[Dict[str, Any]] = []
+        if all(isinstance(x, dict) and "monsters" in x for x in raw_mp):
+            grouped_out = raw_mp
+        else:
+            grouped_map: Dict[Any, Dict[str, Any]] = {}
+            for mp in raw_mp:
+                try:
+                    rid = mp.get("roomId")
+                    mid = mp.get("monsterId")
+                    cnt = mp.get("count", 0)
+                except Exception:
+                    continue
+                if rid not in grouped_map:
+                    grouped_map[rid] = {"roomId": rid, "monsters": []}
+                grouped_map[rid]["monsters"].append({"monsterId": mid, "count": cnt})
+            grouped_out = list(grouped_map.values())
 
-        # 다음 층 이벤트 정보 매핑
-        next_event_data = None
-        if result.get("next_floor_event"):
-            evt = result["next_floor_event"]
-            next_event_data = EventResponse(
-                roomId=evt.get("room_id", 0),
-                eventType=evt.get("event_type", 0),
-                eventTitle=evt.get("event_title", ""),
-                scenarioText=evt.get("scenario_text", ""),
-                scenarioNarrative=evt.get("scenario_narrative", ""),
-            )
+        # Build monster_placements from grouped_out (works for both grouped and flat service outputs)
+        monster_placements: List[RoomMonsterPlacement] = []
+        for g in grouped_out:
+            room_id = g.get("roomId")
+            monster_ids: List[int] = []
+            for m in g.get("monsters", []):
+                mid = m.get("monsterId")
+                cnt = int(m.get("count", 0) or 0)
+                if mid is None:
+                    continue
+                monster_ids.extend([mid] * max(0, cnt))
+            # only include rooms that actually have monsters
+            if monster_ids:
+                monster_placements.append(
+                    RoomMonsterPlacement(roomId=room_id, monsterIds=monster_ids)
+                )
+
+        resp_first_player_id = None
+        try:
+                if hasattr(request, "firstPlayerId") and request.firstPlayerId:
+                    resp_first_player_id = request.firstPlayerId
+        except Exception:
+            resp_first_player_id = None
+
+        if resp_first_player_id is None:
+            try:
+                first_pd = request.playerDataList[0]
+                if (
+                    isinstance(first_pd.heroineData, dict)
+                    and "heroineId" in first_pd.heroineData
+                ):
+                    resp_first_player_id = first_pd.heroineData.get("heroineId")
+                else:
+                    # fallback: use normalized_players[0].playerId if available
+                    try:
+                        if normalized_players and isinstance(normalized_players, list):
+                            pid = normalized_players[0].get("playerId")
+                            if pid is not None:
+                                resp_first_player_id = pid
+                    except Exception:
+                        pass
+            except Exception:
+                resp_first_player_id = None
+
+        if resp_first_player_id is None:
+            # final fallback to the incoming firstPlayerId
+            resp_first_player_id = request.firstPlayerId
 
         return BalanceResponse(
             success=True,
-            message="던전 밸런싱 성공",
-            firstPlayerId=request.firstPlayerId,
+            firstPlayerId=str(resp_first_player_id) if resp_first_player_id is not None else "",
             monsterPlacements=monster_placements,
-            agentResult=result.get("agent_result"),
         )
     except Exception as e:
         import traceback
@@ -349,7 +464,6 @@ def clear_floor(request: ClearRequest):
         # balanced_map 반환 제거, 완료 처리만 응답
         return ClearResponse(
             success=True,
-            message=f"{finished_floor}층 완료",
             finishedFloor=finished_floor,
         )
     except Exception as e:
@@ -504,7 +618,6 @@ def nextfloor(request: NextFloorRequest):
             heroine_memory_progress.append(0)
         return NextFloorResponse(
             success=True,
-            message="다음 층 입장 및 이벤트 생성 성공",
             playerIds=player_ids,
             events=events_list if events_list else None,
         )

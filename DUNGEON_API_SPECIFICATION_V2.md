@@ -4,9 +4,8 @@
 `http://<server_ip>:8090/api/dungeon`
 
 ---
-
 ## 1. 던전 입장 (1층 생성)
-**Endpoint:** `POST /entrance`
+**Endpoint:** `POST /api/dungeon/entrance`
 **Description:** 플레이어가 던전(1층)에 입장할 때 호출됩니다. 던전 세션을 초기화하고, 참여하는 플레이어들의 이전 미완료 세션을 정리하며, 제공된 맵 구조를 기반으로 1층,2층 이벤트를 생성합니다.
 
 ### Request Body (`application/json`)
@@ -21,12 +20,9 @@
 
 ```json
 {
-  "playerIds": [220, 221],
+  "playerIds": ["TEST0", "TEST1"],
   "heroineIds": [1, 1],
-  "heroineData": [
-    { "heroineId": 1, "memoryProgress": 0 },
-    { "heroineId": 1, "memoryProgress": 0 }
-  ],
+  "heroineData": [10, 50],
   "rawMaps": [
     {
       "floor": 1,
@@ -91,13 +87,13 @@
 
 | 필드명 | 타입 | 필수 | 설명 |
 | :--- | :--- | :--- | :--- |
-| `firstPlayerId` | Integer | Yes | 방장(Host) 플레이어 ID |
+| `firstPlayerId` | String | Yes | 방장(Host) 플레이어 ID |
 | `playerDataList` | Array | Yes | 각 플레이어들의 현재 상태 정보(각 항목에 heroineData 포함) |
 | `usedEvents` | Array | No | (선택)이전에 사용된 이벤트 ID 목록 |
 
 ```json
 {
-  "firstPlayerId": 101,
+  "firstPlayerId": "TEST0",
   "playerDataList": [
     {
       "heroineData": {
@@ -105,8 +101,7 @@
         "heroineId": 1,
         "memoryProgress": 50,
         "scenarioLevel": 3,
-        "heroineStat": { ... },
-        "dungeonPlayerData": { ... }
+        "heroineStat": { ... }
       }
     },
     {
@@ -115,8 +110,7 @@
         "heroineId": 2,
         "memoryProgress": 30,
         "scenarioLevel": 2,
-        "heroineStat": { ... },
-        "dungeonPlayerData": { ... }
+        "heroineStat": { ... }
       }
     }
   ],
@@ -132,8 +126,6 @@
 | `message`         | String  | 결과 메시지                          |
 | `firstPlayerId`   | Integer | 방장(Host) 플레이어 ID               |
 | `monsterPlacements` | Array | 다음 층에 배치될 몬스터 정보 목록    |
-| `nextFloorEvent`  | Object  | 다음 층을 위해 생성된 이벤트 정보    |
-| `agentResult`     | Object  | (디버깅용) AI 분석 결과              |
 
 ```json
 {
@@ -160,7 +152,7 @@
 
 ```json
 {
-  "playerIds": [1] // 방장만      // 층을 클리어한 플레이어 ID 목록
+  "playerIds": ["TEST0"] // 방장만      // 층을 클리어한 플레이어 ID 목록
 }
 ```
 
@@ -198,8 +190,8 @@
 
 ```json
 {
-  "firstPlayerId": 1,       // 방장(Host) 플레이어 ID
-  "selectingPlayerId": 1,   // 선택을 한 플레이어 ID
+  "firstPlayerId":"TEST0",       // 방장(Host) 플레이어 ID
+  "selectingPlayerId":"TEST0",   // 선택을 한 플레이어 ID
   "roomId": 1,              // 이벤트가 발생한 방 ID
   "choice": "상인을 공격한다" // 선택한 선택지의 텍스트 (자유 입력 가능)
 }
@@ -210,26 +202,40 @@
 | 필드명 | 타입 | 설명 |
 | :--- | :--- | :--- |
 | `success` | Boolean | 요청 처리 성공 여부 |
-| `firstPlayerId` | Integer | 방장(Host) 플레이어 ID |
-| `selectingPlayerId` | Integer | 선택을 한 플레이어 ID |
+| `firstPlayerId` | String | 방장(Host) 플레이어 ID |
+| `selectingPlayerId` | String | 선택을 한 플레이어 ID |
 | `roomId` | Integer | 이벤트가 발생한 방 ID |
 | `outcome` | String | LLM이 생성한 결과 서술 |
 | `rewardId` | Object / Array / null | 획득한 보상 정보 — 문자열 ID뿐 아니라 구조체(dict)나 리스트 형태로 반환될 수 있습니다. (예: `{ "weaponId": 20 }` 또는 `[ {"monsterId": 3, "count":1} ]`) |
 | `penaltyId` | Object / Array / null | 적용된 패널티 정보 — 문자열 ID뿐 아니라 구조체(dict)나 리스트 형태로 반환될 수 있습니다. |
-| `appliedActions` | Array | 알파 모드에서는 보상/패널티 효과가 DB에 영속되지 않고 간단화된 적용 결과를 인메모리로 요약하여 반환합니다. 각 항목은 클라이언트가 즉시 반영할 수 있는 최소 구조를 가집니다. |
+
 
 ```json
 {
 "success": true,
-"firstPlayerId": 101,
-"selectingPlayerId": 101,
+"firstPlayerId": "TEST0",
+"selectingPlayerId": "TEST0",
 "roomId": 2,
 "outcome": "...", // 이벤트 선택 결과
-"rewardId": {"monsterId":[3,5]}, // 데이터 스프레드 시트 기준 Id로 설정 
-"penaltyId": null,
-"isUnexpected": false
+"rewardId": {"weaponId": 2}, // 데이터 스프레드 시트 기준 Id로 설정 
+"penaltyId": [
+        {
+            "stat": {
+                "name": "hp",
+                "value": -10,
+                "duration": 0
+            }
+        },
+        {
+            "monsterId": [
+                0
+            ]
+        }
+    ]
 }
 ```
+
+
 ---
 ## 5. 다음 층 입장
 **Endpoint:** `POST /nextfloor`
@@ -247,15 +253,12 @@
 {
   "rawMap": {
     "floor": 3, // 이때, floor 가 반드시 포함되어야 합니다.
-    "playerIds": [101, 102],
+    "playerIds": ["TEST0", "TEST1"],
     "heroineIds": [1, 2],
     "rooms": [ ... ],
     "rewards": [ ... ]
   },
-  "heroineData": [
-    { "heroineId": 1, "memoryProgress": 50 },
-    { "heroineId": 2, "memoryProgress": 30 }
-  ],
+  "heroineData": [10, 50],
   "usedEvents": []
 }
 ```
@@ -277,7 +280,7 @@
   "success": true,
   "message": "다음 층 입장 및 이벤트 생성 성공",
   "floorId": 3,
-  "playerIds": [101, 102],
+  "playerIds": ["TEST0", "TEST1"],
   "heroineIds": [1, 2],
   "heroineMemoryProgress": [50, 30],
   "events": [
