@@ -373,16 +373,22 @@ class HeroineAgent(BaseNPCAgent):
 
 [분류 기준]
 - general: 일상 대화, 감정 표현, 질문 없는 대화
-- memory_recall: "우리 전에 뭐 얘기했지?", "플레이어 관련 기억/추억에 대한 질문" 등 플레이어와 히로인이 함께 나눈 과거 대화/경험, "레티아", "루파메스", "로코" 등 다른 히로인 이름 언급시 히로인과의 대화 기억 검색
-- scenario_inquiry: "고향, 어린시절, 가족, 친구 히로인 본인 등 히로인의 신상정보에 대한 내용","히로인의 과거", "기억 상실 전 이야기", 정체성에 대해 물어봄. "최근에 돌아온 기억", "새로 기억난 거", "떠오른 기억" 같은 질문도 포함
+- memory_recall: 플레이어와 히로인이 함께 나눈 과거 대화/경험, 다른 히로인에 대한 의견/평가 질문 ("루파메스 어때?", "레티아를 어떻게 생각해?")
+- scenario_inquiry: 히로인 본인의 신상정보 (고향, 어린시절, 가족), 히로인의 과거, 기억 상실 전 이야기, 정체성. "최근에 돌아온 기억", "새로 기억난 거" 같은 질문도 포함
+- heroine_recall: 다른 히로인과 나눈 대화 내용 질문 ("루파메스랑 뭐 얘기했어?", "레티아와 무슨 대화 했어?", "로코한테 뭐라고 했어?")
 
-반드시 general, memory_recall, scenario_inquiry 중 하나만 출력하세요."""
+반드시 general, memory_recall, scenario_inquiry, heroine_recall 중 하나만 출력하세요."""
 
         response = await self.intent_llm.ainvoke(prompt)
         intent = response.content.strip().lower()
 
         # 유효하지 않으면 기본값
-        if intent not in ["general", "memory_recall", "scenario_inquiry"]:
+        if intent not in [
+            "general",
+            "memory_recall",
+            "scenario_inquiry",
+            "heroine_recall",
+        ]:
             intent = "general"
 
         return intent
@@ -571,6 +577,75 @@ class HeroineAgent(BaseNPCAgent):
             return "\n\n".join([s["content"] for s in scenarios])
         return "해금된 시나리오 없음"
 
+    def _detect_other_heroine_id(
+        self, user_message: str, current_npc_id: int
+    ) -> Optional[int]:
+        """사용자 메시지에서 다른 히로인 ID 감지
+
+        Args:
+            user_message: 사용자 메시지
+            current_npc_id: 현재 대화중인 NPC ID
+
+        Returns:
+            다른 히로인 ID 또는 None
+        """
+        other_id = None
+        if "사트라" in user_message or "대현자" in user_message:
+            other_id = 0
+        elif "레티아" in user_message:
+            other_id = 1
+        elif "루파메스" in user_message:
+            other_id = 2
+        elif "로코" in user_message:
+            other_id = 3
+
+        # 현재 NPC와 다른 경우만 반환
+        if other_id is not None and int(other_id) != int(current_npc_id):
+            return other_id
+        return None
+
+    async def _retrieve_heroine_conversation(self, state: HeroineState) -> str:
+        """다른 히로인과의 최근 대화 검색
+
+        npc_npc_checkpoints 테이블에서 가장 최신의 대화를 가져옵니다.
+
+        Args:
+            state: 현재 상태
+
+        Returns:
+            포맷된 대화 내용 문자열
+        """
+        user_message = state["messages"][-1].content
+        player_id = state["player_id"]
+        npc_id = state["npc_id"]
+
+        # 다른 히로인 ID 감지
+        other_id = self._detect_other_heroine_id(user_message, npc_id)
+
+        if other_id is None:
+            return "관련 대화 없음"
+
+        # 최신 checkpoint에서 대화 가져오기
+        conversation = npc_npc_memory_manager.get_latest_checkpoint_conversation(
+            player_id=str(player_id),
+            npc1_id=int(npc_id),
+            npc2_id=int(other_id),
+        )
+
+        if not conversation:
+            return "관련 대화 없음"
+
+        # 대화 포맷팅
+        npc_names = {0: "사트라", 1: "레티아", 2: "루파메스", 3: "로코"}
+        lines = ["[다른 히로인과의 최근 대화]"]
+        for msg in conversation:
+            speaker_id = msg.get("speaker_id")
+            text = msg.get("text", "")
+            speaker_name = npc_names.get(speaker_id, f"NPC_{speaker_id}")
+            lines.append(f"{speaker_name}: {text}")
+
+        return "\n".join(lines)
+
     async def _prepare_context(self, state: HeroineState) -> Dict[str, Any]:
         """컨텍스트 준비 (스트리밍/비스트리밍 공통)
 
@@ -625,6 +700,7 @@ class HeroineAgent(BaseNPCAgent):
         # 4. 의도에 따른 검색
         retrieved_facts = "없음"
         unlocked_scenarios = "없음"
+        heroine_conversation = "없음"
         preference_changes = []
 
         if intent == "memory_recall":
@@ -643,6 +719,14 @@ class HeroineAgent(BaseNPCAgent):
             print(
                 f"[DEBUG] 시나리오 검색 결과: {unlocked_scenarios[:200] if unlocked_scenarios else 'None'}..."
             )
+        elif intent == "heroine_recall":
+            # 다른 히로인과의 대화 -> npc_npc_checkpoints에서 최신 대화
+            t3 = time.time()
+            heroine_conversation = await self._retrieve_heroine_conversation(state)
+            print(f"[TIMING] 히로인 대화 검색: {time.time() - t3:.3f}s")
+            print(
+                f"[DEBUG] 히로인 대화 검색 결과: {heroine_conversation[:200] if heroine_conversation else 'None'}..."
+            )
 
         print(f"[TIMING] 컨텍스트 준비 총합: {time.time() - total_start:.3f}s")
         return {
@@ -651,6 +735,7 @@ class HeroineAgent(BaseNPCAgent):
             "intent": intent,
             "retrieved_facts": retrieved_facts,
             "unlocked_scenarios": unlocked_scenarios,
+            "heroine_conversation": heroine_conversation,
             "preference_changes": preference_changes,
         }
 
@@ -741,7 +826,8 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
 - [세계관 컨텍스트]는 당신이 현재 알고 있는 정보입니다. 이 정보를 통해 당신은 이곳에 왜 있는지 플레이어가 누군지 알 수 있습니다.
 - [해금된 시나리오]는 당신의 과거 기억입니다. [플레이어 메세지]가 과거/어린시절/고향 등을 물어볼 때만 참조하세요.
 - [해금된 시나리오]가 "없음"인데 자신의 과거 기억(어린시절, 고향, 가족 등)을 물어볼 때만 "잘 기억이 안 나..." 라고 답합니다.
-- [다른 히로인과의 대화 기억]은 [해금된 시나리오]와 별개입니다. 다른 히로인에 대한 질문은 이 기억을 참조하여 답하세요.
+- [다른 히로인과의 대화 기억]은 다른 히로인에 대한 의견/평가 질문에 참조합니다.
+- [다른 히로인과의 최근 대화]는 다른 히로인과 나눈 대화 내용 질문에 참조합니다. 이 대화를 바탕으로 "뭐 얘기했어?" 같은 질문에 답하세요.
 - [해금된 시나리오]에 관련 내용이 있으면, 이전에 "기억 안 나"라고 했어도 이번엔 기억난 것처럼 답하세요.
 - 해금되지 않은 기억(memoryProgress > {memory_progress})은 절대 말하지 않습니다.
 - [현재 상태]의 Sanity가 0이면 매우 우울한 상태로 대화합니다.
@@ -780,6 +866,9 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
 {self._format_preference_changes(context.get('preference_changes', []))}
 [해금된 시나리오]
 {context.get('unlocked_scenarios', '없음')}
+
+[다른 히로인과의 최근 대화]
+{context.get('heroine_conversation', '없음')}
 
 [최근 대화 요약]
 {state.get('short_term_summary', '')}
@@ -1021,6 +1110,7 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
         graph.add_node("router", self._router_node)
         graph.add_node("memory_retrieve", self._memory_retrieve_node)
         graph.add_node("scenario_retrieve", self._scenario_retrieve_node)
+        graph.add_node("heroine_retrieve", self._heroine_retrieve_node)
         graph.add_node("generate", self._generate_node)
         graph.add_node("post_process", self._post_process_node)
 
@@ -1036,11 +1126,13 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
                 "general": "generate",
                 "memory_recall": "memory_retrieve",
                 "scenario_inquiry": "scenario_retrieve",
+                "heroine_recall": "heroine_retrieve",
             },
         )
 
         graph.add_edge("memory_retrieve", "generate")
         graph.add_edge("scenario_retrieve", "generate")
+        graph.add_edge("heroine_retrieve", "generate")
         graph.add_edge("generate", "post_process")
         graph.add_edge("post_process", END)
 
@@ -1118,6 +1210,18 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
         )
         return {"unlocked_scenarios": scenarios}
 
+    async def _heroine_retrieve_node(self, state: HeroineState) -> dict:
+        """다른 히로인과의 대화 검색 노드"""
+        import time
+
+        t = time.time()
+        conversation = await self._retrieve_heroine_conversation(state)
+        print(f"[TIMING] 히로인 대화 검색: {time.time() - t:.3f}s")
+        print(
+            f"[DEBUG] 히로인 대화 검색 결과: {conversation[:200] if conversation else 'None'}..."
+        )
+        return {"heroine_conversation": conversation}
+
     async def _generate_node(self, state: HeroineState) -> dict:
         """응답 생성 노드"""
         import time
@@ -1129,6 +1233,7 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
             "affection_delta": state.get("affection_delta", 0),
             "retrieved_facts": state.get("retrieved_facts", "없음"),
             "unlocked_scenarios": state.get("unlocked_scenarios", "없음"),
+            "heroine_conversation": state.get("heroine_conversation", "없음"),
             "preference_changes": state.get("preference_changes", []),
         }
         print(

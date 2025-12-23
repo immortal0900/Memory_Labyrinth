@@ -515,6 +515,51 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
 
         return result.rowcount
 
+    def get_latest_checkpoint_conversation(
+        self,
+        player_id: str,
+        npc1_id: int,
+        npc2_id: int,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """가장 최신 NPC-NPC 대화(conversation)를 가져옵니다.
+
+        Args:
+            player_id: 플레이어 ID
+            npc1_id: 첫 번째 NPC ID
+            npc2_id: 두 번째 NPC ID
+
+        Returns:
+            대화 리스트 또는 None
+        """
+        heroine_id_1, heroine_id_2 = _normalize_pair(npc1_id, npc2_id)
+
+        sql = text(
+            """
+            SELECT conversation
+            FROM npc_npc_checkpoints
+            WHERE player_id = :player_id
+              AND heroine_id_1 = :heroine_id_1
+              AND heroine_id_2 = :heroine_id_2
+            ORDER BY created_at DESC
+            LIMIT 1
+            """
+        )
+
+        with self.engine.connect() as conn:
+            row = conn.execute(
+                sql,
+                {
+                    "player_id": str(player_id),
+                    "heroine_id_1": heroine_id_1,
+                    "heroine_id_2": heroine_id_2,
+                },
+            ).fetchone()
+
+            if row and row.conversation:
+                return row.conversation
+
+        return None
+
     def search_memories(
         self,
         player_id: str,

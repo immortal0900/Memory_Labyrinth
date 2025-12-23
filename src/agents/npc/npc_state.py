@@ -7,8 +7,9 @@ class IntentType(StrEnum):
     """NPC 대화 의도 분류"""
 
     GENERAL = "general"  # 일반 대화
-    MEMORY_RECALL = "memory_recall"  # 과거 회상 (Mem0 검색)
-    SCENARIO_INQUIRY = "scenario_inquiry"  # 시나리오 질문 (DB 검색)
+    MEMORY_RECALL = "memory_recall"  # 과거 회상 (user_memories + npc_npc_memories 검색)
+    SCENARIO_INQUIRY = "scenario_inquiry"  # 시나리오 질문 (heroine_scenarios 검색)
+    HEROINE_RECALL = "heroine_recall"  # 다른 히로인과 나눈 대화 내용 질문 (npc_npc_checkpoints)
 
 
 class EmotionType(StrEnum):
@@ -59,8 +60,9 @@ class NPCState(TypedDict, total=False):
     intent: str
 
     # 검색 결과
-    retrieved_facts: Optional[str]  # Mem0 검색 결과
-    unlocked_scenarios: Optional[str]  # DB 시나리오 검색 결과
+    retrieved_facts: Optional[str]  # user_memories + npc_npc_memories 검색 결과
+    unlocked_scenarios: Optional[str]  # heroine_scenarios 검색 결과
+    heroine_conversation: Optional[str]  # npc_npc_checkpoints 대화 전체
 
     # 대화 버퍼
     conversation_buffer: List[dict]
