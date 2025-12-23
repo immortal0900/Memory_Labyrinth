@@ -70,7 +70,7 @@ class UserMemoryManager:
         self.embeddings = OpenAIEmbeddings(model=embedding_model)
 
         # Fact 추출용 LLM (temperature=0으로 일관된 추출)
-        self.extract_llm = init_chat_model(model=LLM.GPT5_NANO)
+        self.extract_llm = init_chat_model(model=LLM.GPT5_MINI)
 
         # 기본 검색 가중치
         self.default_weights = SearchWeights()
@@ -121,10 +121,12 @@ class UserMemoryManager:
 - "world": 세계에 대한 사실
 
 [content_type 값]
-- "preference": 선호도 (좋아함, 싫어함)
+- "preference": 취향/선호도 (음식, 색상, 활동 등 좋아하거나 싫어하는 것)
+  예시: "고양이를 좋아함", "사과보다 배를 더 좋아함", "매운 음식을 싫어함"
 - "trait": 특성 (성격, 외모)
 - "event": 이벤트 (함께한 경험)
-- "opinion": 평가 (누군가에 대한 의견)
+- "opinion": 타인/상황에 대한 평가나 의견
+  예시: "멘토님이 친절하다고 생각함", "세상이 불공평하다고 느낌"
 - "personal": 개인정보 (이름, 직업)
 
 [중요도 기준]

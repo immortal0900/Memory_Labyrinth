@@ -1134,7 +1134,7 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
             "affection_delta": state.get("affection_delta", 0),
             "retrieved_facts": state.get("retrieved_facts", "없음"),
             "unlocked_scenarios": state.get("unlocked_scenarios", "없음"),
-            "preference_changes": [],
+            "preference_changes": state.get("preference_changes", []),
         }
         print(
             f"[DEBUG] generate 노드 - unlocked_scenarios: {context['unlocked_scenarios'][:200] if context['unlocked_scenarios'] != '없음' else '없음'}..."
