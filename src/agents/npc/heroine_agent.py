@@ -430,11 +430,6 @@ class HeroineAgent(BaseNPCAgent):
             user_memories = user_memory_manager.get_recent_memories_sync(
                 player_id, npc_id, 7, limit=5
             )
-        elif re.search(r"(바뀌|변하|전에는|바꼈|바뀐|변했)", user_message):
-            print("[MEMORY_FUNC] get_preference_history_sync")
-            user_memories = user_memory_manager.get_preference_history_sync(
-                player_id, npc_id, user_message
-            )
         # 전체 기억 요청
         elif re.search(r"(전부|다\s|모든|기억하는\s*거)", user_message):
             print("[MEMORY_FUNC] get_valid_memories_sync")

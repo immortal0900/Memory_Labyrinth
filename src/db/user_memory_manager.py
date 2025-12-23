@@ -823,52 +823,6 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
 
         return results
 
-    def get_preference_history_sync(
-        self, player_id: str, npc_id: int, keyword: str
-    ) -> List[dict]:
-        """취향 변화 이력 조회
-
-        Args:
-            player_id: 플레이어 ID
-            npc_id: NPC ID (숫자)
-            keyword: 검색 키워드
-
-        Returns:
-            기억 dict 리스트 (시간순)
-        """
-        heroine_id = NPC_ID_TO_HEROINE.get(npc_id, "letia")
-
-        sql = text(
-            """
-            SELECT * FROM get_preference_history(:player_id, :heroine_id, :keyword)
-        """
-        )
-
-        results = []
-
-        with self.engine.connect() as conn:
-            result = conn.execute(
-                sql,
-                {"player_id": player_id, "heroine_id": heroine_id, "keyword": keyword},
-            )
-
-            for row in result:
-                results.append(
-                    {
-                        "memory": row.content,
-                        "text": row.content,
-                        "valid_at": row.valid_at,
-                        "invalid_at": row.invalid_at,
-                        "metadata": {
-                            "speaker": row.speaker,
-                            "subject": row.subject,
-                            "content_type": row.content_type,
-                        },
-                    }
-                )
-
-        return results
-
     def get_recent_memories_sync(
         self, player_id: str, npc_id: int, days: int, limit: int = 50
     ) -> List[dict]:
