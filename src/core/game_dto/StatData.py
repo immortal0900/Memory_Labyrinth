@@ -21,8 +21,8 @@ class StatData(BaseModel):
     # # 기량
     dexterity: int
 
-    # # 지능 (미사용)
-    intelligence: Optional[int]
+    # # 지능
+    intelligence: Optional[int] = None
 
     # # 치명타 확률(합연산) 20 ~ 100
     critChance: float = 20.0

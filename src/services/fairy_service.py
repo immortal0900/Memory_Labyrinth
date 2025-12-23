@@ -1,15 +1,20 @@
-from typing import List
+from typing import List, Optional
 
 from agents.fairy.guild.fairy_guild_agent import graph_builder as guild_builder
 from agents.fairy.dungeon.fairy_dungeon_agent import graph_builder as dungeon_builder
-from agents.fairy.interaction.fairy_interaction_agent import graph_builder as interaction_builder
+from agents.fairy.interaction.fairy_interaction_agent import (
+    graph_builder as interaction_builder,
+)
 from langgraph.checkpoint.memory import MemorySaver
 from agents.fairy.util import add_human_message
 
 from core.game_dto.DungeonPlayerData import DungeonPlayerData
+from core.game_dto.WeaponData import WeaponData
 
 dungeon_memory = MemorySaver()
 dungeon_graph = dungeon_builder.compile(dungeon_memory)
+
+
 async def fairy_dungeon_talk(
     dungeon_player: DungeonPlayerData,
     question: str,
@@ -32,7 +37,7 @@ async def fairy_dungeon_talk(
         },
         config=config,
     )
-    
+
     interrupts = response.get("__interrupt__")
     if interrupts:
         first = interrupts[0]
@@ -46,17 +51,20 @@ async def fairy_dungeon_talk(
         print(result)
         return result
 
+
 guild_memory = MemorySaver()
 guild_graph = guild_builder.compile(guild_memory)
+
+
 async def fairy_guild_talk(
     playerId: int,
     question: str,
     heroine_id: int,
-    affection:int,
+    affection: int,
     memory_progress: int,
-    sanity:int,
+    sanity: int,
 ) -> str:
-    
+
     config = {
         "configurable": {
             "thread_id": playerId,
@@ -78,12 +86,25 @@ async def fairy_guild_talk(
     print(result)
     return result
 
+
 interaction_graph = interaction_builder.compile()
-def fairy_interaction(inventory: List[int], question: str) -> dict:
+
+
+def fairy_interaction(
+    inventory: List[int],
+    question: str,
+    weapon: Optional[WeaponData],
+    sub_weapon: Optional[WeaponData],
+) -> dict:
 
     myInventory = inventory
     response = interaction_graph.invoke(
-        {"messages": [add_human_message(question)], "inventory": myInventory}
+        {
+            "messages": [add_human_message(question)],
+            "inventory": myInventory,
+            "weapon": weapon,
+            "sub_weapon": sub_weapon,
+        }
     )
     return {
         "useItemId": response["useItemId"],

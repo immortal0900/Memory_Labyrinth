@@ -130,6 +130,8 @@ FAIRY_DUNGEON_SYSTEM:
         "어떻게 됐는지까진 잘 모르겠어" (I’m not sure what happened).
       - Describe only the action result briefly and avoid excessive explanation.
       - When explaining an item, refer to it by its item name, not its ID.
+      - Equipped items are always applied to the primary weapon
+      - When an equipment item is used, it is always applied to the primary weapon
 
     ### USAGE_GUIDE
       - Answer by referring to information related to “Usage / Control Guide” that is included in **Current Situation**.
@@ -258,30 +260,58 @@ FAIRY_DUNGEON_SYSTEM:
       - Attack speed multiplier (Min: 1.0, Max: 2.5)
 
     ■ weapon (weaponData)
-    Information about the weapon the heroine is equipped with, including attack power, weapon rarity, and stat modifiers.
+    Weapon data currently equipped by the heroine.
+    Includes attack power, weapon rarity, and stat modifiers.
+
+    - Primary weapon slot
+    - The weapon currently in use
+    - Combat calculations, damage output, stat bonuses, and AI decision-making
+      are always based on this weapon
+    - When swapping, the values of weapon and subWeapon are exchanged
+
+    - weaponType (int)
+        Weapon type (Min: 0, Max: 3)
+          0: One-handed Sword
+          1: Dual Blades
+          2: Greatsword
+          3: Blunt Weapon
+
+    - rarity (int)
+        Weapon rarity (Min: 0, Max: 3)
+          0: Common
+          1: Uncommon
+          2: Rare
+          3: Legendary
+
+    - attackPower (int)
+        Base attack power of the weapon
+        (The actual range varies by weapon type and rarity)
+
+    - modifier (Dictionary)
+        Stat modifiers.
+        A structure that increases specific attributes by percentage.
+        Example: "strength": 0.5, "dexterity": 0.5
+        → +50% Strength, +50% Dexterity
+
+    ■ subWeapon (weaponData)
+      - Secondary weapon slot
+      - A standby weapon equipped for swapping during combat
+      - Currently inactive:
+        stat bonuses and weapon effects are not applied
+      - When swapping, the values of weapon and subWeapon are exchanged
 
       - weaponType (int)
-          Weapon type (Min: 0, Max: 3)
-            0: One-handed sword  
-            1: Dual blades  
-            2: Greatsword  
-            3: Hammer/Mace  
+          Weapon type (same as weapon)
 
       - rarity (int)
-          Weapon rarity (Min: 0, Max: 3)
-            0: Common
-            1: Uncommon
-            2: Rare
-            3: Legendary
+          Weapon rarity (same as weapon)
 
       - attackPower (int)
-          Base attack power of the weapon (the range depends on the weapon and rarity)
+          Base attack power of the weapon (same as weapon)
 
       - modifier (Dictionary)
-          Stat modifiers. This structure increases specific stats as percentages.
-          Example: "strength": 0.5, "dexterity": 0.5 
-          → strength +50%, dexterity +50%
-
+          Stat modifiers (same as weapon)
+      
     ■ inventory (int[])
       - A list of IDs of items currently owned by the heroine
     </Heroine Info Definition>

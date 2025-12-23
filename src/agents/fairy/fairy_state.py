@@ -13,7 +13,22 @@ class DungeonPlayerState(BaseModel):
     hp: int = 250,
     moveSpeed: float = 1,
     attackSpeed: float = 1.0,
+
+    # 쿨타임 감소량 (1.0 x value) 1 ~ 2
+    cooldownReduction: float = 1
+    strength: int
+    dexterity: int    
+    intelligence: Optional[int]
+    # 치명타 확률(합연산) 20 ~ 100
+    critChance: float = 20.0
+    # 스킬 데미지 증가(곱연산) 1 ~ 5
+    skillDamageMultiplier: float = 1.0
+    # 평타 데미지 증가(곱연산) 1 ~ 5
+    autoAttackMultiplier: float = 1.0
+
+    skillIds:List[int]
     weapon: Optional[WeaponData] = None
+    sub_weapon:Optional[WeaponData] = None
     inventory: List[int] = []
 
 class FairyDungeonIntentType(StrEnum):
@@ -52,6 +67,8 @@ class FairyInterationIntentOutput(BaseModel):
 
 class FairyInteractionState(MessagesState):
     inventory: List[int] = []
+    weapon: Optional[WeaponData] = None
+    sub_weapon:Optional[WeaponData] = None
     # 0 은 미행동, 1은 불키기, 2은 불끄기
     roomLight: int = 0
     useItemId: Optional[int] = None

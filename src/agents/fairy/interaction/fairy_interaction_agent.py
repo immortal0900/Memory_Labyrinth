@@ -29,7 +29,6 @@ def _clarify_intent(query):
     # intent_output: FairyInterationIntentOutput = parser_llm.invoke(
     #     interation_intent_prompt
     # )
-
     raw_labels, _ = fairy_interaction_intent_model.predict(query)
     enum_list = FairyInteractionIntentModel.parse_intents_to_enum(raw_labels)    
     intent_output = FairyInterationIntentOutput(intents=enum_list)
@@ -56,9 +55,15 @@ def create_temp_use_item_id(state: FairyInteractionState):
     last = state["messages"][-1]
     last_message = last.content
     inventory = state["inventory"]
+    weapon = state["weapon"]
+    sub_weapon = state["sub_weapon"]
     my_items = get_inventory_items(inventory)
+
     item_use_prompt = PromptManager(FairyPromptType.FAIRY_ITEM_USE).get_prompt(
-        inventory_items=my_items, question=last_message
+        inventory_items=my_items, 
+        question=last_message,
+        weapon = weapon,
+        sub_weapon = sub_weapon,
     )
     try: 
         item_id = int(llm.invoke(item_use_prompt).content)

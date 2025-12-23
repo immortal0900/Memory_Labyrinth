@@ -17,15 +17,17 @@ from core.common import get_inventory_items, get_inventory_item
 
 
 router = APIRouter(prefix="/api/fairy", tags=["Fairy"])
+
+
 class DungeonPlayerDto(BaseModel):
     playerId: str
     heroineId: int
     currRoomId: int
     difficulty: int = 0
-    hp: int = (250,)
-    moveSpeed: float = (1,)
-    attackSpeed: float = (1.0,)
+    stats: StatData
+    skillIds: List[int]
     weaponId: int = None
+    subWeaponId: int = None
     inventory: List[int] = []
 
 
@@ -35,6 +37,8 @@ def _create_dungeon_player_dto(player_id: str):
         heroineId=random.randint(0, 2),
         currRoomId=random.randint(0, 5),
         difficulty=0,
+        stats=StatData(strength=1, dexterity=1, intelligence=None),
+        skillIds=[0, 1],
         hp=250,
         moveSpeed=1,
         attackSpeed=1.0,
@@ -86,6 +90,8 @@ class InteractionRequest(BaseModel):
         description="인벤토리 아이템 id 목록",
         example=[21, 47],
     )
+    weapon_id: Optional[int] = None
+    sub_weapon_id: Optional[int] = None
     question: str = Field(..., description="사용자의 질문", example="현재 방 불좀 켜봐")
 
 
@@ -100,21 +106,35 @@ class InteractionResponse(BaseModel):
     )
 
 
+def _weapon_id_to_data(weapon_id: Optional[int]) -> Optional[WeaponData]:
+    weapon = None
+    weapon_id = weapon_id
+    item: Optional[ItemData] = get_inventory_item(weapon_id)
+    if item is not None:
+        weapon = item.weapon
+    return weapon
+
+
 def dungeon_player_dto_to_state(player_dto: DungeonPlayerDto) -> DungeonPlayerState:
     playerId = player_dto.playerId
     heroineId = player_dto.heroineId
     currRoomId = player_dto.currRoomId
     difficulty = player_dto.difficulty
-    hp = player_dto.hp
-    moveSpeed = player_dto.moveSpeed
-    attackSpeed = player_dto.attackSpeed
+    stats = player_dto.stats
+    hp = stats.hp
+    moveSpeed = stats.moveSpeed
+    attackSpeed = stats.attackSpeed
+    cooldownReduction = stats.cooldownReduction
+    strength = stats.strength
+    dexterity = stats.dexterity
+    intelligence = stats.intelligence
+    critChance = stats.critChance
+    skillDamageMultiplier = stats.skillDamageMultiplier
+    autoAttackMultiplier = stats.autoAttackMultiplier
+    skillIds = player_dto.skillIds
     inventory = player_dto.inventory
-
-    weapon = None
-    weaponId = player_dto.weaponId
-    item: Optional[ItemData] = get_inventory_item(weaponId)
-    if item is not None:
-        weapon = item.weapon
+    weapon = _weapon_id_to_data(player_dto.weaponId)
+    sub_weapon = _weapon_id_to_data(player_dto.subWeaponId)
 
     return DungeonPlayerState(
         playerId=playerId,
@@ -124,8 +144,17 @@ def dungeon_player_dto_to_state(player_dto: DungeonPlayerDto) -> DungeonPlayerSt
         hp=hp,
         moveSpeed=moveSpeed,
         attackSpeed=attackSpeed,
+        cooldownReduction=cooldownReduction,
+        strength=strength,
+        dexterity=dexterity,
+        intelligence=intelligence,
+        critChance=critChance,
+        skillDamageMultiplier=skillDamageMultiplier,
+        autoAttackMultiplier=autoAttackMultiplier,
+        skillIds=skillIds,
         inventory=inventory,
         weapon=weapon,
+        sub_weapon=sub_weapon,
     )
 
 
@@ -150,7 +179,9 @@ def interaction(request: InteractionRequest):
     """정령 - 던전 인터렉션 요청"""
     question = request.question
     inventory = request.inventory
-    response = fairy_interaction(inventory, question)
+    weapon = _weapon_id_to_data(request.weapon_id)
+    sub_weapon = _weapon_id_to_data(request.sub_weapon_id)
+    response = fairy_interaction(inventory, question, weapon, sub_weapon)
 
     useItemId = response["useItemId"]
     roomLight = response["roomLight"]

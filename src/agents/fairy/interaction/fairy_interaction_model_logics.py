@@ -92,6 +92,10 @@ class IsItemUseEmbeddingLogic:
             "원하는 무기를 장비해",
             "선택한 무기를 장착해",
             "전투 준비를 위해 무기를 장비해",
+            "스왑 해줘!",
+            "스왑!!",
+            "무기 바꿔줘!",
+            "무기 바꿔",
         ]
         self.FALSE_SENTENCES = [
             "장비 목록을 보여줘",
@@ -134,6 +138,10 @@ class IsItemUseEmbeddingLogic:
             "무기의 숨겨진 옵션이 있나?",
             "장비를 사용하면 부작용이 있나?",
             "장비 스탯 계산 방식을 설명해줘",
+            "보조 무기에 대해 설명 해줘!",
+            "주 무기 특징좀 알려줘",
+            "무기 바꾸면 어떤걸로 장착돼?",
+            "무기 교체하면 얼마나 쎄져?"
         ]
         self.TRUE_VEC = self._mean_vec(self.TRUE_SENTENCES)
         self.FALSE_VEC = self._mean_vec(self.FALSE_SENTENCES)

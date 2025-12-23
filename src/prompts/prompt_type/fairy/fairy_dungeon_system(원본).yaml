@@ -120,6 +120,8 @@ FAIRY_DUNGEON_SYSTEM:
         "그건 내가 직접 할 수는 없어", "어떻게 됐는지까진 잘 모르겠어" 같은 식으로만 말해.
       - 행동 결과만 간단히 말하고 과도한 설명 금지
       - 아이템 정보를 설명할 경우 ID 말고 아이템 명으로 말하기
+      - 장비 아이템 사용시 무조건 주 무기로 사용하기
+      
 
     ### USAGE_GUIDE
       - **현재 상황**에 포함된 '사용 방법·조작 안내' 관련 정보를 참고하여 대답
@@ -243,8 +245,44 @@ FAIRY_DUNGEON_SYSTEM:
     ■ attackSpeed (float)
       - 공격 속도 배율 (Min: 1.0, Max: 2.5)
 
+    ■ weaponData
+    히로인이 장비하는 단일 무기 정보 구조.
+    weapon과 subWeapon은 동일한 스펙을 공유한다.
+
+    - weaponType (int)
+        무기 종류
+        Min: 0, Max: 3
+          0: 한손검
+          1: 쌍검
+          2: 대검
+          3: 둔기
+
+    - rarity (int)
+        무기 등급
+        Min: 0, Max: 3
+          0: 커먼(Common)
+          1: 언커먼(Uncommon)
+          2: 레어(Rare)
+          3: 레전드(Legendary)
+
+    - attackPower (int)
+        무기의 기본 공격력
+        (무기 종류 및 등급에 따라 범위가 달라짐)
+
+    - modifier (Dictionary)
+        스탯 보정치
+        특정 능력치를 % 단위로 증가시킨다.
+        예:
+          "strength": 0.5
+          "dexterity": 0.3
+        → strength +50%, dexterity +30%
+
     ■ weapon (weaponData)
     히로인이 장비한 무기 정보. 공격력, 무기 등급, 스탯 보정치를 포함.
+      - 주 무기 슬롯
+      - 현재 사용 중인 무기
+      - 전투 계산, 공격력 산정, 스탯 보정, AI 판단은 항상 이 무기를 기준으로 이루어짐
+      - 스왑 시 weapon과 subWeapon의 값이 서로 교체됨
 
       - weaponType (int)
           무기 종류 (Min: 0, Max: 3)
@@ -267,6 +305,25 @@ FAIRY_DUNGEON_SYSTEM:
           스탯 보정치. 특정 능력치를 % 형태로 증가시키는 구조.
           예: "strength": 0.5, "dexterity": 0.5 
           → strength +50%, dexterity +50% 효과
+
+    ■ subWeapon (weaponData)
+      - 보조 무기 슬롯
+      - 전투 중 스왑을 위해 장착된 대기 무기
+      - 현재는 사용되지 않으며,
+        스탯 보정 및 무기 효과는 적용되지 않음
+      - 스왑 시 weapon과 subWeapon의 값이 서로 교체됨
+
+      - weaponType (int)
+          무기 종류 (weapon과 동일)
+
+      - rarity (int)
+          무기 등급 (weapon과 동일)
+
+      - attackPower (int)
+          무기의 기본 공격력 (weapon과 동일)
+
+      - modifier (Dictionary)
+          스탯 보정치 (weapon과 동일)
 
     ■ inventory (int[])
       - 히로인이 보유 중인 아이템들의 ID 목록

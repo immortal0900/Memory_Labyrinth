@@ -82,7 +82,7 @@ def get_groq_llm_lc(
     )
     return llm
 
-from agents.fairy.cache_data import HEROINE_SCENARIOS, HEROINE_INFOS, MONSTER_INFOS
+from agents.fairy.cache_data import HEROINE_SCENARIOS, HEROINE_INFOS, MONSTER_INFOS, SKILL_INFOS
 from typing import List, Dict, Any
 
 def find_scenarios(heroine_id: int, memory_progress: int) -> List[Dict[str, Any]]:
@@ -92,6 +92,13 @@ def find_scenarios(heroine_id: int, memory_progress: int) -> List[Dict[str, Any]
         if s["heroine_id"] == heroine_id and s["memory_progress"] in progresses
     ]
 
+
+def find_skill_info(skill_ids: list[int]):
+    results = []
+    for skil in SKILL_INFOS:
+        if skil["monsterId"] in skill_ids:
+            results.append(skil)
+    return results
 
 def find_monsters_info(monster_ids: list[int]):
     results = []

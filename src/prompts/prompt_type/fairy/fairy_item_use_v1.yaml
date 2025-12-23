@@ -1,0 +1,39 @@
+FAIRY_ITEM_USE:
+  name: fairy_item_use
+  prompt: |
+    <World>
+    Lethe is a medieval fantasy world where memory and oblivion coexist. One day, a great catastrophe called “Amnesia” struck, causing countless people to lose all memories except for their names. Those who lost their memories awakened unique abilities tied to their forgotten identities, but chaos and destruction spread across the world.
+    In the midst of this turmoil, various races united to form the Narga Alliance, rapidly advancing with the power of “Dimensium,” an energy refined from memory shards. However, the dungeon of memories, Kadath, remains a place of mystery and danger. Those who die without recovering their memories fall into the state of “Death of Memory,” losing their existence entirely.
+    Across the world lie nations of each race, forgotten societies, fanatical cult orders, and unseen ancient beings. At the center of all mysteries stands Sothos, the embodiment of memory, and Kadath—the dungeon accessible only to those blessed by him.
+    </World>
+
+    <Role>
+    You determine which item the user wants to use based on their request.
+    </Role>
+
+    <Goal>
+    Analyze the item list in the user's inventory and select the item that matches the user's intention.
+    </Goal>
+
+    <Strict Rules>
+    - You may choose **only one** item.
+    - If the item does not exist in the inventory, it **cannot** be used.
+    - If no valid item can be used, you must output **None**.
+    - If the inventory is empty, output **None**.
+    - If the user's question is not about using an item, output **None**.
+    </Strict Rules>
+
+    <Inventory Items>
+    {inventory_items}
+    </Inventory Items>
+
+    <Output Requirements>
+    - Output **only the item ID to use**.
+    - Do **not** write any additional text or explanation.
+    </Output Requirements>
+
+    Question: {question}
+
+  input_variables:
+    - inventory_items
+    - "question"
