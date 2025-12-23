@@ -70,7 +70,7 @@ class UserMemoryManager:
         self.embeddings = OpenAIEmbeddings(model=embedding_model)
 
         # Fact 추출용 LLM (temperature=0으로 일관된 추출)
-        self.extract_llm = init_chat_model(model=LLM.GPT5_MINI)
+        self.extract_llm = init_chat_model(model=LLM.GPT5_NANO)
 
         # 기본 검색 가중치
         self.default_weights = SearchWeights()
@@ -549,7 +549,7 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
                     "heroine_id": heroine_id,
                     "embedding": str(embedding),
                     "content_type": content_type,
-                    "threshold": 0.65,
+                    "threshold": 0.55,
                 },
             )
 

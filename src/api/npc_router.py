@@ -53,33 +53,33 @@ def save_audio_file_background(
     endpoint_type: str = "chat",
 ):
     """백그라운드에서 음성 파일을 로컬에 저장합니다.
-    
+
     저장 경로: audio_logs/{날짜}/{endpoint_type}/{npc_name}/{timestamp}_{player_id}.wav
     """
     try:
         # 날짜별 디렉토리 생성
         today = datetime.now().strftime("%Y-%m-%d")
         npc_name = NPC_NAMES.get(npc_id, f"npc_{npc_id}")
-        
+
         save_dir = AUDIO_LOG_DIR / today / endpoint_type / npc_name
         save_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # 파일명: timestamp_playerid_emotion.wav
         timestamp = datetime.now().strftime("%H%M%S_%f")
         filename = f"{timestamp}_{player_id}_e{emotion}.wav"
         filepath = save_dir / filename
-        
+
         # WAV 파일 저장
         with open(filepath, "wb") as f:
             f.write(audio_bytes)
-        
+
         # 텍스트도 함께 저장 (어떤 대사인지 확인용)
         text_filepath = save_dir / f"{timestamp}_{player_id}_e{emotion}.txt"
         with open(text_filepath, "w", encoding="utf-8") as f:
             f.write(f"NPC: {npc_name}\n")
             f.write(f"Emotion: {emotion}\n")
             f.write(f"Text: {text}\n")
-        
+
         print(f"[AUDIO LOG] Saved: {filepath}")
     except Exception as e:
         print(f"[AUDIO LOG ERROR] Failed to save audio: {e}")
@@ -94,6 +94,7 @@ router = APIRouter(prefix="/api/npc", tags=["NPC"])
 
 class ChatResponseWithVoice(BaseModel):
     """히로인 대화 응답 (음성 포함)"""
+
     text: str
     emotion: int
     emotion_intensity: float
@@ -105,6 +106,7 @@ class ChatResponseWithVoice(BaseModel):
 
 class SageChatResponseWithVoice(BaseModel):
     """대현자 대화 응답 (음성 포함)"""
+
     text: str
     emotion: int
     emotion_intensity: float
@@ -115,6 +117,7 @@ class SageChatResponseWithVoice(BaseModel):
 
 class ConversationTurnWithVoice(BaseModel):
     """히로인간 대화 턴 (음성 포함)"""
+
     speaker_id: int
     speaker_name: str
     text: str
@@ -125,6 +128,7 @@ class ConversationTurnWithVoice(BaseModel):
 
 class HeroineConversationResponseWithVoice(BaseModel):
     """히로인간 대화 응답 (음성 포함)"""
+
     id: str
     heroine1_id: int
     heroine2_id: int
@@ -132,7 +136,6 @@ class HeroineConversationResponseWithVoice(BaseModel):
     conversation: List[ConversationTurnWithVoice]
     importance_score: int
     timestamp: str
-
 
 
 # 백그라운드 NPC 대화 태스크 관리
@@ -789,15 +792,18 @@ async def get_active_npc_conversation(player_id: str):
         return {"active": False, "conversation": None}
     return {"active": True, "conversation": conv}
 
+
 # ============================================
 # TTS 음성 포함 엔드포인트
 # ============================================
 
 
 @router.post("/heroine/chat/sync/voice", response_model=ChatResponseWithVoice)
-async def heroine_chat_sync_voice(request: ChatRequest, background_tasks: BackgroundTasks):
+async def heroine_chat_sync_voice(
+    request: ChatRequest, background_tasks: BackgroundTasks
+):
     """히로인과 대화 (음성 포함)
-    
+
     기존 /heroine/chat/sync와 동일하지만 TTS 음성이 포함됩니다.
     """
     import time
@@ -850,6 +856,7 @@ async def heroine_chat_sync_voice(request: ChatRequest, background_tasks: Backgr
 
     # TTS 생성
     t_tts = time.time()
+    print(f"[DEBUG] TTS 입력 텍스트: {response_text}")
     audio_bytes = await typecast_tts_service.text_to_speech(
         text=response_text,
         npc_id=heroine_id,
@@ -868,7 +875,7 @@ async def heroine_chat_sync_voice(request: ChatRequest, background_tasks: Backgr
         response_text,
         new_state,
     )
-    
+
     # 음성 파일 로컬 저장 (백그라운드, 피드백용)
     background_tasks.add_task(
         save_audio_file_background,
@@ -880,8 +887,10 @@ async def heroine_chat_sync_voice(request: ChatRequest, background_tasks: Backgr
         "heroine_chat",
     )
 
-    print(f"[TIMING] === API 총 소요시간 (heroine_chat_sync_voice): {time.time() - api_start:.3f}s ===")
-    
+    print(
+        f"[TIMING] === API 총 소요시간 (heroine_chat_sync_voice): {time.time() - api_start:.3f}s ==="
+    )
+
     return ChatResponseWithVoice(
         text=response_text,
         emotion=emotion,
@@ -894,9 +903,11 @@ async def heroine_chat_sync_voice(request: ChatRequest, background_tasks: Backgr
 
 
 @router.post("/sage/chat/sync/voice", response_model=SageChatResponseWithVoice)
-async def sage_chat_sync_voice(request: SageChatRequest, background_tasks: BackgroundTasks):
+async def sage_chat_sync_voice(
+    request: SageChatRequest, background_tasks: BackgroundTasks
+):
     """대현자와 대화 (음성 포함)
-    
+
     기존 /sage/chat/sync와 동일하지만 TTS 음성이 포함됩니다.
     """
     import time
@@ -957,7 +968,7 @@ async def sage_chat_sync_voice(request: SageChatRequest, background_tasks: Backg
         response_text,
         new_state,
     )
-    
+
     # 음성 파일 로컬 저장 (백그라운드, 피드백용)
     background_tasks.add_task(
         save_audio_file_background,
@@ -969,8 +980,10 @@ async def sage_chat_sync_voice(request: SageChatRequest, background_tasks: Backg
         "sage_chat",
     )
 
-    print(f"[TIMING] === API 총 소요시간 (sage_chat_sync_voice): {time.time() - api_start:.3f}s ===")
-    
+    print(
+        f"[TIMING] === API 총 소요시간 (sage_chat_sync_voice): {time.time() - api_start:.3f}s ==="
+    )
+
     return SageChatResponseWithVoice(
         text=response_text,
         emotion=emotion,
@@ -981,12 +994,15 @@ async def sage_chat_sync_voice(request: SageChatRequest, background_tasks: Backg
     )
 
 
-@router.post("/heroine-conversation/generate/voice", response_model=HeroineConversationResponseWithVoice)
+@router.post(
+    "/heroine-conversation/generate/voice",
+    response_model=HeroineConversationResponseWithVoice,
+)
 async def generate_heroine_conversation_voice(
     request: HeroineConversationRequest, background_tasks: BackgroundTasks
 ):
     """히로인간 대화 생성 (음성 포함)
-    
+
     기존 /heroine-conversation/generate와 동일하지만 TTS 음성이 포함됩니다.
     """
     import time
@@ -1004,7 +1020,7 @@ async def generate_heroine_conversation_voice(
     # 각 턴에 TTS 생성 (턴별로 개별 음성 생성)
     conversation_with_voice = []
     t_tts_total = time.time()
-    
+
     for turn_idx, turn in enumerate(result.get("conversation", [])):
         speaker_id = turn.get("speaker_id")
         speaker_name = turn.get("speaker_name", "")
@@ -1013,7 +1029,9 @@ async def generate_heroine_conversation_voice(
         emotion_intensity = turn.get("emotion_intensity", 1.0)
 
         # 디버그: 각 턴별로 어떤 텍스트가 TTS로 전달되는지 확인
-        print(f"[TTS DEBUG] Turn {turn_idx}: speaker={speaker_name}({speaker_id}), text_length={len(text)}, text_preview={text[:50]}...")
+        print(
+            f"[TTS DEBUG] Turn {turn_idx}: speaker={speaker_name}({speaker_id}), text_length={len(text)}, text_preview={text[:50]}..."
+        )
 
         audio_bytes = await typecast_tts_service.text_to_speech(
             text=text,
@@ -1021,10 +1039,10 @@ async def generate_heroine_conversation_voice(
             emotion=emotion,
             emotion_intensity=emotion_intensity,
         )
-        
+
         # 디버그: 생성된 오디오 크기 확인
         print(f"[TTS DEBUG] Turn {turn_idx}: audio_bytes_size={len(audio_bytes)} bytes")
-        
+
         audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
 
         conversation_with_voice.append(
@@ -1037,7 +1055,7 @@ async def generate_heroine_conversation_voice(
                 audio_base64=audio_base64,
             )
         )
-        
+
         # 음성 파일 로컬 저장 (백그라운드, 피드백용)
         background_tasks.add_task(
             save_audio_file_background,
@@ -1050,12 +1068,16 @@ async def generate_heroine_conversation_voice(
         )
 
     print(f"[TIMING] TTS 총 생성: {time.time() - t_tts_total:.3f}s")
-    print(f"[TIMING] === API 총 소요시간 (heroine_conversation_voice): {time.time() - api_start:.3f}s ===")
-    
+    print(
+        f"[TIMING] === API 총 소요시간 (heroine_conversation_voice): {time.time() - api_start:.3f}s ==="
+    )
+
     # 디버그: conversation_with_voice 리스트 길이 확인
     print(f"[DEBUG] conversation_with_voice 길이: {len(conversation_with_voice)}")
     for idx, turn in enumerate(conversation_with_voice):
-        print(f"[DEBUG] Turn {idx}: speaker={turn.speaker_name}, text_preview={turn.text[:30]}...")
+        print(
+            f"[DEBUG] Turn {idx}: speaker={turn.speaker_name}, text_preview={turn.text[:30]}..."
+        )
 
     return HeroineConversationResponseWithVoice(
         id=result.get("id", ""),

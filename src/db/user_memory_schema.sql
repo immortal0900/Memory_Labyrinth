@@ -438,7 +438,7 @@ CREATE OR REPLACE FUNCTION find_conflict_candidates(
     p_heroine_id TEXT,
     p_embedding vector(1536),
     p_content_type TEXT,
-    p_threshold FLOAT DEFAULT 0.65
+    p_threshold FLOAT DEFAULT 0.55
 ) RETURNS TABLE (
     id UUID,
     content TEXT,

@@ -648,24 +648,6 @@ class HeroineAgent(BaseNPCAgent):
             print(
                 f"[DEBUG] 시나리오 검색 결과: {unlocked_scenarios[:200] if unlocked_scenarios else 'None'}..."
             )
-        else:
-            print(f"[DEBUG] general 의도 - 검색 안 함")
-
-        # 5. 취향 변화 선제 감지 (모든 의도에서 수행)
-        from db.user_memory_models import NPC_ID_TO_HEROINE
-
-        t4 = time.time()
-        player_id = state["player_id"]
-        npc_id = state["npc_id"]
-        heroine_id = NPC_ID_TO_HEROINE.get(npc_id, "letia")
-
-        preference_changes = await user_memory_manager.detect_preference_change(
-            str(player_id), heroine_id, user_message
-        )
-        print(f"[TIMING] 취향 변화 감지: {time.time() - t4:.3f}s")
-
-        if preference_changes:
-            print(f"[DEBUG] 취향 변화 감지됨: {preference_changes}")
 
         print(f"[TIMING] 컨텍스트 준비 총합: {time.time() - total_start:.3f}s")
         return {
@@ -1123,28 +1105,11 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
     async def _memory_retrieve_node(self, state: HeroineState) -> dict:
         """기억 검색 노드"""
         import time
-        from db.user_memory_models import NPC_ID_TO_HEROINE
 
         t = time.time()
         facts = await self._retrieve_memory(state)
         print(f"[TIMING] 기억 검색: {time.time() - t:.3f}s")
-
-        # 취향 변화 선제 감지
-        t2 = time.time()
-        player_id = state["player_id"]
-        npc_id = state["npc_id"]
-        user_message = state["messages"][-1].content
-        heroine_id = NPC_ID_TO_HEROINE.get(npc_id, "letia")
-
-        preference_changes = await user_memory_manager.detect_preference_change(
-            str(player_id), heroine_id, user_message
-        )
-        print(f"[TIMING] 취향 변화 감지: {time.time() - t2:.3f}s")
-
-        if preference_changes:
-            print(f"[DEBUG] 취향 변화 감지됨: {preference_changes}")
-
-        return {"retrieved_facts": facts, "preference_changes": preference_changes}
+        return {"retrieved_facts": facts}
 
     async def _scenario_retrieve_node(self, state: HeroineState) -> dict:
         """시나리오 DB 검색 노드"""
@@ -1169,6 +1134,7 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
             "affection_delta": state.get("affection_delta", 0),
             "retrieved_facts": state.get("retrieved_facts", "없음"),
             "unlocked_scenarios": state.get("unlocked_scenarios", "없음"),
+            "preference_changes": [],
         }
         print(
             f"[DEBUG] generate 노드 - unlocked_scenarios: {context['unlocked_scenarios'][:200] if context['unlocked_scenarios'] != '없음' else '없음'}..."
