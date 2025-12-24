@@ -271,8 +271,7 @@ class HeroineAgent(BaseNPCAgent):
             f"주무기: {persona.get('basic_info', {}).get('weapon', '알 수 없음')}",
             "",
             f"[현재 호감도 레벨: {level}]",
-        
-        ]  
+        ]
 
         # 호감도 레벨별 반응
         affection_resp = persona.get("affection_responses", {}).get(level, {})
@@ -289,9 +288,11 @@ class HeroineAgent(BaseNPCAgent):
             lines.append(f"반응: {sanity_resp.get('description', '우울함')}")
             for example in sanity_resp.get("examples", [])[:2]:
                 lines.append(f"  - {example}")
+        lines.append("----")
         lines.append("좋아하는거:")
         for keyword in persona.get("liked_keywords", []):
             lines.append(f"  - {keyword}")
+        lines.append("----")
         lines.append("매우 싫어하는거:")
         for keyword in persona.get("trauma_keywords", []):
             lines.append(f"  - {keyword}")
