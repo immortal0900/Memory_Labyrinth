@@ -790,12 +790,6 @@ def _place_monsters_in_rooms(
     return filled_dungeon
 
 
-def _generate_random_position() -> Dict[str, float]:
-    """방 내 랜덤 위치 생성"""
-    # 0.0 ~ 1.0 범위의 정규화된 좌표 반환 (언리얼 배치용)
-    return {"x": random.random(), "y": random.random(), "z": random.random()}
-
-
 # ===== LangGraph 구성 =====
 from langgraph.graph import START, END, StateGraph
 
