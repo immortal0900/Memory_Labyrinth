@@ -25,5 +25,7 @@ class WeaponData(BaseModel):
     # 예: { "strength": 0.5, "dexterity": 0.5 }
     modifier: Dict[str, float] = {},
 
+    finalDemage:Optional[float] = None
+
     
 

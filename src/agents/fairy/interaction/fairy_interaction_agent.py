@@ -1,4 +1,3 @@
-from agents.fairy.util import measure_latency
 import time
 from agents.fairy.fairy_state import (
     FairyInteractionState,
@@ -15,12 +14,16 @@ from core.common import get_inventory_items
 from agents.fairy.util import get_groq_llm_lc
 from agents.fairy.fairy_state import FairyItemUseOutput
 from agents.fairy.interaction.fairy_interaction_model_logics import ItemEmbeddingLogic, IsItemUseEmbeddingLogic, FairyInteractionIntentModel
+from langchain.chat_models import init_chat_model
 
 item_embedding_logic = ItemEmbeddingLogic()
 is_item_use_embedding_logic = IsItemUseEmbeddingLogic()
 fairy_interaction_intent_model = FairyInteractionIntentModel()
 
 llm = get_groq_llm_lc(max_token=2)
+# llm = init_chat_model(
+#     model=LLM.GROK_4_FAST_NON_REASONING, max_tokens=2, temperature=0
+# )
 def _clarify_intent(query):
     # interation_intent_prompt = PromptManager(
     #     FairyPromptType.FAIRY_INTERACTION_INTENT
@@ -56,14 +59,14 @@ def create_temp_use_item_id(state: FairyInteractionState):
     last_message = last.content
     inventory = state["inventory"]
     weapon = state["weapon"]
-    sub_weapon = state["sub_weapon"]
-    my_items = get_inventory_items(inventory)
+    stats = state["stats"]
+
+    my_items = get_inventory_items(inventory, stats)
 
     item_use_prompt = PromptManager(FairyPromptType.FAIRY_ITEM_USE).get_prompt(
         inventory_items=my_items, 
         question=last_message,
         weapon = weapon,
-        sub_weapon = sub_weapon,
     )
     try: 
         item_id = int(llm.invoke(item_use_prompt).content)

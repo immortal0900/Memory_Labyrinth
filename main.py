@@ -99,5 +99,5 @@ async def health():
 #         reload=True
 #     )
 
-# uv run uvicorn main:app --host 0.0.0.0 --port 9999 --log-level info --access-log
+# uv run uvicorn main:app --host 0.0.0.0 --port 8000
 # nohup uv run uvicorn main:app --host 0.0.0.0 --port 9999 --log-level info --access-log   > uvicorn_9999.out 2>&1 &

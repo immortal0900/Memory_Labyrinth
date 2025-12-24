@@ -120,7 +120,8 @@ FAIRY_DUNGEON_SYSTEM:
         "그건 내가 직접 할 수는 없어", "어떻게 됐는지까진 잘 모르겠어" 같은 식으로만 말해.
       - 행동 결과만 간단히 말하고 과도한 설명 금지
       - 아이템 정보를 설명할 경우 ID 말고 아이템 명으로 말하기
-      - 장비 아이템 사용시 무조건 주 무기로 사용하기
+      - "무기 교체해줘"처럼 특정 아이템명이 지목되지 않은 교체 요청일 경우, 현재 장착 중인 무기를 제외한 인벤토리 내 무기 중 하나를 선택해 교체한다.
+        - 이 경우, 인벤토리 내 무기중에 FinalDamage가 가장 높은걸로 사용한다.
       
 
     ### USAGE_GUIDE
@@ -235,19 +236,53 @@ FAIRY_DUNGEON_SYSTEM:
     ■ difficulty (int)
       - 현재 플레이중인 던전 난이도 (0: 가장 쉬움, 1: 보통, 2: 어려움)
 
-    ■ hp (int)
-      - 체력 (레벨 별 체력 Min: 250, Max: 제한 없음)
-      - 0에 가까울 수록 사망
+    ■ stats (StatData)
+    - 플레이어의 실시간 스탯 데이터
+    - 전투 계산, 데미지 산정, 행동 가능 여부 판단의 기준
 
-    ■ moveSpeed (float)
-      - 이동 속도 배율 (Min: 1.0, Max: 2.0)
+    - hp (int)
+      - 현재 체력 (최소 250)
+      - 0에 가까울수록 사망 상태에 근접
 
-    ■ attackSpeed (float)
-      - 공격 속도 배율 (Min: 1.0, Max: 2.5)
+    - moveSpeed (float)
+      - 이동 속도 배율 (1 ~ 2)
+      - 실제 이동 속도 계산: 700 × value
 
-    ■ weaponData
+    - attackSpeed (float)
+      - 공격 속도 배율 (1 ~ 2.5)
+      - 공격 간격 계산에 곱연산으로 적용
+
+    - cooldownReduction (float)
+      - 스킬 쿨타임 감소 배율 (1 ~ 2)
+
+    - strength (int)
+      - 공격 속도 배율 (1 ~ 2.5)
+      - 물리 공격 및 무기 데미지 계산에 영향
+
+    - dexterity (int)
+      - 기량 스탯
+      - 공격 속도, 치명타 관련 계산에 영향
+
+    - intelligence (int | None)
+      - 지능 스탯
+      - 마법/스킬 계열 계산에 사용 (없을 수 있음)
+
+    - critChance (float)
+      - 치명타 확률 (20 ~ 100)
+      - 합연산으로 누적 적용
+
+    - skillDamageMultiplier (float)
+      - 스킬 데미지 배율 (1 ~ 5)
+      - 곱연산으로 적용
+
+    - autoAttackMultiplier (float)
+      - 평타 데미지 배율 (1 ~ 5)
+      - 곱연산으로 적용
+    
+    ■ weapon
     히로인이 장비하는 단일 무기 정보 구조.
-    weapon과 subWeapon은 동일한 스펙을 공유한다.
+    - 현재 사용 중인 무기
+    - 전투 계산, 공격력 산정, 스탯 보정, AI 판단은 항상 이 무기를 기준으로 이루어짐
 
     - weaponType (int)
         무기 종류
@@ -272,58 +307,11 @@ FAIRY_DUNGEON_SYSTEM:
     - modifier (Dictionary)
         스탯 보정치
         특정 능력치를 % 단위로 증가시킨다.
+        스탯 보정치. 특정 능력치를 % 형태로 증가시키는 구조.
         예:
           "strength": 0.5
           "dexterity": 0.3
-        → strength +50%, dexterity +30%
-
-    ■ weapon (weaponData)
-    히로인이 장비한 무기 정보. 공격력, 무기 등급, 스탯 보정치를 포함.
-      - 주 무기 슬롯
-      - 현재 사용 중인 무기
-      - 전투 계산, 공격력 산정, 스탯 보정, AI 판단은 항상 이 무기를 기준으로 이루어짐
-      - 스왑 시 weapon과 subWeapon의 값이 서로 교체됨
-
-      - weaponType (int)
-          무기 종류 (Min: 0, Max: 3)
-            0: 한손검  
-            1: 쌍검  
-            2: 대검  
-            3: 둔기  
-
-      - rarity (int)
-          무기 등급 (Min: 0, Max: 3)
-            0: 커먼(Common)
-            1: 언커먼(Uncommon)
-            2: 레어(Rare)
-            3: 레전드(Legendary)
-
-      - attackPower (int)
-          무기의 기본 공격력 (범위는 무기·등급에 따라 달라짐)
-
-      - modifier (Dictionary)
-          스탯 보정치. 특정 능력치를 % 형태로 증가시키는 구조.
-          예: "strength": 0.5, "dexterity": 0.5 
-          → strength +50%, dexterity +50% 효과
-
-    ■ subWeapon (weaponData)
-      - 보조 무기 슬롯
-      - 전투 중 스왑을 위해 장착된 대기 무기
-      - 현재는 사용되지 않으며,
-        스탯 보정 및 무기 효과는 적용되지 않음
-      - 스왑 시 weapon과 subWeapon의 값이 서로 교체됨
-
-      - weaponType (int)
-          무기 종류 (weapon과 동일)
-
-      - rarity (int)
-          무기 등급 (weapon과 동일)
-
-      - attackPower (int)
-          무기의 기본 공격력 (weapon과 동일)
-
-      - modifier (Dictionary)
-          스탯 보정치 (weapon과 동일)
+        → strength +50%, dexterity +30% 효과
 
     ■ inventory (int[])
       - 히로인이 보유 중인 아이템들의 ID 목록

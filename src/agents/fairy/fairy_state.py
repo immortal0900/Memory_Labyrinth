@@ -1,8 +1,9 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, TypedDict
+from typing import List, Optional
 from enum import StrEnum
 from langgraph.graph import MessagesState
 from core.game_dto.WeaponData import WeaponData
+from core.game_dto.StatData import StatData
 
 # ==== START 던전 =====
 class DungeonPlayerState(BaseModel):
@@ -10,25 +11,9 @@ class DungeonPlayerState(BaseModel):
     heroineId: int
     currRoomId: int
     difficulty: int 
-    hp: int = 250,
-    moveSpeed: float = 1,
-    attackSpeed: float = 1.0,
-
-    # 쿨타임 감소량 (1.0 x value) 1 ~ 2
-    cooldownReduction: float = 1
-    strength: int
-    dexterity: int    
-    intelligence: Optional[int]
-    # 치명타 확률(합연산) 20 ~ 100
-    critChance: float = 20.0
-    # 스킬 데미지 증가(곱연산) 1 ~ 5
-    skillDamageMultiplier: float = 1.0
-    # 평타 데미지 증가(곱연산) 1 ~ 5
-    autoAttackMultiplier: float = 1.0
-
+    stats:StatData
     skillIds:List[int]
     weapon: Optional[WeaponData] = None
-    sub_weapon:Optional[WeaponData] = None
     inventory: List[int] = []
 
 class FairyDungeonIntentType(StrEnum):
@@ -66,12 +51,14 @@ class FairyInterationIntentOutput(BaseModel):
     )
 
 class FairyInteractionState(MessagesState):
+    stats: StatData
     inventory: List[int] = []
     weapon: Optional[WeaponData] = None
-    sub_weapon:Optional[WeaponData] = None
+    
     # 0 은 미행동, 1은 불키기, 2은 불끄기
     roomLight: int = 0
     useItemId: Optional[int] = None
+
     is_item_use: bool = False
     intent_types: List[FairyInterationIntentType]
     temp_use_item_id: Optional[int] = None

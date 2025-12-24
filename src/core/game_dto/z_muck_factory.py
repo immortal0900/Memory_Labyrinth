@@ -72,13 +72,7 @@ class MockFactory:
             modifier={"strength": 0.1, "dexterity": 0.8, "intelligence": 0.1}
         )
 
-    @staticmethod
-    def create_sub_weapon():
-        return WeaponData(
-            weaponId=20, weaponType=2, weaponName="일반 쌍검",
-            rarity=0, attackPower=6, staggerPower=1,
-            modifier={"strength": 0.1, "dexterity": 0.8, "intelligence": 0.1}
-        )
+    
 
     @staticmethod
     def create_dungeon_player(player_id: int):

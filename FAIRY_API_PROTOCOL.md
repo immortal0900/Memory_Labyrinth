@@ -44,7 +44,6 @@
 | │   ├── `skillDamageMultiplier` | Float          | Yes      | 스킬 피해 증가(곱연산) 1 ~ 5            |
 | │   └── `autoAttackMultiplier`  | Float          | Yes      | 평타 피해 증가 (곱연산) 1 ~ 5           |
 | ├── `weaponId`                  | Integer        | Yes      | 장착 중인 무기 ID                      |
-| ├── `subWeaponId`               | Integer        | Yes      | 장비 슬롯에 등록된 미사용 무기 ID          |
 | └── `inventory`                 | List[int]      | Yes      | 인벤토리에 포함된 아이템 ID 목록           |
 | `skillIds`                      | List[int]      | Yes      | 플레이어가 보유한 스킬 ID 목록             |
 | `question`                      | String         | Yes      | 사용자의 질문 (예: `"현재 방의 불좀 켜줘"`)  |
@@ -108,16 +107,12 @@
 | Field | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
 | `inventory`    | List[int] | Yes      | 인벤토리에 포함된 아이템 ID 목록                    |
-| `weapon_id`    | int | Yes          |   장착 중인 무기 ID                              |
-| `sub_weapon_id`    | int | Yes      | 장비 슬롯에 등록된 미사용 무기 ID                    |
 | `question` | String | Yes | 사용자의 질문 |
 
 
 ```json
 {
   "inventory": [0, 22, 42],
-  "weapon_id": 21,
-  "sub_weapon_id":20,
   "question": "무기 교체해줘"
 }
 ```

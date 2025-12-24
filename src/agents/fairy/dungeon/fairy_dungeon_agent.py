@@ -16,13 +16,13 @@ from agents.fairy.util import (
     find_monsters_info,
 )
 from core.common import get_inventory_items
+from core.game_dto.StatData import StatData
 from enums.LLM import LLM
 from langchain.chat_models import init_chat_model
 from typing import List
 from db.RDBRepository import RDBRepository
 from db.rdb_entity.DungeonRow import DungeonRow
 from agents.fairy.dynamic_prompt import (
-    dungeon_spec_prompt,
     item_spec_prompt,
     monster_spec_prompt,
 )
@@ -98,8 +98,8 @@ async def dungeon_navigator(dungeon_row: DungeonRow, curr_room_id: int):
     return total_prompt
 
 
-async def create_interaction(inventory_ids):
-    item_prompt = item_spec_prompt.format(items_json=get_inventory_items(inventory_ids))
+async def create_interaction(inventory_ids, stats:StatData):
+    item_prompt = item_spec_prompt.format(items_json=get_inventory_items(inventory_ids,stats))
     inventory_prompt = (
         f"        <INVENTORY_ITEMS>\n" f"{item_prompt}\n" f"        </INVENTORY_ITEMS>"
     )
@@ -171,6 +171,7 @@ async def fairy_action(state: FairyDungeonState):
     dungeon_row = rdb_repository.get_current_dungeon_by_player(
         dungenon_player.playerId, dungenon_player.heroineId
     )
+
     messages = state["messages"]
     INTENT_HANDLERS = {
         FairyDungeonIntentType.MONSTER_GUIDE: lambda: get_monsters_info(
@@ -183,7 +184,7 @@ async def fairy_action(state: FairyDungeonState):
             dungeon_row, currRoomId
         ),
         FairyDungeonIntentType.INTERACTION_HANDLER: lambda: create_interaction(
-            dungenon_player.inventory
+            dungenon_player.inventory, dungenon_player.stats
         ),
         FairyDungeonIntentType.USAGE_GUIDE: get_system_info,
     }

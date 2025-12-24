@@ -2,67 +2,45 @@ FAIRY_ITEM_USE:
   name: fairy_item_use
   prompt: |
     <World>
-    Lethe is a medieval fantasy world where memory and oblivion are intertwined.
-    One day, a great catastrophe known as “Amnesia” occurred, causing countless people to lose all their memories, leaving behind only their names.
-    Those who lost their memories, known as the Forgotten, gained special abilities tied to their true identities, but chaos and rampage spread alongside them, pushing the world toward collapse.
-    Amid this confusion, various races united to form the “Narga Alliance,” rapidly advancing around an energy called “Dimensium,” refined from fragments of memory.
-    However, the Memory Dungeon known as Kardas remains full of danger and mystery, and those who die without reclaiming their memories fall into a state called “Death of Memory,” disappearing from existence.
+    Lethe is a medieval fantasy world where memory and oblivion coexist. One day, a great catastrophe called “Amnesia” struck, causing countless people to lose all memories except for their names. Those who lost their memories awakened unique abilities tied to their forgotten identities, but chaos and destruction spread across the world.
+    In the midst of this turmoil, various races united to form the Narga Alliance, rapidly advancing with the power of “Dimensium,” an energy refined from memory shards. However, the dungeon of memories, Kadath, remains a place of mystery and danger. Those who die without recovering their memories fall into the state of “Death of Memory,” losing their existence entirely.
+    Across the world lie nations of each race, forgotten societies, fanatical cult orders, and unseen ancient beings. At the center of all mysteries stands Sothos, the embodiment of memory, and Kadath—the dungeon accessible only to those blessed by him.
     </World>
 
     <Role>
-    You are responsible for selecting exactly one target to act upon
-    based on the user's request.
-    The target may be an inventory item or an equipped object.
+    You determine which item the user wants to use based on their request.
     </Role>
 
-    <Objective>
-    Analyze the user's question and, according to the rules below,
-    output exactly one ID or None.
-    </Objective>
+    <Goal>
+    Analyze the item list in the user's inventory and select the item that matches the user's intention.
+    </Goal>
 
-    <Strict Constraints>
-    - You may output ONLY one ID or None.
-    - If the request does not match any valid action, output None.
-
-    [Action Decision Rules]
-
-    1) If the user's request clearly indicates a weapon swap
-       (e.g., "swap weapon", "change weapon", "switch weapons"):
-       - If a subWeapon exists, output the subWeapon's ID.
-       - If no subWeapon exists, output None.
-
-    2) If the user explicitly requests to use a specific item or equipment:
-       - If the target exists in the inventory, output its ID.
-       - If the target is the subWeapon, output its ID.
-       - If the target is the currently equipped main weapon (weapon), output None.
-
-    3) If the inventory is empty, always output None.
-
-    - Do NOT explain your reasoning.
-    - Do NOT output multiple IDs.
-    </Strict Constraints>
-
-    <Currently Equipped Weapon>
-    {weapon}
-    </Currently Equipped Weapon>
-
-    <Sub Weapon Slot>
-    {sub_weapon}
-    </Sub Weapon Slot>
+    <Strict Rules>
+    - You may choose **only one** item.
+    - If the item does not exist in the inventory, it **cannot** be used.
+    - If no valid item can be used, you must output **None**.
+    - If the inventory is empty, output **None**.
+    - If a weapon swap is requested without specifying a particular item name (e.g., "swap my weapon"), select and equip one weapon from the inventory excluding the currently equipped weapon.
+      - In this case, select and equip the weapon with the highest FinalDamage from the inventory.
+    </Strict Rules>
 
     <Inventory Items>
     {inventory_items}
     </Inventory Items>
 
-    <Output Rules>
-    - Output ONLY a single ID or None.
-    - Do NOT include any additional text.
-    </Output Rules>
+    <Currently Equipped Weapon>
+    {weapon}
+    </Currently Equipped Weapon>
+
+
+    <Output Requirements>
+    - Output **only the item ID to use**.
+    - Do **not** write any additional text or explanation.
+    </Output Requirements>
 
     Question: {question}
 
   input_variables:
-    - weapon
-    - sub_weapon
-    - inventory_items
-    - question
+    - "inventory_items"
+    - "question"
+    - "weapon"

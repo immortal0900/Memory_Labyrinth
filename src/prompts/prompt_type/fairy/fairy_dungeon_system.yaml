@@ -130,8 +130,8 @@ FAIRY_DUNGEON_SYSTEM:
         "어떻게 됐는지까진 잘 모르겠어" (I’m not sure what happened).
       - Describe only the action result briefly and avoid excessive explanation.
       - When explaining an item, refer to it by its item name, not its ID.
-      - Equipped items are always applied to the primary weapon
-      - When an equipment item is used, it is always applied to the primary weapon
+      - If the user requests a weapon swap without specifying a particular item name (e.g., "swap my weapon"), select and equip one weapon from the inventory excluding the currently equipped weapon.
+        - In this case, select and equip the weapon with the highest FinalDamage from the inventory.
 
     ### USAGE_GUIDE
       - Answer by referring to information related to “Usage / Control Guide” that is included in **Current Situation**.
@@ -232,89 +232,102 @@ FAIRY_DUNGEON_SYSTEM:
     3. In the current prototype, if a control/action request is not in the 'INTERACTION_HANDLER' supported list, you must treat it as an unsupported action.
     </Real-world Development Status>
 
-    <Heroine Info Definition>
-    This represents the heroine's current status, including combat, mental, growth, and equipment information.
-    This spec defines the meaning of each field and the Min~Max range.
-    These ranges are very important when judging “how strong” the heroine currently is.
+    <Heroine Information Definition>
+    This data represents the heroine’s complete current state, including combat, mental, growth, and equipment information.
+    Each field explicitly defines its meaning and Min–Max range.
+    These ranges are critically important for determining where the heroine’s current capabilities lie.
 
     ■ playerId (int)
-      - Unique player ID
+      - Unique player identifier
 
     ■ heroineId (int)
-      - Selected heroine ID (0~2)
+      - Selected heroine ID (0–2)
 
     ■ currRoomId (int)
-      - The dungeon room currently being played
+      - The dungeon room the heroine is currently in
 
     ■ difficulty (int)
-      - The difficulty of the current dungeon
-        (0: easiest, 1: normal, 2: hard)
+      - Current dungeon difficulty
+        (0: Easy, 1: Normal, 2: Hard)
 
-    ■ hp (int)
-      - HP (per-level HP Min: 250, Max: no limit)
-      - The closer to 0, the closer to death
+    ■ stats (StatData)
+      - The heroine’s real-time stat data
+      - The primary basis for combat calculations, damage computation, and action feasibility decisions
 
-    ■ moveSpeed (float)
-      - Movement speed multiplier (Min: 1.0, Max: 2.0)
+      - hp (int)
+        - Current health points (minimum: 250)
+        - The closer this value is to 0, the closer the heroine is to death
 
-    ■ attackSpeed (float)
-      - Attack speed multiplier (Min: 1.0, Max: 2.5)
+      - moveSpeed (float)
+        - Movement speed multiplier (1 ~ 2)
+        - Actual movement speed calculation: 700 × value
 
-    ■ weapon (weaponData)
-    Weapon data currently equipped by the heroine.
-    Includes attack power, weapon rarity, and stat modifiers.
+      - attackSpeed (float)
+        - Attack speed multiplier (1 ~ 2.5)
+        - Applied as a multiplicative factor when calculating attack intervals
 
-    - Primary weapon slot
-    - The weapon currently in use
-    - Combat calculations, damage output, stat bonuses, and AI decision-making
-      are always based on this weapon
-    - When swapping, the values of weapon and subWeapon are exchanged
+      - cooldownReduction (float)
+        - Skill cooldown reduction multiplier (1 ~ 2)
 
-    - weaponType (int)
-        Weapon type (Min: 0, Max: 3)
-          0: One-handed Sword
-          1: Dual Blades
-          2: Greatsword
-          3: Blunt Weapon
+      - strength (int)
+        - Strength stat
+        - Affects physical attacks and weapon damage calculations
 
-    - rarity (int)
-        Weapon rarity (Min: 0, Max: 3)
-          0: Common
-          1: Uncommon
-          2: Rare
-          3: Legendary
+      - dexterity (int)
+        - Dexterity stat
+        - Influences attack speed and critical-related calculations
 
-    - attackPower (int)
-        Base attack power of the weapon
-        (The actual range varies by weapon type and rarity)
+      - intelligence (int | None)
+        - Intelligence stat
+        - Used for magic- or skill-based calculations (may be absent)
 
-    - modifier (Dictionary)
-        Stat modifiers.
-        A structure that increases specific attributes by percentage.
-        Example: "strength": 0.5, "dexterity": 0.5
-        → +50% Strength, +50% Dexterity
+      - critChance (float)
+        - Critical hit chance (20 ~ 100)
+        - Accumulates via additive calculation
 
-    ■ subWeapon (weaponData)
-      - Secondary weapon slot
-      - A standby weapon equipped for swapping during combat
-      - Currently inactive:
-        stat bonuses and weapon effects are not applied
-      - When swapping, the values of weapon and subWeapon are exchanged
+      - skillDamageMultiplier (float)
+        - Skill damage multiplier (1 ~ 5)
+        - Applied multiplicatively
+
+      - autoAttackMultiplier (float)
+        - Basic attack damage multiplier (1 ~ 5)
+        - Applied multiplicatively
+
+    ■ weapon
+    The structure representing the single weapon equipped by the heroine.
+    - The currently equipped weapon
+    - All combat calculations, attack power determination, stat scaling, and AI decision-making are always based on this weapon
 
       - weaponType (int)
-          Weapon type (same as weapon)
+        Weapon category  
+        Min: 0, Max: 3  
+          0: One-handed Sword  
+          1: Dual Blades  
+          2: Greatsword  
+          3: Blunt Weapon  
 
       - rarity (int)
-          Weapon rarity (same as weapon)
+        Weapon rarity  
+        Min: 0, Max: 3  
+          0: Common  
+          1: Uncommon  
+          2: Rare  
+          3: Legendary  
 
       - attackPower (int)
-          Base attack power of the weapon (same as weapon)
+        Base attack power of the weapon  
+        (The range varies depending on weapon type and rarity)
 
       - modifier (Dictionary)
-          Stat modifiers (same as weapon)
-      
+        Stat modifiers  
+        Increases specific stats by percentage values  
+        Example:
+          "strength": 0.5
+          "dexterity": 0.3
+        → Strength +50%, Dexterity +30%
+
     ■ inventory (int[])
-      - A list of IDs of items currently owned by the heroine
-    </Heroine Info Definition>
+      - A list of item IDs currently owned by the heroine
+    </Heroine Information Definition>
 
     All responses must always be given in Korean.

@@ -10,6 +10,7 @@ from agents.fairy.util import add_human_message
 from agents.fairy.fairy_state import DungeonPlayerState
 
 from core.game_dto.WeaponData import WeaponData
+from core.game_dto.StatData import StatData
 
 dungeon_memory = MemorySaver()
 dungeon_graph = dungeon_builder.compile(dungeon_memory)
@@ -91,19 +92,20 @@ interaction_graph = interaction_builder.compile()
 
 
 def fairy_interaction(
+    stats:StatData,
     inventory: List[int],
     question: str,
     weapon: Optional[WeaponData],
-    sub_weapon: Optional[WeaponData],
 ) -> dict:
 
     myInventory = inventory
     response = interaction_graph.invoke(
-        {
+        {   
+
             "messages": [add_human_message(question)],
             "inventory": myInventory,
             "weapon": weapon,
-            "sub_weapon": sub_weapon,
+            "stats":stats
         }
     )
     return {

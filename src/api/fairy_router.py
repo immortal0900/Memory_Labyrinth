@@ -13,7 +13,7 @@ from core.game_dto.StatData import StatData
 from core.game_dto.ItemData import ItemData
 from core.game_dto.WeaponData import WeaponData
 import random
-from core.common import get_inventory_items, get_inventory_item
+from core.common import get_inventory_item
 
 
 router = APIRouter(prefix="/api/fairy", tags=["Fairy"])
@@ -27,7 +27,6 @@ class DungeonPlayerDto(BaseModel):
     stats: StatData
     skillIds: List[int]
     weaponId: int = None
-    subWeaponId: int = None
     inventory: List[int] = []
 
 
@@ -68,6 +67,33 @@ class TalkDungeonRequest(BaseModel):
         ..., description="히로인이 이동 가능한 방 ID 목록", example=1
     )
 
+class InteractionRequest(BaseModel):
+    dungeonPlayer: DungeonPlayerDto = Field(
+        ...,
+        description="던전 플레이어의 실시간 상태",
+        example=_create_dungeon_player_dto("1"),
+    )
+    
+    inventory: List[int] = Field(
+        ...,
+        description="인벤토리 아이템 id 목록",
+        example=[21, 47],
+    )
+
+    question: str = Field(..., description="사용자의 질문", example="현재 방 불좀 켜봐")
+
+
+class InteractionResponse(BaseModel):
+    roomLight: int = Field(
+        ...,
+        description="방 밝기 On/Off 여부 (정령 행동 필요 없으면 :0 , 불키기: 1, 불끄기: 2)",
+        example=0,
+    )
+    useItemId: Optional[int] = Field(
+        ..., description="사용 하려는 아이템 (정령 행동 필요 없으면 Null)", example=None
+    )
+
+
 
 class TalkGuildRequest(BaseModel):
     playerId: str = Field(..., description="사용자 ID")
@@ -84,32 +110,11 @@ class TalkResponse(BaseModel):
     )
 
 
-class InteractionRequest(BaseModel):
-    inventory: List[int] = Field(
-        ...,
-        description="인벤토리 아이템 id 목록",
-        example=[21, 47],
-    )
-    weapon_id: Optional[int] = None
-    sub_weapon_id: Optional[int] = None
-    question: str = Field(..., description="사용자의 질문", example="현재 방 불좀 켜봐")
 
-
-class InteractionResponse(BaseModel):
-    roomLight: int = Field(
-        ...,
-        description="방 밝기 On/Off 여부 (정령 행동 필요 없으면 :0 , 불키기: 1, 불끄기: 2)",
-        example=0,
-    )
-    useItemId: Optional[int] = Field(
-        ..., description="사용 하려는 아이템 (정령 행동 필요 없으면 Null)", example=None
-    )
-
-
-def _weapon_id_to_data(weapon_id: Optional[int]) -> Optional[WeaponData]:
+def _weapon_id_to_data(weapon_id: Optional[int], stat:StatData) -> Optional[WeaponData]:
     weapon = None
     weapon_id = weapon_id
-    item: Optional[ItemData] = get_inventory_item(weapon_id)
+    item: Optional[ItemData] = get_inventory_item(weapon_id, stat)
     if item is not None:
         weapon = item.weapon
     return weapon
@@ -121,40 +126,19 @@ def dungeon_player_dto_to_state(player_dto: DungeonPlayerDto) -> DungeonPlayerSt
     currRoomId = player_dto.currRoomId
     difficulty = player_dto.difficulty
     stats = player_dto.stats
-    hp = stats.hp
-    moveSpeed = stats.moveSpeed
-    attackSpeed = stats.attackSpeed
-    cooldownReduction = stats.cooldownReduction
-    strength = stats.strength
-    dexterity = stats.dexterity
-    intelligence = stats.intelligence
-    critChance = stats.critChance
-    skillDamageMultiplier = stats.skillDamageMultiplier
-    autoAttackMultiplier = stats.autoAttackMultiplier
     skillIds = player_dto.skillIds
     inventory = player_dto.inventory
-    weapon = _weapon_id_to_data(player_dto.weaponId)
-    sub_weapon = _weapon_id_to_data(player_dto.subWeaponId)
+    weapon = _weapon_id_to_data(player_dto.weaponId, stat = player_dto.stats)
 
     return DungeonPlayerState(
         playerId=playerId,
         heroineId=heroineId,
         currRoomId=currRoomId,
         difficulty=difficulty,
-        hp=hp,
-        moveSpeed=moveSpeed,
-        attackSpeed=attackSpeed,
-        cooldownReduction=cooldownReduction,
-        strength=strength,
-        dexterity=dexterity,
-        intelligence=intelligence,
-        critChance=critChance,
-        skillDamageMultiplier=skillDamageMultiplier,
-        autoAttackMultiplier=autoAttackMultiplier,
+        stats= stats,
         skillIds=skillIds,
         inventory=inventory,
         weapon=weapon,
-        sub_weapon=sub_weapon,
     )
 
 
@@ -179,9 +163,10 @@ def interaction(request: InteractionRequest):
     """정령 - 던전 인터렉션 요청"""
     question = request.question
     inventory = request.inventory
-    weapon = _weapon_id_to_data(request.weapon_id)
-    sub_weapon = _weapon_id_to_data(request.sub_weapon_id)
-    response = fairy_interaction(inventory, question, weapon, sub_weapon)
+    player = request.dungeonPlayer
+    
+    weapon = _weapon_id_to_data(player.weaponId, player.stats)
+    response = fairy_interaction(player.stats, inventory, question, weapon)
 
     useItemId = response["useItemId"]
     roomLight = response["roomLight"]
@@ -197,7 +182,7 @@ async def talk_guild(request: TalkGuildRequest):
     """정령 - 길드 대화"""
     playerId = request.playerId
     question = request.question
-
+    
     heroine_id = request.heroine_id
     memory_progress = request.memory_progress
     sanity = request.sanity
