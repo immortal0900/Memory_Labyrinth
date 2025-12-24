@@ -126,6 +126,7 @@ async def _clarify_intent(query) -> FairyDungeonIntentOutput:
 async def analyze_intent(state: FairyDungeonState):
     start = time.perf_counter()
     last = state["messages"][-1]
+    target_monster_ids = state.get("target_monster_ids", [])
     last_message = last.content
     clarify_intent_type: FairyDungeonIntentOutput = await _clarify_intent(last_message)
 
@@ -142,6 +143,11 @@ async def analyze_intent(state: FairyDungeonState):
             "intent_types": clarify_intent_type.intents,
             "is_multi_small_talk": False,
         }
+
+    if (FairyDungeonIntentType.MONSTER_GUIDE not in clarify_intent_type.intents):
+        if target_monster_ids:
+            clarify_intent_type.intents.append(FairyDungeonIntentType.MONSTER_GUIDE)
+
     latency = time.perf_counter() - start
     return {
         "intent_types": clarify_intent_type.intents,

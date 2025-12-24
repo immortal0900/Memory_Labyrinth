@@ -15,11 +15,11 @@ from sqlalchemy import create_engine, text
 from langchain.chat_models import init_chat_model
 from langchain_openai import OpenAIEmbeddings
 from dotenv import load_dotenv
-from enums.LLM import LLM
+from src.enums.LLM import LLM
 
 load_dotenv()
 
-from db.config import CONNECTION_URL
+from src.db.config import CONNECTION_URL
 
 
 class DuplicatePreferenceFixer:

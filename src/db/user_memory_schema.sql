@@ -308,45 +308,7 @@ LANGUAGE SQL AS $$
     LIMIT p_limit;
 $$;
 
--- 3. 취향 변화 이력 조회 (content 패턴 기반)
-CREATE OR REPLACE FUNCTION get_preference_history(
-    p_player_id TEXT,
-    p_heroine_id TEXT,
-    p_keyword TEXT
-) RETURNS TABLE (
-    id UUID,
-    player_id TEXT,
-    heroine_id TEXT,
-    speaker TEXT,
-    subject TEXT,
-    content TEXT,
-    content_type TEXT,
-    importance INT,
-    valid_at TIMESTAMPTZ,
-    invalid_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ
-)
-LANGUAGE SQL AS $$
-    SELECT 
-        m.id,
-        m.player_id,
-        m.heroine_id,
-        m.speaker,
-        m.subject,
-        m.content,
-        m.content_type,
-        m.importance,
-        m.valid_at,
-        m.invalid_at,
-        m.created_at
-    FROM user_memories m
-    WHERE m.player_id = p_player_id
-      AND m.heroine_id = p_heroine_id
-      AND m.content &@~ p_keyword
-    ORDER BY m.valid_at ASC;
-$$;
-
--- 4. 최근 N일 동안 생성된 기억
+-- 3. 최근 N일 동안 생성된 기억
 CREATE OR REPLACE FUNCTION get_recent_memories(
     p_player_id TEXT,
     p_heroine_id TEXT,
@@ -438,7 +400,7 @@ CREATE OR REPLACE FUNCTION find_conflict_candidates(
     p_heroine_id TEXT,
     p_embedding vector(1536),
     p_content_type TEXT,
-    p_threshold FLOAT DEFAULT 0.65
+    p_threshold FLOAT DEFAULT 0.55
 ) RETURNS TABLE (
     id UUID,
     content TEXT,

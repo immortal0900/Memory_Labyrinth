@@ -20,9 +20,7 @@ LOG_FILE = os.path.join(LOG_DIR, "stt_app.log")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
 
-# =========================
 # 로깅 설정 (파일+콘솔, 로그 로테이션)
-# =========================
 logger = logging.getLogger("stt")
 logger.setLevel(logging.INFO)
 
@@ -95,6 +93,39 @@ def _is_suspicious_segment(seg: dict) -> bool:
         return True
     return False
 
+DOMAIN_REPLACE_MAP = {
+    # 몬스터 / 시스템
+    "공격복종": "공략법좀",
+    "저 모니터": "저 몬스터",
+    "다음 번 뭐야?": "다음방 뭐야?",
+    "인벤트로" : "인벤토리",
+
+    #아이템
+    "고급 등기": "고급 둔기",
+    "우리 둔질": "고급 둔기",
+    "보급 등기": "고급 둔기",
+    "9급 둔기": "고급 둔기",
+    "1반 쌍검": "일반 쌍검",
+    "1번 쌍검": "일반 쌍검",
+    
+    # UI / 명령
+    "물 좀 켜줄래?": "불좀 켜줄래?",
+    "불좀 구워줄래?": "불좀 켜줄래?"
+    
+    # 캐릭터
+    #기타 
+}
+
+def _domain_replace(text: str) -> str:
+    if not text:
+        return ""
+
+    t = text
+    for src, dst in DOMAIN_REPLACE_MAP.items():
+        if src in t:
+            t = t.replace(src, dst)
+
+    return t
 
 @router.post("/wav")
 async def stt_wav(request: Request, file: UploadFile = File(...)):
@@ -135,7 +166,7 @@ async def stt_wav(request: Request, file: UploadFile = File(...)):
     ).strip()
 
     dur = time.perf_counter() - t0
-    transfer_text = final_text 
+    transfer_text =  _domain_replace(final_text)
     logger.info(f"[{rid}] transcribe done in {dur:.3f}s text_len={len(final_text)}")
     is_valid = bool(transfer_text) and _is_valid_text(transfer_text)
                                 
@@ -179,7 +210,7 @@ async def stt_pcm(request: Request, pcm: bytes = Body(...)):
             if not _is_suspicious_segment(seg)
         ).strip()
 
-        transfer_text = final_text 
+        transfer_text =  _domain_replace(final_text)
         is_valid = bool(transfer_text) and _is_valid_text(transfer_text)
         logger.info(f"[{rid}] transcribe done in {dur:.3f}s text_len={len(transfer_text)}")
 

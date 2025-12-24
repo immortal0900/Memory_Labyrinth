@@ -121,10 +121,12 @@ class UserMemoryManager:
 - "world": 세계에 대한 사실
 
 [content_type 값]
-- "preference": 선호도 (좋아함, 싫어함)
+- "preference": 취향/선호도 (음식, 색상, 활동 등 좋아하거나 싫어하는 것)
+  예시: "고양이를 좋아함", "사과보다 배를 더 좋아함", "매운 음식을 싫어함"
 - "trait": 특성 (성격, 외모)
 - "event": 이벤트 (함께한 경험)
-- "opinion": 평가 (누군가에 대한 의견)
+- "opinion": 타인/상황에 대한 평가나 의견
+  예시: "멘토님이 친절하다고 생각함", "세상이 불공평하다고 느낌"
 - "personal": 개인정보 (이름, 직업)
 
 [중요도 기준]
@@ -178,7 +180,7 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
 
     async def add_memory(
         self, player_id: str, heroine_id: str, fact: ExtractedFact
-    ) -> Optional[str]:
+    ) -> dict:
         """단일 fact 저장 (중복/충돌 처리 포함)
 
         하이브리드 충돌 감지:
@@ -191,16 +193,23 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
             fact: 저장할 fact
 
         Returns:
-            생성된 메모리 ID 또는 None (중복시)
+            dict: {
+                "memory_id": 생성된 메모리 ID,
+                "invalidated": 무효화된 기억 리스트 [{"content": ..., "created_at": ...}]
+            }
         """
         # 1. 임베딩 생성
         embedding = self.embeddings.embed_query(fact.content)
+
+        # 무효화된 기억 정보 수집
+        invalidated = []
 
         # 2. 완전 중복 검사 (90% 유사도)
         similar = await self._find_similar_memory(player_id, heroine_id, embedding)
 
         if similar:
             await self._invalidate_memory(similar["id"])
+            invalidated.append({"content": similar["content"]})
             print(f"[INFO] 완전 중복 무효화: {similar['content'][:50]}...")
         else:
             # 3. 충돌 후보 검색 (65% 유사도 + 같은 content_type)
@@ -215,11 +224,12 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
                 )
                 if is_conflict:
                     await self._invalidate_memory(candidate["id"])
+                    invalidated.append({"content": candidate["content"]})
                     print(
                         f"[INFO] 취향 변경 감지, 기존 무효화: {candidate['content'][:50]}..."
                     )
 
-        # 3. 새 기억 저장
+        # 5. 새 기억 저장
         memory_id = str(uuid.uuid4())
 
         sql = text(
@@ -249,11 +259,11 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
             )
             conn.commit()
 
-        return memory_id
+        return {"memory_id": memory_id, "invalidated": invalidated}
 
     async def save_conversation(
         self, player_id: str, heroine_id: str, user_message: str, npc_response: str
-    ) -> List[str]:
+    ) -> dict:
         """대화를 분석하여 fact 추출 후 저장
 
         Mem0의 add_memory를 대체하는 메인 메서드
@@ -265,7 +275,10 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
             npc_response: NPC 응답
 
         Returns:
-            저장된 메모리 ID 리스트
+            dict: {
+                "memory_ids": 저장된 메모리 ID 리스트,
+                "preference_changes": 취향 변화 리스트 [{"old": ..., "new": ...}]
+            }
         """
         # 대화 포맷
         conversation = f"플레이어: {user_message}\n{heroine_id}: {npc_response}"
@@ -274,16 +287,22 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
         facts = await self.extract_facts(conversation, heroine_id)
 
         if not facts:
-            return []
+            return {"memory_ids": [], "preference_changes": []}
 
         # 각 fact 저장
         memory_ids = []
-        for fact in facts:
-            memory_id = await self.add_memory(player_id, heroine_id, fact)
-            if memory_id:
-                memory_ids.append(memory_id)
+        preference_changes = []
 
-        return memory_ids
+        for fact in facts:
+            result = await self.add_memory(player_id, heroine_id, fact)
+            if result["memory_id"]:
+                memory_ids.append(result["memory_id"])
+
+            # 무효화된 기억이 있으면 취향 변화로 기록
+            for inv in result["invalidated"]:
+                preference_changes.append({"old": inv["content"], "new": fact.content})
+
+        return {"memory_ids": memory_ids, "preference_changes": preference_changes}
 
     # ============================================
     # 기억 검색
@@ -532,7 +551,7 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
                     "heroine_id": heroine_id,
                     "embedding": str(embedding),
                     "content_type": content_type,
-                    "threshold": 0.65,
+                    "threshold": 0.55,
                 },
             )
 
@@ -580,6 +599,65 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
         answer = response.content.strip().lower()
 
         return answer == "yes"
+
+    async def detect_preference_change(
+        self, player_id: str, heroine_id: str, user_message: str
+    ) -> List[dict]:
+        """응답 생성 전 취향 변화 선제 감지
+
+        유저 메시지에서 preference fact를 추출하고,
+        기존 기억과 충돌하는지 미리 검사합니다.
+
+        Args:
+            player_id: 플레이어 ID
+            heroine_id: 히로인 ID
+            user_message: 유저 메시지
+
+        Returns:
+            취향 변화 리스트 [{"old": 기존 취향, "new": 새 취향}]
+        """
+        # 1. 유저 메시지만으로 preference fact 추출
+        conversation = f"플레이어: {user_message}"
+        facts = await self.extract_facts(conversation, heroine_id)
+        print(
+            f"[DEBUG] 추출된 facts: {[(f.content, f.content_type.value) for f in facts]}"
+        )
+
+        # preference 타입만 필터링
+        preference_facts = [f for f in facts if f.content_type.value == "preference"]
+        print(f"[DEBUG] preference facts: {[f.content for f in preference_facts]}")
+
+        if not preference_facts:
+            return []
+
+        preference_changes = []
+
+        # 2. 각 fact에 대해 충돌 검사
+        for fact in preference_facts:
+            embedding = self.embeddings.embed_query(fact.content)
+
+            # 충돌 후보 검색
+            candidates = await self._find_conflict_candidates(
+                player_id, heroine_id, embedding, "preference"
+            )
+            print(
+                f"[DEBUG] 충돌 후보 {len(candidates)}개: {[c['content'] for c in candidates]}"
+            )
+
+            # LLM으로 충돌 판단
+            for candidate in candidates:
+                is_conflict = await self._check_conflict_with_llm(
+                    fact.content, candidate["content"]
+                )
+                print(
+                    f"[DEBUG] LLM 충돌 판단: {fact.content} vs {candidate['content']} -> {is_conflict}"
+                )
+                if is_conflict:
+                    preference_changes.append(
+                        {"old": candidate["content"], "new": fact.content}
+                    )
+
+        return preference_changes
 
     # ============================================
     # 유틸리티 메서드
@@ -735,52 +813,6 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
                     {
                         "memory": row.content,
                         "text": row.content,
-                        "metadata": {
-                            "speaker": row.speaker,
-                            "subject": row.subject,
-                            "content_type": row.content_type,
-                        },
-                    }
-                )
-
-        return results
-
-    def get_preference_history_sync(
-        self, player_id: str, npc_id: int, keyword: str
-    ) -> List[dict]:
-        """취향 변화 이력 조회
-
-        Args:
-            player_id: 플레이어 ID
-            npc_id: NPC ID (숫자)
-            keyword: 검색 키워드
-
-        Returns:
-            기억 dict 리스트 (시간순)
-        """
-        heroine_id = NPC_ID_TO_HEROINE.get(npc_id, "letia")
-
-        sql = text(
-            """
-            SELECT * FROM get_preference_history(:player_id, :heroine_id, :keyword)
-        """
-        )
-
-        results = []
-
-        with self.engine.connect() as conn:
-            result = conn.execute(
-                sql,
-                {"player_id": player_id, "heroine_id": heroine_id, "keyword": keyword},
-            )
-
-            for row in result:
-                results.append(
-                    {
-                        "memory": row.content,
-                        "text": row.content,
-                        "valid_at": row.valid_at,
-                        "invalid_at": row.invalid_at,
                         "metadata": {
                             "speaker": row.speaker,
                             "subject": row.subject,
