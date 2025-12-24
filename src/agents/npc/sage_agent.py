@@ -263,7 +263,7 @@ class SageAgent(BaseNPCAgent):
             "예시 대사:",
         ]
 
-        for example in attitude_data.get("examples", [])[:3]:
+        for example in attitude_data.get("examples", []):
             lines.append(f"  - {example}")
 
         # 성격 특성
