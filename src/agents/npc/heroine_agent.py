@@ -261,23 +261,24 @@ class HeroineAgent(BaseNPCAgent):
         lines = [
             f"이름: {persona.get('name', '알 수 없음')}",
             f"풀네임: {persona.get('name_full', '알 수 없음')}",
-            f"나이: {persona.get('age', '알 수 없음')}",
-            f"종족: {persona.get('species', '알 수 없음')}",
+            f"나이: {persona.get('basic_info', {}).get('age', '알 수 없음')}",
+            f"종족: {persona.get('basic_info', {}).get('species', '알 수 없음')}",
             f"성격: {persona.get('personality', {}).get('base', '알 수 없음')}",
             f"말투: {'존댓말' if persona.get('speech_style', {}).get('honorific', False) else '반말'}",
             f"대화길이: {persona.get('speech_style', {}).get('sentence_length', '보통')}",
             f"감탄사: {'풍부' if persona.get('speech_style', {}).get('exclamations', False) else '적음'}",
-            f"키: {persona.get('height', '알 수 없음')}",
-            f"주무기: {persona.get('weapon', '알 수 없음')}",
+            f"키: {persona.get('basic_info', {}).get('height', '알 수 없음')}",
+            f"주무기: {persona.get('basic_info', {}).get('weapon', '알 수 없음')}",
             "",
             f"[현재 호감도 레벨: {level}]",
+        
         ]  
 
         # 호감도 레벨별 반응
         affection_resp = persona.get("affection_responses", {}).get(level, {})
         lines.append(f"반응 스타일: {affection_resp.get('description', '')}")
         lines.append("예시 대사:")
-        for example in affection_resp.get("examples", [])[:3]:
+        for example in affection_resp.get("examples", []):
             lines.append(f"  - {example}")
 
         # 정신력 0이면 우울 상태 추가
@@ -288,7 +289,12 @@ class HeroineAgent(BaseNPCAgent):
             lines.append(f"반응: {sanity_resp.get('description', '우울함')}")
             for example in sanity_resp.get("examples", [])[:2]:
                 lines.append(f"  - {example}")
-
+        lines.append("좋아하는거:")
+        for keyword in persona.get("liked_keywords", []):
+            lines.append(f"  - {keyword}")
+        lines.append("매우 싫어하는거:")
+        for keyword in persona.get("trauma_keywords", []):
+            lines.append(f"  - {keyword}")
         return "\n".join(lines)
 
     def _extract_recent_user_questions(self, conversation_buffer: list) -> str:
@@ -805,6 +811,7 @@ class HeroineAgent(BaseNPCAgent):
 
 [핵심 목표]
 - 최근 대화는 '맥락 파악'에만 사용합니다.
+- [페르소나]에 충실하게 답변하세요.
 - 같은 질문이 반복되어도 과거 답변 문장을 그대로 복사하지 않습니다.
 - 반드시 [현재 호감도 레벨], [페르소나], [호감도 변화 정보], [장기 기억 (검색 결과)], [해금된 시나리오], [플레이어 메세지]를 근거로 새로 답합니다.
 
