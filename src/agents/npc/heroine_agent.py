@@ -260,11 +260,18 @@ class HeroineAgent(BaseNPCAgent):
         # 기본 정보
         lines = [
             f"이름: {persona.get('name', '알 수 없음')}",
+            f"풀네임: {persona.get('name_full', '알 수 없음')}",
+            f"나이: {persona.get('age', '알 수 없음')}",
+            f"종족: {persona.get('species', '알 수 없음')}",
             f"성격: {persona.get('personality', {}).get('base', '알 수 없음')}",
             f"말투: {'존댓말' if persona.get('speech_style', {}).get('honorific', False) else '반말'}",
+            f"대화길이: {persona.get('speech_style', {}).get('sentence_length', '보통')}",
+            f"감탄사: {'풍부' if persona.get('speech_style', {}).get('exclamations', False) else '적음'}",
+            f"키: {persona.get('height', '알 수 없음')}",
+            f"주무기: {persona.get('weapon', '알 수 없음')}",
             "",
             f"[현재 호감도 레벨: {level}]",
-        ]
+        ]  
 
         # 호감도 레벨별 반응
         affection_resp = persona.get("affection_responses", {}).get(level, {})
@@ -365,19 +372,25 @@ class HeroineAgent(BaseNPCAgent):
 
         prompt = f"""다음 플레이어 메시지의 의도를 분류하세요.
 
-[최근 대화 맥락]
+<recent_conversation_context>
 {conversation_context}
+</recent_conversation_context>
 
-[플레이어 메시지]
+<player_message>
 {user_message}
+</player_message>
 
-[분류 기준]
+<classification_rules>
 - general: 일상 대화, 감정 표현, 질문 없는 대화
 - memory_recall: 플레이어와 히로인이 함께 나눈 과거 대화/경험, 다른 히로인에 대한 의견/평가 질문 ("루파메스 어때?", "레티아를 어떻게 생각해?")
 - scenario_inquiry: 히로인 본인의 신상정보 (고향, 어린시절, 가족), 히로인의 과거, 기억 상실 전 이야기, 정체성. "최근에 돌아온 기억", "새로 기억난 거" 같은 질문도 포함
 - heroine_recall: 다른 히로인과 나눈 대화 내용 질문 ("루파메스랑 뭐 얘기했어?", "레티아와 무슨 대화 했어?", "로코한테 뭐라고 했어?")
+</classification_rules>
 
-반드시 general, memory_recall, scenario_inquiry, heroine_recall 중 하나만 출력하세요."""
+<output>
+반드시 general, memory_recall, scenario_inquiry, heroine_recall 중 하나만 출력하세요.
+</output>
+"""
 
         response = await self.intent_llm.ainvoke(prompt)
         intent = response.content.strip().lower()
@@ -764,9 +777,9 @@ class HeroineAgent(BaseNPCAgent):
         # 호감도 변화 힌트 (LLM에게 알려줌)
         pre_calculated_delta = context.get("affection_delta", 0)
         if pre_calculated_delta > 0:
-            affection_hint = f"플레이어가 당신이 좋아하는 것에 대해 말했습니다. 기분이 좋아집니다. (호감도 +{pre_calculated_delta})"
+            affection_hint = f"플레이어가 당신이 좋아하는 것에 대해 말했습니다. [페르소나]를 참조해서 매우 좋아하며 대답하세요 (호감도 +{pre_calculated_delta})"
         elif pre_calculated_delta < 0:
-            affection_hint = f"플레이어가 당신의 트라우마를 건드렸습니다. 불쾌합니다. (호감도 {pre_calculated_delta})"
+            affection_hint = f"플레이어가 당신의 트라우마를 건드렸습니다. [페르소나]를 참고해서 매우 단호하고 불쾌해 하며 대답하세요 (호감도 {pre_calculated_delta})"
         else:
             affection_hint = "특별한 호감도 변화 없음"
 
@@ -808,6 +821,7 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
 
 3) '기억 없음' 처리 (B유형 질문 + 두 조건 모두 충족시에만)
 - [플레이어 메세지]가 B유형(자신의 과거/신상) 질문이고,
+- [페르소나]에 없는 내용이고,
 - [해금된 시나리오]가 "없음"이며,
 - [장기 기억 (검색 결과)]도 "없음" 또는 관련 없는 내용이면
 => text에 "잘 기억이 안 나..." 라고 답합니다(30자 이내).
@@ -876,11 +890,13 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
 <recent_context_observations>
 - 목적: 최근 대화의 흐름(반복 질문/주제/막힌 지점) 파악용입니다.
 - 규칙: 아래 정보는 '참고용'이며 문장/구문을 그대로 인용하지 않습니다.
-- 최근 유저 질문(요약/리스트): {self._extract_recent_user_questions(state.get('conversation_buffer', []))}
+- 최근 유저 질문 요약: {self._extract_recent_user_questions(state.get('conversation_buffer', []))}
 </recent_context_observations>
 
 <raw_recent_dialogue_do_not_quote>
-{self.format_conversation_history(state.get('conversation_buffer', []))}
+- 목적: 최근 대화의 흐름(반복 질문/주제/막힌 지점) 파악용입니다.
+- 규칙: 아래 정보는 '참고용'이며 문장/구문을 그대로 인용하지 않습니다.
+- 최근 대화 내용:{self.format_conversation_history(state.get('conversation_buffer', []))}
 </raw_recent_dialogue_do_not_quote>
 
 [플레이어 메세지]

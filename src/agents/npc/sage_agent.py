@@ -256,6 +256,7 @@ class SageAgent(BaseNPCAgent):
             "[말투 특징]",
             f"- 기본: {speech.get('tone', '기품 있는 하대')}",
             f"- 호칭: {speech.get('mentor_address', '멘토')}",
+            f"- 대화패턴: {speech.get('patterns', [])}",
             "",
             f"[현재 레벨 {scenario_level} 태도]",
             f"스타일: {attitude_data.get('description', '')}",
@@ -269,8 +270,12 @@ class SageAgent(BaseNPCAgent):
         personality = persona.get("personality", {})
         lines.append("")
         lines.append("[성격]")
-        for trait in personality.get("surface", [])[:3]:
+        for trait in personality.get("surface", []):
             lines.append(f"  - {trait}")
+        if attitude_key == 'high':
+            for trait in personality.get("hidden", []):
+                lines.append(f"  - {trait}")
+        
 
         return "\n".join(lines)
 
@@ -567,7 +572,7 @@ class SageAgent(BaseNPCAgent):
 [답변 결정 절차 - 반드시 준수]
 1) 질문 유형 판별 (두 가지로 구분)
 A) 플레이어와의 대화/경험 질문: "N일 전에 뭐 했지?", "어제 뭐 얘기했지?", "우리 전에 뭐 얘기했지?" 등
-B) 세계관/정보 질문: "던전이 뭐야?", "히로인들은 누구야?" 등
+B) 세계관/정보 질문: "던전이 뭐야?", "히로인들은 누구야?, "자신의 신상에 대한 질문" 등
 
 2) [장기 기억] 우선 적용 규칙 (가장 중요!)
 - [장기 기억 (검색 결과)]에 "없음"이 아닌 내용이 있으면, 반드시 그 내용을 text에 포함해야 합니다.
@@ -577,6 +582,7 @@ B) 세계관/정보 질문: "던전이 뭐야?", "히로인들은 누구야?" �
 
 3) '정보 없음' 처리 (B유형 질문 + 두 조건 모두 충족시에만)
 - [플레이어 메시지]가 B유형(세계관/정보) 질문이고,
+- [페르소나]에 없는 내용이고,
 - [해금된 세계관 정보]가 "없음"이며,
 - [장기 기억 (검색 결과)]도 "없음" 또는 관련 없는 내용이면
 => text에 회피 응답을 사용합니다(30자 이내).
@@ -636,7 +642,9 @@ B) 세계관/정보 질문: "던전이 뭐야?", "히로인들은 누구야?" �
 </recent_context_observations>
 
 <raw_recent_dialogue_do_not_quote>
-{self.format_conversation_history(state.get('conversation_buffer', []))}
+- 목적: 최근 대화의 흐름(반복 질문/주제/막힌 지점) 파악용입니다.
+- 규칙: 아래 정보는 '참고용'이며 문장/구문을 그대로 인용하지 않습니다.
+- 최근 대화 내용:{self.format_conversation_history(state.get('conversation_buffer', []))}
 </raw_recent_dialogue_do_not_quote>
 
 [플레이어 메시지]
