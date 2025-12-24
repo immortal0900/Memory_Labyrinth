@@ -7,8 +7,8 @@ from agents.fairy.interaction.fairy_interaction_agent import (
 )
 from langgraph.checkpoint.memory import MemorySaver
 from agents.fairy.util import add_human_message
+from agents.fairy.fairy_state import DungeonPlayerState
 
-from core.game_dto.DungeonPlayerData import DungeonPlayerData
 from core.game_dto.WeaponData import WeaponData
 
 dungeon_memory = MemorySaver()
@@ -16,7 +16,7 @@ dungeon_graph = dungeon_builder.compile(dungeon_memory)
 
 
 async def fairy_dungeon_talk(
-    dungeon_player: DungeonPlayerData,
+    dungeon_player: DungeonPlayerState,
     question: str,
     target_monster_ids: List[int],
     next_room_ids: List[int],
