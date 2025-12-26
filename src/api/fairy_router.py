@@ -13,7 +13,7 @@ from core.game_dto.StatData import StatData
 from core.game_dto.ItemData import ItemData
 from core.game_dto.WeaponData import WeaponData
 import random
-from core.common import get_inventory_item
+from core.common import get_inventory_item,get_inventory_items, get_skills
 
 
 router = APIRouter(prefix="/api/fairy", tags=["Fairy"])
@@ -25,7 +25,7 @@ class DungeonPlayerDto(BaseModel):
     currRoomId: int
     difficulty: int = 0
     stats: StatData
-    skillIds: List[int]
+    skillIds: List[int] = []
     weaponId: int = None
     inventory: List[int] = []
 
@@ -38,10 +38,6 @@ def _create_dungeon_player_dto(player_id: str):
         difficulty=0,
         stats=StatData(strength=1, dexterity=1, intelligence=None),
         skillIds=[0, 1],
-        hp=250,
-        moveSpeed=1,
-        attackSpeed=1.0,
-        passiveSkillIds=[0, 1],
         weaponId=0,
         inventory=[21, 42],
     )
@@ -127,8 +123,11 @@ def dungeon_player_dto_to_state(player_dto: DungeonPlayerDto) -> DungeonPlayerSt
     difficulty = player_dto.difficulty
     stats = player_dto.stats
     skillIds = player_dto.skillIds
-    inventory = player_dto.inventory
-    weapon = _weapon_id_to_data(player_dto.weaponId, stat = player_dto.stats)
+    inventory_ids = player_dto.inventory
+    
+    skills = get_skills(skillIds)
+    inventory:List[ItemData] = get_inventory_items(inventory_ids, stats)
+    weapon = _weapon_id_to_data(player_dto.weaponId, stat = stats)
 
     return DungeonPlayerState(
         playerId=playerId,
@@ -136,7 +135,7 @@ def dungeon_player_dto_to_state(player_dto: DungeonPlayerDto) -> DungeonPlayerSt
         currRoomId=currRoomId,
         difficulty=difficulty,
         stats= stats,
-        skillIds=skillIds,
+        skills=skills,
         inventory=inventory,
         weapon=weapon,
     )

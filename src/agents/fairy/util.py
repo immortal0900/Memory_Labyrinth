@@ -18,6 +18,12 @@ def add_human_message(content: str):
         content=content, additional_kwargs={"created_at": datetime.now().isoformat()}
     )
 
+def get_last_human_message(messages):
+    for m in reversed(messages):
+        if isinstance(m, HumanMessage):
+            return m.content
+    return None
+
 def str_to_bool(text):
     if text == "True" or text == "true":
         return True
@@ -112,6 +118,7 @@ def lc_messages_to_groq(messages: List[BaseMessage]) -> List[Dict]:
         })
 
     return groq_messages
+
 def get_groq_gpt(messeages:List[BaseMessage]):
     groq_messages = lc_messages_to_groq(messeages)
     client = Groq()
