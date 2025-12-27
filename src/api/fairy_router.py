@@ -118,7 +118,11 @@ def dungeon_player_dto_to_state(player_dto: DungeonPlayerDto) -> DungeonPlayerSt
     difficulty = player_dto.difficulty
     stats = player_dto.stats
     skillIds = player_dto.skillIds
-    inventory_ids = player_dto.inventory
+    inventory_ids = (
+        [i for i in player_dto.inventory if i != player_dto.weaponId]
+        if player_dto.weaponId is not None
+        else list(player_dto.inventory)
+    )
 
     skills = get_skills(skillIds)
     inventory: List[ItemData] = get_inventory_items(inventory_ids, stats)
@@ -157,11 +161,14 @@ def interaction(request: InteractionRequest):
     """정령 - 던전 인터렉션 요청"""
     question = request.question
     player = request.dungeonPlayer
-    inventory = player.inventory
-
+    inventory_ids = (
+        [i for i in player.inventory if i != player.weaponId]
+        if player.weaponId is not None
+        else list(player.inventory)
+    )
     weapon = _weapon_id_to_data(player.weaponId, player.stats)
     response = fairy_interaction(
-        player.playerId, player.heroineId, player.stats, inventory, question, weapon
+        player.playerId, player.heroineId, player.stats, inventory_ids, question, weapon
     )
 
     useItemId = response["useItemId"]

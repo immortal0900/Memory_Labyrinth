@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel,Field
 from typing import List, Dict, Optional
 
 
@@ -23,7 +23,7 @@ class WeaponData(BaseModel):
 
     # 스탯별 보정치
     # 예: { "strength": 0.5, "dexterity": 0.5 }
-    modifier: Dict[str, float] = {},
+    modifier: Dict[str, float] = Field(default_factory=dict)
 
     finalDemage:Optional[float] = None
 

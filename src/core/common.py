@@ -84,37 +84,20 @@ from typing import List
 from core.game_dto.StatData import StatData
 from core.game_dto.WeaponData import WeaponData
 
+from typing import Optional
+
 def _calculate_final_damage_score(
     stat: StatData,
     weapon: WeaponData,
 ) -> float:
-    """
-    에이전트가 아이템 추천용으로 사용하는
-    '대표 데미지 스코어'
-    """
-
-    # 1. 스탯 기여도 (보정치 제곱 합)
     stat_contribution = 0.0
     for stat_name, ratio in weapon.modifier.items():
-        char_stat_value = getattr(stat, stat_name, 0) or 0
-        stat_contribution += (char_stat_value * ratio) ** 2
+        v = getattr(stat, stat_name, 0) or 0
+        stat_contribution += v * ratio 
 
-    # 2. 대표 공격 배율 (평타 + 스킬 평균)
-    effective_multiplier = (
-        stat.autoAttackMultiplier
-        + stat.skillDamageMultiplier
-    ) / 2
+    effective_multiplier = (stat.autoAttackMultiplier + stat.skillDamageMultiplier) / 2
 
-    # 3. 최종 스코어
-    final_damage_score = (
-        stat_contribution
-        * weapon.attackPower
-        * effective_multiplier
-    )
-
-    return final_damage_score
-
-
+    return stat_contribution * weapon.attackPower * effective_multiplier
 
 def get_inventory_items(inventory_ids:list) -> List[ItemData]:
     return [item for item in cache_items if item.itemId in inventory_ids]

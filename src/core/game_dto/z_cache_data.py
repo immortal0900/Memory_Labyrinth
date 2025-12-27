@@ -138,7 +138,7 @@ cache_items = [
             rarity=0,
             attackPower=6,
             staggerPower=1,
-            modifier={"strength": 0.1, "dexterity": 0.8, "intelligence": 0},
+            modifier={"strength": 0.1, "dexterity": 0.8, "intelligence": 0.1},
         ),
     ),
     ItemData(
@@ -153,7 +153,7 @@ cache_items = [
             rarity=1,
             attackPower=9,
             staggerPower=1,
-            modifier={"strength": 0.1, "dexterity": 0.8, "intelligence": 0},
+            modifier={"strength": 0.1, "dexterity": 0.8, "intelligence": 0.1},
         ),
     ),
     ItemData(
@@ -168,7 +168,7 @@ cache_items = [
             rarity=2,
             attackPower=11,
             staggerPower=1,
-            modifier={"strength": 0.1, "dexterity": 0.8, "intelligence": 0},
+            modifier={"strength": 0.1, "dexterity": 0.8, "intelligence": 0.1},
         ),
     ),
     ItemData(
@@ -183,7 +183,7 @@ cache_items = [
             rarity=3,
             attackPower=14,
             staggerPower=1,
-            modifier={"strength": 0.1, "dexterity": 0.8, "intelligence": 0},
+            modifier={"strength": 0.1, "dexterity": 0.8, "intelligence": 0.1},
         ),
     ),
     ItemData(
@@ -198,7 +198,7 @@ cache_items = [
             rarity=0,
             attackPower=9,
             staggerPower=1,
-            modifier={"strength": 0.3, "dexterity": 0.55, "intelligence": 0},
+            modifier={"strength": 0.3, "dexterity": 0.55, "intelligence": 0.15},
         ),
     ),
     ItemData(
@@ -213,7 +213,7 @@ cache_items = [
             rarity=1,
             attackPower=11,
             staggerPower=1,
-            modifier={"strength": 0.3, "dexterity": 0.55, "intelligence": 0},
+            modifier={"strength": 0.3, "dexterity": 0.55, "intelligence": 0.15},
         ),
     ),
     ItemData(
@@ -228,7 +228,7 @@ cache_items = [
             rarity=2,
             attackPower=13,
             staggerPower=1,
-            modifier={"strength": 0.3, "dexterity": 0.55, "intelligence": 0},
+            modifier={"strength": 0.3, "dexterity": 0.55, "intelligence": 0.15},
         ),
     ),
     ItemData(
@@ -243,7 +243,7 @@ cache_items = [
             rarity=3,
             attackPower=17,
             staggerPower=1,
-            modifier={"strength": 0.3, "dexterity": 0.55, "intelligence": 0},
+            modifier={"strength": 0.3, "dexterity": 0.55, "intelligence": 0.15},
         ),
     ),
     # weaponType 3 : 대검 / 드래곤슬레이어
@@ -259,7 +259,7 @@ cache_items = [
             rarity=0,
             attackPower=15,
             staggerPower=5,
-            modifier={"strength": 0.75, "dexterity": 0.2, "intelligence": 0},
+            modifier={"strength": 0.75, "dexterity": 0.2, "intelligence": 0.05},
         ),
     ),
     ItemData(
@@ -274,7 +274,7 @@ cache_items = [
             rarity=1,
             attackPower=21,
             staggerPower=5,
-            modifier={"strength": 0.75, "dexterity": 0.2, "intelligence": 0},
+            modifier={"strength": 0.75, "dexterity": 0.2, "intelligence": 0.05},
         ),
     ),
     ItemData(
@@ -289,7 +289,7 @@ cache_items = [
             rarity=2,
             attackPower=25,
             staggerPower=5,
-            modifier={"strength": 0.75, "dexterity": 0.2, "intelligence": 0},
+            modifier={"strength": 0.75, "dexterity": 0.2, "intelligence": 0.05},
         ),
     ),
     ItemData(
@@ -304,7 +304,7 @@ cache_items = [
             rarity=3,
             attackPower=32,
             staggerPower=5,
-            modifier={"strength": 0.75, "dexterity": 0.2, "intelligence": 0},
+            modifier={"strength": 0.75, "dexterity": 0.2, "intelligence": 0.05},
         ),
     ),
     ItemData(
