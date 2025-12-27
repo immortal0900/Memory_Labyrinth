@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PORT=9999
-LOG_FILE="uvicorn_${PORT}.out"
+LOG_FILE="uvicorn_${PORT}_$(date +'%Y%m%d_%H%M%S').out"
 
 echo "== 1) Kill GPU compute procs matching ProjectML/.venv/bin/python3 =="
 

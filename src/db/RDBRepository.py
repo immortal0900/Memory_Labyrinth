@@ -413,3 +413,37 @@ class RDBRepository:
         with self.engine.connect() as conn:
             conn.execute(text(sql), params)
             conn.commit()
+
+    def get_fairy_messages_for_memory(
+        self,
+        player_id: str,
+        heroine_id: str,
+        context_type:str = "DUNGEON",
+        limit: int = 20,
+    ) -> List[Dict[str, Any]]:
+        """
+        fairy_messages 조회 (메모리 적재용)
+        """
+        sql = f"""
+        SELECT
+            sender_type,
+            message,
+            player_id,
+            intent_type,
+            created_at
+        FROM fairy_messages
+        WHERE player_id = :player_id
+          AND context_type = :context_type
+          AND heroine_id = :heroine_id
+        ORDER BY created_at DESC
+        LIMIT {limit}
+        """
+        params = {
+            "player_id": player_id,
+            "context_type": context_type,
+            "heroine_id": str(heroine_id),
+        }
+
+        with self.engine.connect() as conn:
+            rows = conn.execute(text(sql), params).fetchall()
+            return [dict(r._mapping) for r in rows]

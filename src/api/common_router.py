@@ -102,17 +102,36 @@ DOMAIN_REPLACE_MAP = {
 
     #아이템
     "고급 등기": "고급 둔기",
+    "일반 등기": "일반 둔기",
     "우리 둔질": "고급 둔기",
     "보급 등기": "고급 둔기",
     "9급 둔기": "고급 둔기",
     "1반 쌍검": "일반 쌍검",
     "1번 쌍검": "일반 쌍검",
-    
+    '고무 누워프':'고급 드워프',
+    '고급 두업으로':'고급 드워프',
+    '고급 드로크':'고급 드워프',
+    '양솜에서':'양손 메서',
+    '고급한 손검': '고급 한손검',
+    '1번 한손검':'일반 한손검',
+    '레어스 숏소드': '레어 숏소드',
+    '쇼스토드':'숏소드',
+    '1번 도어퍼':'일반 드워프',
+    '9급':'고급',
+    '드래곤 플레이어':'드래곤 슬레이어',
+    '슬레이오':'슬레이어',
+    '레오상검': '레어 쌍검',
+    '고급 상품': '고급 쌍검',
+    '고급 더프의 망치':'고급 드워프의 망치',
+    '한 손 검':'한손검',
+    '부어프':'드워프',
+    '궁극 두어프': '고급 드워프',
+        
     # UI / 명령
     "물 좀 켜줄래?": "불좀 켜줄래?",
     "불좀 구워줄래?": "불좀 켜줄래?"
     
-    # 캐릭터
+    #캐릭터
     #기타 
 }
 
@@ -134,27 +153,23 @@ async def stt_wav(request: Request, file: UploadFile = File(...)):
     if not file.filename:
         raise HTTPException(400, "No file uploaded")
 
-    suffix = os.path.splitext(file.filename)[-1].lower() or ".wav"
-    tmp_path = None
-    saved_path = None
-
+    # 1️⃣ 파일 먼저 읽기
     data = await file.read()
     size = len(data)
 
-    logger.info(f"[{rid}] upload filename={file.filename} content_type={file.content_type} bytes={size}")
+    suffix = os.path.splitext(file.filename)[-1].lower() or ".wav"
 
-    # 1) 원본 파일 저장 (원하면 영구 보관)
-    if SAVE_UPLOADS:
-        saved_path = _make_save_path("stt", file.filename, suffix)
-        with open(saved_path, "wb") as f:
-            f.write(data)
-        logger.info(f"[{rid}] saved upload -> {saved_path}")
-
-    # 2) whisper에 넣을 임시 파일 생성(업로드 확장자 유지)
+    # 2️⃣ 임시 파일에 저장
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(data)
         tmp_path = tmp.name
 
+    logger.info(
+        f"[{rid}] upload filename={file.filename} "
+        f"content_type={file.content_type} bytes={size}"
+    )
+
+    # 3️⃣ STT
     t0 = time.perf_counter()
     result = model.transcribe(tmp_path, language="ko")
     segments = result.get("segments", [])
@@ -166,15 +181,25 @@ async def stt_wav(request: Request, file: UploadFile = File(...)):
     ).strip()
 
     dur = time.perf_counter() - t0
-    transfer_text =  _domain_replace(final_text)
-    logger.info(f"[{rid}] transcribe done in {dur:.3f}s text_len={len(final_text)}")
+    transfer_text = _domain_replace(final_text)
+
+    logger.info(
+        f"[{rid}] transcribe done in {dur:.3f}s text_len={len(final_text)}"
+    )
+
     is_valid = bool(transfer_text) and _is_valid_text(transfer_text)
-                                
+    saved_path = None
+
+    if is_valid and SAVE_UPLOADS:
+        saved_path = _make_save_path("stt", file.filename, suffix)
+        with open(saved_path, "wb") as f:
+            f.write(data)
+        logger.info(f"[{rid}] saved upload -> {saved_path}")
+
     return JSONResponse({
         "transferText": transfer_text,
-        "isValid":is_valid
+        "isValid": is_valid
     })
-
     
 @router.post("/pcm")
 async def stt_pcm(request: Request, pcm: bytes = Body(...)):

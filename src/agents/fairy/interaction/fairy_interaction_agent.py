@@ -1,4 +1,3 @@
-from agents.fairy.util import measure_latency
 import time
 from agents.fairy.fairy_state import (
     FairyInteractionState,
@@ -9,19 +8,21 @@ from prompts.promptmanager import PromptManager
 from prompts.prompt_type.fairy.FairyPromptType import FairyPromptType
 from enums.LLM import LLM
 from langgraph.graph import StateGraph, START, END
-from langchain_core.messages import HumanMessage
 from typing import List
 from core.common import get_inventory_items
-from agents.fairy.util import get_groq_llm_lc
+from agents.fairy.util import get_groq_llm_lc, get_groq_gpt
 from agents.fairy.fairy_state import FairyItemUseOutput
 from agents.fairy.interaction.fairy_interaction_model_logics import ItemEmbeddingLogic, IsItemUseEmbeddingLogic, FairyInteractionIntentModel
+from langchain.messages import SystemMessage, HumanMessage
+from langchain.chat_models import init_chat_model
+
 
 item_embedding_logic = ItemEmbeddingLogic()
 is_item_use_embedding_logic = IsItemUseEmbeddingLogic()
 fairy_interaction_intent_model = FairyInteractionIntentModel()
 
-llm = get_groq_llm_lc(max_token=2)
-def _clarify_intent(query):
+# item_use_llm = get_groq_llm_lc(model = LLM.OPENAI_GPT_OSS_20B, max_token=2)
+def _clarify_intent(query:str):
     # interation_intent_prompt = PromptManager(
     #     FairyPromptType.FAIRY_INTERACTION_INTENT
     # ).get_prompt(question=query)
@@ -32,6 +33,7 @@ def _clarify_intent(query):
     raw_labels, _ = fairy_interaction_intent_model.predict(query)
     enum_list = FairyInteractionIntentModel.parse_intents_to_enum(raw_labels)    
     intent_output = FairyInterationIntentOutput(intents=enum_list)
+
     return intent_output
 
 
@@ -40,6 +42,7 @@ def analyze_intent(state: FairyInteractionState):
 
     last = state["messages"][-1]
     last_message = last.content
+
     intent_output: FairyInterationIntentOutput = _clarify_intent(last_message)
 
     latency = time.perf_counter() - start
@@ -48,27 +51,42 @@ def analyze_intent(state: FairyInteractionState):
         "latency_analyze_intent": latency,
     }
 
+from pprint import pformat
 
 # LLM Call을 한번이라도 줄이기 위해 의도 분석과 함께 병렬 호출 Node
 def create_temp_use_item_id(state: FairyInteractionState):
     start = time.perf_counter()
-    last = state["messages"][-1]
-    last_message = last.content
+    messages = state["messages"]
+    # last_message = messages[-1].content
     inventory = state["inventory"]
     weapon = state["weapon"]
-    sub_weapon = state["sub_weapon"]
-    my_items = get_inventory_items(inventory)
+    stats = state["stats"]
 
-    item_use_prompt = PromptManager(FairyPromptType.FAIRY_ITEM_USE).get_prompt(
-        inventory_items=my_items, 
-        question=last_message,
+    my_items = get_inventory_items(inventory, stats)
+    prettry_items = pformat(
+        [item.model_dump() for item in my_items],
+        width=120,
+        sort_dicts=False
+    )   
+    
+    # if is_deictic:
+    #    question = messages
+    # else:
+    #    question = last_message
+
+    system_prompt = PromptManager(FairyPromptType.FAIRY_ITEM_USE).get_prompt(
+        inventory_items=prettry_items, 
         weapon = weapon,
-        sub_weapon = sub_weapon,
     )
+    new_messages = [SystemMessage(content=system_prompt)] + messages
+    # ai_answer = item_use_llm.invoke(new_messages).content
+    ai_answer = get_groq_gpt(new_messages)
     try: 
-        item_id = int(llm.invoke(item_use_prompt).content)
+        item_id = int(ai_answer)
     except Exception as e:
+        print(e)
         item_id = None
+
     # parser_llm = llm.with_structured_output(FairyItemUseOutput)
     output = FairyItemUseOutput(item_id=item_id)  # for type hinting
     latency = time.perf_counter() - start
@@ -98,7 +116,7 @@ def create_interation(state: FairyInteractionState):
     is_item_use = state["is_item_use"]
 
     item_id = None
-    if FairyInterationIntentType.INVENTORY_ITEM_USE in intent_types and (is_item_use != False):
+    if is_item_use:
         item_id = state["temp_use_item_id"]
 
     room_light = 0
@@ -119,7 +137,6 @@ graph_builder.add_node("analyze_intent", analyze_intent)
 graph_builder.add_node("create_temp_use_item_id", create_temp_use_item_id)
 graph_builder.add_node("create_interation", create_interation)
 graph_builder.add_node("check_use_item", check_use_item)
-
 
 graph_builder.add_edge(START, "analyze_intent")
 graph_builder.add_edge(START, "create_temp_use_item_id")

@@ -15,15 +15,13 @@ from agents.fairy.util import (
     get_groq_llm_lc,
     find_monsters_info,
 )
-from core.common import get_inventory_items
+from core.game_dto.StatData import StatData
 from enums.LLM import LLM
 from langchain.chat_models import init_chat_model
 from typing import List
 from db.RDBRepository import RDBRepository
 from db.rdb_entity.DungeonRow import DungeonRow
 from agents.fairy.dynamic_prompt import (
-    dungeon_spec_prompt,
-    item_spec_prompt,
     monster_spec_prompt,
 )
 from agents.fairy.util import (
@@ -35,12 +33,15 @@ from agents.fairy.util import (
 from agents.fairy.dungeon.fairy_dungeon_model_logics import FairyDungeonIntentModel
 import asyncio
 
-intent_llm = get_groq_llm_lc(model=LLM.LLAMA_3_1_8B_INSTANT, max_token=43)
+intent_llm = get_groq_llm_lc(model=LLM.LLAMA_3_3_70B_VERSATILE, max_token=43)
+
 # action_llm = get_groq_llm_lc(max_token=80, temperature=0)
+# small_talk_llm = get_groq_llm_lc(max_token=120, temperature=0)
 action_llm = init_chat_model(
     model=LLM.GROK_4_FAST_NON_REASONING, max_tokens=80, temperature=0
 )
-small_talk_llm = init_chat_model(model=LLM.GROK_4_FAST_NON_REASONING, max_tokens=120)
+
+# small_talk_llm = init_chat_model(model=LLM.GROK_4_FAST_NON_REASONING, max_tokens=80)
 rdb_repository = RDBRepository()
 intent_model = FairyDungeonIntentModel()
 
@@ -53,11 +54,16 @@ def _rdb_fairy_messages_bg(user_args, ai_args):
         print("fairy_message insert failed:", e)
 
 
-async def get_monsters_info(target_monster_ids: List[int]):
+async def get_monsters_info(target_monster_ids: List[int], inventory_ids, stats: StatData):
     monster_prompt = monster_spec_prompt.format(
         monster_infos_json=find_monsters_info(target_monster_ids)
     )
-    return monster_prompt
+    monster_info_prompt = (
+        f"        <MONSTER_INFO>\n" f"{monster_prompt}\n" f"        </MONSTER_INFO>"
+    )
+    
+    return monster_info_prompt
+
 
 
 async def get_event_info(dungeon_row: DungeonRow, curr_room_id: int):
@@ -98,13 +104,7 @@ async def dungeon_navigator(dungeon_row: DungeonRow, curr_room_id: int):
     return total_prompt
 
 
-async def create_interaction(inventory_ids):
-    item_prompt = item_spec_prompt.format(items_json=get_inventory_items(inventory_ids))
-    inventory_prompt = (
-        f"        <INVENTORY_ITEMS>\n" f"{item_prompt}\n" f"        </INVENTORY_ITEMS>"
-    )
-    result = inventory_prompt
-    return result
+
 
 
 async def get_system_info():
@@ -144,7 +144,7 @@ async def analyze_intent(state: FairyDungeonState):
             "is_multi_small_talk": False,
         }
 
-    if (FairyDungeonIntentType.MONSTER_GUIDE not in clarify_intent_type.intents):
+    if FairyDungeonIntentType.MONSTER_GUIDE not in clarify_intent_type.intents:
         if target_monster_ids:
             clarify_intent_type.intents.append(FairyDungeonIntentType.MONSTER_GUIDE)
 
@@ -171,10 +171,11 @@ async def fairy_action(state: FairyDungeonState):
     dungeon_row = rdb_repository.get_current_dungeon_by_player(
         dungenon_player.playerId, dungenon_player.heroineId
     )
+
     messages = state["messages"]
     INTENT_HANDLERS = {
         FairyDungeonIntentType.MONSTER_GUIDE: lambda: get_monsters_info(
-            target_monster_ids
+            target_monster_ids,dungenon_player.inventory, dungenon_player.stats
         ),
         FairyDungeonIntentType.EVENT_GUIDE: lambda: get_event_info(
             dungeon_row, currRoomId
@@ -182,16 +183,13 @@ async def fairy_action(state: FairyDungeonState):
         FairyDungeonIntentType.DUNGEON_NAVIGATOR: lambda: dungeon_navigator(
             dungeon_row, currRoomId
         ),
-        FairyDungeonIntentType.INTERACTION_HANDLER: lambda: create_interaction(
-            dungenon_player.inventory
-        ),
         FairyDungeonIntentType.USAGE_GUIDE: get_system_info,
     }
+    
     INTENT_LABELS = {
         FairyDungeonIntentType.MONSTER_GUIDE: "MONSTER_GUIDE",
         FairyDungeonIntentType.EVENT_GUIDE: "EVENT_GUIDE",
         FairyDungeonIntentType.DUNGEON_NAVIGATOR: "DUNGEON_NAVIGATOR",
-        FairyDungeonIntentType.INTERACTION_HANDLER: "INTERACTION_HANDLER",
         FairyDungeonIntentType.USAGE_GUIDE: "USAGE_GUIDE",
     }
 
@@ -230,21 +228,21 @@ async def fairy_action(state: FairyDungeonState):
 
     print("총 질문", human_prompt)
 
-    if intent_types[0] == FairyDungeonIntentType.SMALLTALK and len(intent_types) == 1:
-        ai_answer = small_talk_llm.invoke(
-            [SystemMessage(content=system_prompt)]
-            + messages
-            + [HumanMessage(content=human_prompt)]
-        )
-    else:
-        ai_answer = action_llm.invoke(
-            [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=human_prompt),
-            ]
-        )
-        if contains_hanja(ai_answer.content):
-            ai_answer.content = replace_hanja_naively(ai_answer.content)
+    # if intent_types in  FairyDungeonIntentType.SMALLTALK:
+    #     ai_answer = small_talk_llm.invoke(
+    #         [SystemMessage(content=system_prompt)]
+    #         + messages
+    #         + [HumanMessage(content=human_prompt)]
+    #     )
+    # else:
+    ai_answer = action_llm.invoke(
+        [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=human_prompt),
+        ]
+    )
+    if contains_hanja(ai_answer.content):
+        ai_answer.content = replace_hanja_naively(ai_answer.content)
 
     asyncio.create_task(
         asyncio.to_thread(

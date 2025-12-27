@@ -7,7 +7,7 @@ class SkillData(BaseModel):
     skillDescription: Optional[str] = None
     skillCoolTime: float = 1.0
     IsWeaponSkill:bool = False
-    typeOrId:int = 2
+    typeOrId:Optional[int] = None
     keyword:str 
 
 # 0	높은 방어력

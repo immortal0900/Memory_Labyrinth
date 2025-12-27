@@ -73,12 +73,22 @@ class MockFactory:
         )
 
     @staticmethod
-    def create_sub_weapon():
+    def create_yakk_weapon():
         return WeaponData(
-            weaponId=20, weaponType=2, weaponName="일반 쌍검",
-            rarity=0, attackPower=6, staggerPower=1,
-            modifier={"strength": 0.1, "dexterity": 0.8, "intelligence": 0.1}
+            weaponId=46, weaponType=3, weaponName="레어 드래곤슬레이어",
+            rarity=2, attackPower=21, staggerPower=5,
+            modifier={"strength": 0.2, "dexterity": 0.8, "intelligence": 0}
         )
+    
+    @staticmethod
+    def create_power_weapon():
+        return WeaponData(
+            weaponId=67, weaponType=4, weaponName="레전드 바이킹의 망치",
+            rarity=3, attackPower=28, staggerPower=6,
+            modifier={"strength": 0.85, "dexterity": 0.15, "intelligence": 0}
+        )
+
+    
 
     @staticmethod
     def create_dungeon_player(player_id: int):

@@ -1,29 +1,17 @@
+# 요정 API 수정
 
-# Fairy API Documentation
+(배포시 알파버전 패키징 파일에서 정령 테스트는 불가합니다.   
+AI 팀은 어느정도 테스트 완료했으므로 새로 배포합니다.)   
 
-정령(Fairy) 에이전트와 관련된 API 명세서입니다. 던전 내 상호작용 및 대화, 길드 내 대화를 처리합니다.
+정령 기능 바뀐점 
+- 상호작용 과거 참고 대화 강화
+- 무기를 FinalDamage 기준으로 추천 
+- 불필요 데이터 참고 제거
 
-- **Base URL**: `/api/fairy`
-
-## 1. 던전 (Dungeon)
-
-** 주의사항 (Usage Note)**
-> `/api/fairy/dungeon/talk`와 `/api/fairy/dungeon/interaction` API는 **반드시 함께 호출**되어야 합니다.  
-> 하나의 사용자 입력에 대해 대화 응답(Talk)과 게임 내 행동(Interaction)을 각각 병렬로 처리하여 결과를 클라이언트에 반영해야 합니다.
-
-### 1-1. 정령 - 던전 대화 (Talk)
-
-던전 탐험 중 플레이어와 정령 간의 대화를 처리합니다.
-
-- **Endpoint**: `POST /dungeon/talk`
-- **Description**: 
-  - 사용자의 질문에 대한 정령의 텍스트 응답을 반환합니다.
-  - **성능 특이사항**:
-    - **과거 회상/기억 관련 질문**: 응답 생성에 시간이 오래 걸릴 수 있습니다 (Latency High).
-    - **일반/현재 상황 질문**: 응답 속도가 매우 빠릅니다 (Latency Low).
+## 1. 정령 - 던전 대화
+`POST /dungeon/talk`
 
 ### 요청 방식 (Body)
-
 
 | Field                           | Type           | Required | Description                       |
 | :------------------------------ | :------------- | :------- | :-------------------------------- |
@@ -50,7 +38,7 @@
 | `targetMonsterIds`              | List[int]      | No       | 타겟팅된 몬스터 ID 목록 (기본값: `[]`)      |
 | `nextRoomIds`                   | List[int]      | No      | 히로인이 이동 가능한 방 ID 목록 (기본값: `[]`) |
 
-
+### 요청 예시 
 ```json
 {
     "dungeonPlayer": {
@@ -83,23 +71,14 @@
     "nextRoomIds": [0,1]
 }
 ```
+dungeonPlayer 수정:  hp, moveSpeed, attackSpeed 는 stats 객체로 옮겻고 subWeaponId 제거했습니다.
+dungeonPlayer.stats 추가:  stats 데이터는 데이터 스프레트시트에 표기된 내용과 똑같이 맞췄습니다.
+dungeonPlayer.skillIds 추가: 히로인 스킬 id 목록을 하나로 퉁쳤습니다. 히로인이 가진 skill id 를 모두 넘겨주시면 됩니다.
 
-### 응답 방식 (Body)
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `response_text` | String | 정령의 답변 텍스트 |
-```json
-{
-  "response_text": "현재 던전의 불을 켜드리겠습니다. 방이 밝아졌어요!"
-}
-```
+응답(Response)는 기존과 같습니다.
 
-### 1-2. 정령 - 던전 인터렉션 (Interaction)
-
-던전 탐험 중 사용자의 말에 따른 게임 시스템적 행동(불 켜기, 아이템 사용 등)을 판단합니다.
-
-- **Endpoint**: `POST /dungeon/interaction`
-- **Description**: 정령이 수행해야 할 게임 내 행동을 반환합니다. 대화 API와 함께 호출하여 행동을 동기화해야 합니다.
+## 2. 정령 - 상호작용
+`POST /dungeon/interaction`
 
 #### 요청 방식 (Body)
 
@@ -157,60 +136,7 @@
   }
 }
 ```
+dungeonPlayer 추가: 정령 던전 대화 API 와 똑같은 dungeonPlayer 객체를 보내주시면 됩니다.
+dungeonPlayer 가 추가됨으로 가장 바깥에 있던 inventory 필드는 삭제했습니다.   
 
-#### 응답 방식 (Body)
-
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `roomLight` | Integer | 방 밝기 조절 여부 (`0`: 행동 없음, `1`: 켜기, `2`: 끄기) |
-| `isCheckNextRoom` | Boolean | 다음 방 확인 필요 여부 (정령 행동 필요 없으면 `false`) |
-| `useItemId` | Integer (Optional) | 사용할 아이템의 ID (`null`: 사용 안 함) |
-
-```json
-{
-  "roomLight": true,
-  "isCheckNextRoom": false,
-  "useItemId": null
-}
-```
-
-## 2. 길드 (Guild)
-
-### 정령 - 길드 대화
-
-길드(로비/거점)에서 히로인과 나누는 일상 대화를 처리합니다.
-
-- **Endpoint**: `POST /guild/talk`
-- **Description**: 히로인의 호감도, 정신력, 기억 해금 상태를 반영하여 대화를 생성합니다.
-
-#### 요청 방식 (Body)
-
-| Field | Type | Required | Description |
-| :--- | :--- | :--- | :--- |
-| `playerId` | Integer | Yes | 사용자 ID |
-| `heroine_id` | Integer | Yes | 대화 대상 히로인 ID |
-| `memory_progress` | Integer | Yes | 히로인 기억 해금 진척도 |
-| `affection` | Integer | Yes | 히로인 호감도 수치 |
-| `sanity` | Integer | Yes | 히로인 정신력 수치 |
-| `question` | String | Yes | 사용자의 질문 |
-```json
-{
-  "playerId": 1001,
-  "heroine_id": 1,
-  "memory_progress": 50,
-  "affection": 85,
-  "sanity": 90,
-  "question": "오늘 기분은 좀 어때?"
-}
-```
-#### 응답 방식 (Body)
-
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `response_text` | String | 히로인의 답변 텍스트 |
-
-**Example JSON:**
-```json
-{
-  "response_text": "덕분에 기분이 아주 좋아요! 오늘 임무도 같이 힘내요."
-}
+응답(Response)는 기존과 같습니다.

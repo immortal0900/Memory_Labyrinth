@@ -80,14 +80,74 @@ def get_best_device():
 from core.game_dto.z_cache_data import cache_items
 from core.game_dto.ItemData import ItemData
 from typing import List
+
+from core.game_dto.StatData import StatData
+from core.game_dto.WeaponData import WeaponData
+
+from typing import Optional
+
+def _calculate_final_damage_score(
+    stat: StatData,
+    weapon: WeaponData,
+) -> float:
+    stat_contribution = 0.0
+    for stat_name, ratio in weapon.modifier.items():
+        v = getattr(stat, stat_name, 0) or 0
+        stat_contribution += v * ratio 
+
+    effective_multiplier = (stat.autoAttackMultiplier + stat.skillDamageMultiplier) / 2
+
+    return stat_contribution * weapon.attackPower * effective_multiplier
+
 def get_inventory_items(inventory_ids:list) -> List[ItemData]:
     return [item for item in cache_items if item.itemId in inventory_ids]
 
-def get_inventory_item(item_id: int):
+from typing import List
+
+def get_inventory_items(
+    inventory_ids: list[int],
+    stat: StatData
+) -> List[ItemData]:
+    result: List[ItemData] = []
+
     for item in cache_items:
-        if item.itemId == item_id:
-            return item
+        if item.itemId not in inventory_ids:
+            continue
+
+        if item.weapon is not None:
+            weapon = item.weapon
+            final_damage = _calculate_final_damage_score(stat, weapon)
+            weapon.finalDemage = final_damage
+
+        result.append(item)
+
+    return result
+
+def get_inventory_item(item_id: int, stat: StatData):
+    for item in cache_items:
+        if item.itemId != item_id:
+            continue
+
+        # weapon 이 있는 경우에만 계산
+        if item.weapon is not None:
+            final_damage = _calculate_final_damage_score(stat, item.weapon)
+            item.weapon.finalDemage = final_damage
+
+        return item
+
     return None
+
+from core.game_dto.SkillData import SkillData
+from core.game_dto.z_cache_data import cache_skills
+def get_skills(skills_ids:List[int]) -> List[SkillData]:
+    result: List[SkillData] = []
+    for skill in cache_skills:
+        if skill.skillId not in skills_ids:
+            continue
+        result.append(skill)
+    return result
+    
+
 
 # 아래는 주피터 노트북에서 src 경로를 고정시키기위한 코드 
 # import os, sys

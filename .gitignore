@@ -13,6 +13,5 @@ src/db/mem0_manager.py
 logs
 /src/agents/dungeon/data/
 uploads
-uvicion_9999.out
 audio_logs
-
+uvicorn_*.out

@@ -109,6 +109,12 @@ FAIRY_DUNGEON_INTENT:
     Question: "내 주머니에 뭐 들어있어?"
     Answer: ["INTERACTION_HANDLER"]
 
+    Question: "방금 말한거 써줘"
+    Answer: ["INTERACTION_HANDLER", "SMALLTALK"]
+
+    Question: "그럼 그거 사용해"
+    Answer: ["INTERACTION_HANDLER", "SMALLTALK"]
+
     Question: "방의 불을 키면서 슬라임 공략법을 알려줘"
     Answer: ["INTERACTION_HANDLER", "MONSTER_GUIDE"]
 
