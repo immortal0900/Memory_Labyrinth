@@ -153,17 +153,23 @@ async def stt_wav(request: Request, file: UploadFile = File(...)):
     if not file.filename:
         raise HTTPException(400, "No file uploaded")
 
+    # 1️⃣ 파일 먼저 읽기
+    data = await file.read()
+    size = len(data)
+
     suffix = os.path.splitext(file.filename)[-1].lower() or ".wav"
-    tmp_path = None
+
+    # 2️⃣ 임시 파일에 저장
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(data)
         tmp_path = tmp.name
 
-    data = await file.read()
-    size = len(data)
+    logger.info(
+        f"[{rid}] upload filename={file.filename} "
+        f"content_type={file.content_type} bytes={size}"
+    )
 
-    logger.info(f"[{rid}] upload filename={file.filename} content_type={file.content_type} bytes={size}")
-
+    # 3️⃣ STT
     t0 = time.perf_counter()
     result = model.transcribe(tmp_path, language="ko")
     segments = result.get("segments", [])
@@ -175,20 +181,24 @@ async def stt_wav(request: Request, file: UploadFile = File(...)):
     ).strip()
 
     dur = time.perf_counter() - t0
-    transfer_text =  _domain_replace(final_text)
-    logger.info(f"[{rid}] transcribe done in {dur:.3f}s text_len={len(final_text)}")
+    transfer_text = _domain_replace(final_text)
+
+    logger.info(
+        f"[{rid}] transcribe done in {dur:.3f}s text_len={len(final_text)}"
+    )
+
     is_valid = bool(transfer_text) and _is_valid_text(transfer_text)
     saved_path = None
-    if is_valid == False:
-        if SAVE_UPLOADS:
-            saved_path = _make_save_path("stt", file.filename, suffix)
-            with open(saved_path, "wb") as f:
-                f.write(data)
-            logger.info(f"[{rid}] saved upload -> {saved_path}")
+
+    if is_valid and SAVE_UPLOADS:
+        saved_path = _make_save_path("stt", file.filename, suffix)
+        with open(saved_path, "wb") as f:
+            f.write(data)
+        logger.info(f"[{rid}] saved upload -> {saved_path}")
 
     return JSONResponse({
         "transferText": transfer_text,
-        "isValid":is_valid
+        "isValid": is_valid
     })
     
 @router.post("/pcm")
