@@ -190,7 +190,7 @@ async def stt_wav(request: Request, file: UploadFile = File(...)):
     is_valid = bool(transfer_text) and _is_valid_text(transfer_text)
     saved_path = None
 
-    if is_valid and SAVE_UPLOADS:
+    if SAVE_UPLOADS:
         saved_path = _make_save_path("stt", file.filename, suffix)
         with open(saved_path, "wb") as f:
             f.write(data)
