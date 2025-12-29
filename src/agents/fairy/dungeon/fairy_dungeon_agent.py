@@ -40,7 +40,6 @@ intent_llm = get_groq_llm_lc(model=LLM.LLAMA_3_3_70B_VERSATILE, max_token=43)
 action_llm = init_chat_model(
     model=LLM.GROK_4_FAST_NON_REASONING, max_tokens=80, temperature=0
 )
-
 # small_talk_llm = init_chat_model(model=LLM.GROK_4_FAST_NON_REASONING, max_tokens=80)
 rdb_repository = RDBRepository()
 intent_model = FairyDungeonIntentModel()
@@ -235,11 +234,17 @@ async def fairy_action(state: FairyDungeonState):
     #         + [HumanMessage(content=human_prompt)]
     #     )
     # else:
+
+    # ai_answer = action_llm.invoke(
+    #     [   
+    #         SystemMessage(content=system_prompt),
+    #         HumanMessage(content=human_prompt),
+    #     ]
+    # )
     ai_answer = action_llm.invoke(
-        [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=human_prompt),
-        ]
+        [SystemMessage(content=system_prompt)]
+        + messages
+        + [HumanMessage(content=human_prompt)]
     )
     if contains_hanja(ai_answer.content):
         ai_answer.content = replace_hanja_naively(ai_answer.content)

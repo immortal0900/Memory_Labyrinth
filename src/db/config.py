@@ -40,3 +40,6 @@ class DBCollectionName(StrEnum):
 
     HEROINE_MEMORY = "heroine_memory"
 
+
+    # 정령 관련
+    FAIRY_DUNGEON_FEWSHOT_PROMPT =  "fairy_dungeon_fewshot_prompt"

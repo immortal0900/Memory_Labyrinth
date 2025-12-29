@@ -407,8 +407,8 @@ def balance_dungeon(request: BalanceRequest):
 
         resp_first_player_id = None
         try:
-                if hasattr(request, "firstPlayerId") and request.firstPlayerId:
-                    resp_first_player_id = request.firstPlayerId
+            if hasattr(request, "firstPlayerId") and request.firstPlayerId:
+                resp_first_player_id = request.firstPlayerId
         except Exception:
             resp_first_player_id = None
 
@@ -438,7 +438,9 @@ def balance_dungeon(request: BalanceRequest):
 
         return BalanceResponse(
             success=True,
-            firstPlayerId=str(resp_first_player_id) if resp_first_player_id is not None else "",
+            firstPlayerId=(
+                str(resp_first_player_id) if resp_first_player_id is not None else ""
+            ),
             monsterPlacements=monster_placements,
         )
     except Exception as e:
