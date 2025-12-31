@@ -828,6 +828,9 @@ B) 세계관/정보 질문: "던전이 뭐야?", "히로인들은 누구야?, "�
                 redis_manager.save_session(player_id, npc_id, session)
             else:
                 summary_list = [summary_item]
+                summary_list = session_checkpoint_manager.prune_summary_list(
+                    summary_list
+                )
 
             session_checkpoint_manager.save_summary(player_id, npc_id, summary_list)
 
