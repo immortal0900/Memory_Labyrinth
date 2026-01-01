@@ -18,6 +18,10 @@ import json
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 import redis
+from redis.connection import ConnectionPool
+from redis.retry import Retry
+from redis.backoff import ExponentialBackoff
+from redis.exceptions import ConnectionError, TimeoutError
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -52,9 +56,30 @@ class RedisManager:
     """
 
     def __init__(self):
-        """Redis 클라이언트 초기화"""
-        # decode_responses=True: 바이트 대신 문자열로 반환
-        self.client = redis.from_url(REDIS_URL, decode_responses=True)
+        """Redis 클라이언트 초기화
+
+        연결 풀을 사용하여 연결을 재사용하고,
+        연결이 끊어졌을 때 자동으로 재연결합니다.
+        """
+        # 연결 풀 생성 (연결 재사용 및 재연결 지원)
+        pool = ConnectionPool.from_url(
+            REDIS_URL,
+            decode_responses=True,
+            socket_connect_timeout=5,  # 최대 5초까지 기다립니다.
+            socket_timeout=5,  # 응답을 최대 5초까지 기다립니다.
+            socket_keepalive=True,  # TCP Keep-Alive 활성화 (연결 유지 도움)
+            health_check_interval=30,  # 30초 마다 연결 상태를 확인하여 끊긴 연결 사용 방지
+        )
+
+        # 재시도 설정: 연결이 끊기면 잠시 기다렸다 다시 시도합니다. (총 3번)
+        retry_strategy = Retry(ExponentialBackoff(), 3)
+
+        # Redis 클라이언트 생성 (재시도 설정 적용)
+        self.client = redis.Redis(
+            connection_pool=pool,
+            retry=retry_strategy,
+            retry_on_error=[ConnectionError, TimeoutError],
+        )
 
     # ============================================
     # 키 생성 헬퍼 메서드
