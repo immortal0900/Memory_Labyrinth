@@ -222,6 +222,16 @@ Output:
         # 1. 임베딩 생성 (content + keywords)
         text_to_embed = self._combine_content_with_keywords(fact.content, fact.keywords)
         embedding = self.embeddings.embed_query(text_to_embed)
+        print(
+            "[MemorySave]",
+            f"player={player_id}",
+            f"heroine={heroine_id}",
+            f"speaker={fact.speaker.value}",
+            f"subject={fact.subject.value}",
+            f"content={fact.content}",
+            f"keywords={fact.keywords}",
+            f"embed_input={text_to_embed}",
+        )
 
         # 무효화된 기억 정보 수집
         invalidated = []

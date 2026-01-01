@@ -170,7 +170,7 @@ class SessionCheckpointManager:
             sql = text(
                 """
                 UPDATE session_checkpoints
-                SET summary_list = CAST(:summary_list AS jsonb) # CAST: 데이터 타입 변환 함수
+                SET summary_list = CAST(:summary_list AS jsonb)
                 WHERE player_id = :player_id AND npc_id = :npc_id
                 AND id = (
                     SELECT id FROM session_checkpoints
