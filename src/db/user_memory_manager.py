@@ -130,7 +130,7 @@ Your goal is to extract key facts from the conversation to be stored in the long
 - 9-10: Critical (Trauma, Secrets, Core relationship changes).
 
 [Output Format - JSON Array]
-Return a JSON array of objects. If nothing is worth saving, return [].
+Return a JSON array of up to **2** objects. If nothing is worth saving, return [].
 
 Example 1 (Concrete - Preference):
 Input: "I've been really into grapes lately."
@@ -308,6 +308,7 @@ Output:
 
         # Fact 추출
         facts = await self.extract_facts(conversation, heroine_id)
+        facts = facts[:2]
 
         if not facts:
             return {"memory_ids": [], "preference_changes": []}
