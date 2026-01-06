@@ -208,12 +208,12 @@ class HeroineHeroineAgent:
             "훈련장에서 훈련을 마친 후",
             "밤에 길드 옥상에서 별을 보는 중",
             "비가 와서 실내에 갇힌 상황",
-            "멘토가 잠시 자리를 비운 사이",
+            "서로의 기억을 공유하는 중",
         ]
 
         situations_text = "\n".join([f"- {s}" for s in situations])
 
-        prompt = f"""다음 상황 목록 중 하나를 선택하고, 구체적인 상황 설명을 만들어주세요.
+        prompt = f"""다음 상황 목록 중 하나를 선택하고, 서로가 흥미롭게 대화 할만한 구체적인 상황 설명을 만들어주세요.
 
 상황 목록:
 {situations_text}

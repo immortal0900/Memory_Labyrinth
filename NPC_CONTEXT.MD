@@ -24,6 +24,19 @@
 
 단순 벡터 검색의 한계를 극복하기 위해 **하이브리드 검색**과 **구조화된 저장 방식**을 채택했습니다.
 
+## **long-term memory**Mem0 대체 및 자체 구축
+
+초기에는 `Mem0` 라이브러리가 locomo 벤치마크 결과  OpenAI의 메모리와 비교했을 때 응답 정확도가 26% 더 높았고langmem(langchain), MemGPT, A-Mem 보다 우수한 성능을 보여서 `Mem0` 라이브러리를 고려했으나 아래의 이유로 **PostgreSQL 기반 자체 하이브리드 시스템**으로 전환했습니다.
+
+### 메타데이터의 부재 (Contextual Ambiguity):
+- Mem0는 단순히 텍스트를 저장하므로 `Speaker`(화자)와 `Subject`(대상)를 명확히 구분하기 어렵습니다. "누가 누구에 대해 말한 것인지" 불분명하여 NPC가 유저의 정보를 자신의 정보로 착각하는 등의 할루시네이션 위험이 있었습니다.
+        
+### 검색 로직의 한계 (Search Flexibility):
+- Mem0는 벡터 유사도(Relevance) 중심입니다. 
+- 하지만 대화 시스템에서는 **최신성(Recency)**, **중요도(Importance)**, **키워드 일치(Keyword)** 또한 복합적으로 고려되어야 자연스러운 회상이 가능합니다.
+### 속도
+- 같은 "grok-4-fast-non-reasoning" 모델을 활용할 경우 자체 하이브리드 시스템에서 속도가 3초 초반대에서 2~3초 대로 단축됨
+
 # A. 저장 방식 (Fact Extraction)
 
 - 장기기억은 RAG로 가져오며, playerId별로 저장됩니다.
@@ -61,10 +74,10 @@ updated_at(수정시간: 임베딩 재생성이나 중요도 재평가시)
 
 $$Score = (w_{recency} \times Recency) + (w_{importance} \times Importance) + (w_{relevance} \times Relevance) + (w_{keyword} \times Keyword)$$
 
-- **Recency (최신성):** 지수 감쇠 함수 적용 (exp(-days/30)).
-- **Importance (중요도):** 1~10점 척도 정규화 (importance/10).
-- **Relevance (관련도):** `pgvector` (Cosine Similarity, 가중치 0.50).
-- **Keyword (키워드):** `PGroonga` (content+keywords BM25, 한국어 형태소 검색 최적화, 가중치 0.20).
+- **Recency (최신성):** 지수 감쇠 함수 적용 (exp(-days/30)), 가중치 0.15.
+- **Importance (중요도):** 1~10점 척도 정규화 (importance/10), 가중치 0.15.
+- **Relevance (관련도):** `pgvector` (Cosine Similarity), 가중치 0.50.
+- **Keyword (키워드):** `PGroonga` (content+keywords BM25, 한국어 형태소 검색 최적화), 가중치 0.20.
 
 **기본 가중치:**
 - Recency: 0.15
@@ -100,6 +113,7 @@ $$Score = (w_{recency} \times Recency) + (w_{importance} \times Importance) + (w
 ## 호감도(affection)의 변화에 따른 태도 변화
 - 0-29 / 30-59 / 60-89 구간 별 태도 변화
 - 정신력(sanity) 0일시 우울 모드
+
 #  E. 단기기억
 - 프롬프트에 포함
 - 최근 5턴의 대화 프롬프트에 삽입
@@ -131,7 +145,8 @@ $$Score = (w_{recency} \times Recency) + (w_{importance} \times Importance) + (w
 
 ### Step 2: 의도 분류 (Intent Classification)
 
-LLM을 통해 사용자 발화의 의도를 분류합니다. 히로인과 대현자는 서로 다른 의도 분류를 사용합니다.
+- LLM을 통해 사용자 발화의 의도를 분류합니다. 히로인과 대현자는 서로 다른 의도 분류를 사용합니다.
+- **최적화:** `max_tokens=20` 설정으로 속도 최적화.
 
 **히로인 의도 분류 (4가지):**
 1. **General:** 일상 대화 (검색 최소화).
@@ -166,6 +181,7 @@ LLM을 통해 사용자 발화의 의도를 분류합니다. 히로인과 대현
 - 설정된 `max_token` 내에서 페르소나 말투를 반영하여 Text 출력.
     
 - 감정 상태(`emotion`), 감정 강도(emotion_intensity)를 0~6(neutral, joy, sorrow 등)의 정수값으로 도출.
+- **토큰 최적화 (Token Capping):** 응답 속도 보장을 위해 `max_tokens=200` 설정.
     
 
 ### Step 5: TTS 생성 (Optional)
@@ -183,7 +199,8 @@ LLM을 통해 사용자 발화의 의도를 분류합니다. 히로인과 대현
 # 4. NPC-NPC 대화 시스템
 
 플레이어 개입 없이 NPC끼리 대화하며 세계관을 확장하는 기능입니다.
-NPC_A NPC_B / NPC_B NPC_C / NPC_A NAP_C 마다 다른 대화창 존재
+- NPC_A NPC_B / NPC_B NPC_C / NPC_A NAP_C 마다 다른 대화창 존재
+- **모델 최적화:** 경량화 모델 및 엄격한 프롬프트 전략으로 생성 시간 단축 (50초 -> 6초대)
 - **생성 방식:** `POST /api/npc/heroine-conversation/generate` 호출 시 한 번에 멀티 턴(예: 10턴) 대화 생성 및 DB 저장.
     
 - **독립적 메모리:** `npc_npc_memories`, `npc_npc_checkpoints` 테이블 사용.
@@ -219,5 +236,4 @@ NPC_A NPC_B / NPC_B NPC_C / NPC_A NAP_C 마다 다른 대화창 존재
 - **시나리오 시딩:** `metadata` 컬럼을 활용해 키워드/동의어 기반 검색률 향상.
 
 - **세션 관리:** Redis에 최근 20턴 대화 버퍼 저장 (24시간 TTL), 로그인 시 `session_checkpoint` 테이블에서 복원.
-
 이 구조는 **"기억하는 NPC"**, **"변화하는 관계"**, **"유기적인 상호작용"**을 구현하기 위해 설계되었습니다.

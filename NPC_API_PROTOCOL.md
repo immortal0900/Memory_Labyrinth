@@ -14,11 +14,10 @@
 4. [히로인간 대화](#4-히로인간-대화)
 5. [길드 시스템](#5-길드-시스템)
 6. [TTS 음성 엔드포인트](#6-tts-음성-엔드포인트)
-7. [스트리밍 응답 처리](#7-스트리밍-응답-처리)
-8. [호출 흐름도](#8-호출-흐름도)
-9. [세션/디버그 API](#9-세션디버그-api)
-10. [에러 응답](#10-에러-응답)
-11. [프로토콜 요약표](#11-프로토콜-요약표)
+7. [호출 흐름도](#7-호출-흐름도)
+8. [세션/디버그 API](#8-세션디버그-api)
+9. [에러 응답](#9-에러-응답)
+10. [프로토콜 요약표](#10-프로토콜-요약표)
 
 ---
 
@@ -89,64 +88,11 @@
 
 ## 2. 히로인 대화
 
-> **스트리밍/비스트리밍 동일 응답**: 둘 다 동일한 컨텍스트(기억/시나리오 검색)를 사용하며, LLM은 1번만 호출됩니다.
-
-### POST /api/npc/heroine/chat (스트리밍)
-
-히로인과 대화합니다. **SSE(Server-Sent Events) 스트리밍**으로 응답합니다.
-> 메모리 저장 시 LLM이 content+keywords(JSON)를 추출해 keywords 배열(상위 카테고리 포함)과 함께 DB에 기록하고, 임베딩은 "content (Keywords: ...)"로 생성합니다. 검색은 PGroonga로 content+keywords를 함께 봅니다.
-
-#### Request
-
-```json
-{
-    "playerId": "10001",
-    "heroineId": 1,
-    "text": "안녕, 오늘 기분이 어때?"
-}
-```
-
-**Request 필드:**
-
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| playerId | string | 플레이어 ID |
-| heroineId | int | 대화할 히로인 ID |
-| text | string | 플레이어 메시지 |
-
-#### Response (SSE 스트리밍)
-
-```
-data: 안
-data: 녕
-data: ...
-data: 별로야
-data: .
-data: {"type": "final", "affection": 50, "sanity": 85, "memoryProgress": 35, "emotion": 0}
-data: [DONE]
-```
-
-| 이벤트 | 설명 |
-|--------|------|
-| `data: {토큰}` | 응답 텍스트 (토큰 단위) |
-| `data: {"type": "final", ...}` | 최종 상태 (JSON) |
-| `data: [DONE]` | 스트리밍 종료 |
-
-**Response 필드 (최종 상태 JSON):**
-
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| type | string | 항상 "final" |
-| affection | int | 변경된 호감도 |
-| sanity | int | 변경된 정신력 |
-| memoryProgress | int | 변경된 기억 진척도 |
-| emotion | int | 현재 감정 (0-6) |
-
----
-
-### POST /api/npc/heroine/chat/sync (비스트리밍)
+### POST /api/npc/heroine/chat/sync
 
 히로인과 대화합니다. **전체 응답을 한번에** 반환합니다.
+
+> 메모리 저장 시 LLM이 content+keywords(JSON)를 추출해 keywords 배열(상위 카테고리 포함)과 함께 DB에 기록하고, 임베딩은 "content (Keywords: ...)"로 생성합니다. 검색은 PGroonga로 content+keywords를 함께 봅니다.
 
 #### Request
 
@@ -212,56 +158,13 @@ data: [DONE]
 | 5 | surprise | 놀람 |
 | 6 | mysterious | 신비로움 |
 
-> **참고**: API 응답에서 emotion은 **정수(int)**로 전달됩니다. 자세한 내용은 [EMOTION_MAPPING.md](EMOTION_MAPPING.md)를 참조하세요.
+> **참고**: API 응답에서 emotion은 **정수(int)**로 전달됩니다.
 
 ---
 
 ## 3. 대현자 대화
 
-> **스트리밍/비스트리밍 동일 응답**: 둘 다 동일한 컨텍스트(시나리오 검색)를 사용하며, LLM은 1번만 호출됩니다.
-
-### POST /api/npc/sage/chat (스트리밍)
-
-대현자 사트라와 대화합니다. SSE 스트리밍으로 응답합니다.
-
-#### Request
-
-```json
-{
-    "playerId": "10001",
-    "text": "이 세계에 대해 알려줘"
-}
-```
-
-**Request 필드:**
-
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| playerId | string | 플레이어 ID |
-| text | string | 플레이어 메시지 |
-
-#### Response (SSE 스트리밍)
-
-```
-data: 이
-data: 세계는
-data: ...
-data: {"type": "final", "scenarioLevel": 3, "emotion": 6, "infoRevealed": true}
-data: [DONE]
-```
-
-**Response 필드 (최종 상태 JSON):**
-
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| type | string | 항상 "final" |
-| scenarioLevel | int | 현재 시나리오 레벨 |
-| emotion | int | 감정 상태 (0-6) |
-| infoRevealed | bool | 정보 공개 여부 |
-
----
-
-### POST /api/npc/sage/chat/sync (비스트리밍)
+### POST /api/npc/sage/chat/sync
 
 대현자 사트라와 대화합니다. 전체 응답을 한번에 반환합니다.
 
@@ -321,9 +224,7 @@ data: [DONE]
 
 ## 4. 히로인간 대화
 
-> **스트리밍/비스트리밍 동일 저장**: 둘 다 동일하게 `agent_memories` 테이블에 저장됩니다.
-
-### POST /api/npc/heroine-conversation/generate (비스트리밍)
+### POST /api/npc/heroine-conversation/generate
 
 두 히로인 사이의 대화를 생성합니다.
 
@@ -391,50 +292,6 @@ data: [DONE]
 | conversation[].emotion | int | 감정 (0-6) |
 | importance_score | int | 중요도 (1-10) |
 | timestamp | string | 생성 시각 (ISO 8601) |
-
----
-
-### POST /api/npc/heroine-conversation/stream (스트리밍)
-
-두 히로인 사이의 대화를 스트리밍으로 생성합니다.
-
-#### Request
-
-```json
-{
-    "playerId": "player_10001",
-    "heroine1Id": 1,
-    "heroine2Id": 2,
-    "situation": null,
-    "turnCount": 10
-}
-```
-
-**Request 필드:**
-
-| 필드 | 타입 | 필수 | 설명 |
-|------|------|------|------|
-| playerId | string | O | 플레이어 ID |
-| heroine1Id | int | O | 첫 번째 히로인 ID |
-| heroine2Id | int | O | 두 번째 히로인 ID |
-| situation | string | X | 상황 설명 (null이면 자동 생성) |
-| turnCount | int | X | 대화 턴 수 (기본값 10) |
-
-#### Response (SSE 스트리밍)
-
-```
-data: [레티아] (neutral) ...뭐해.
-data: [루파메스] (joy) 아 심심해서 왔지~
-data: ...
-data: [DONE]
-```
-
-**Response 형식:**
-
-| 이벤트 | 설명 |
-|--------|------|
-| `data: [이름] (감정) 대사` | 히로인 대사 (스트리밍) |
-| `data: [DONE]` | 스트리밍 종료 |
 
 ---
 
@@ -707,9 +564,10 @@ User가 길드에 있는 동안 NPC들이 자동으로 대화합니다.
 | **언리얼 호환** | 언리얼 엔진에서 Base64 디코딩 후 바로 재생 가능 |
 | **전송 안정성** | 텍스트 기반이므로 인코딩 문제 없음 |
 
-### Base64 → WAV 변환 방법
+### Base64 -> WAV 변환 방법
 
 **언리얼 엔진 (C++):**
+
 ```cpp
 // Base64 디코딩
 TArray<uint8> WavData;
@@ -721,6 +579,7 @@ USoundWave* SoundWave = NewObject<USoundWave>();
 ```
 
 **Python (유틸리티 스크립트):**
+
 ```python
 from src.tools.audio.base64_to_wav import save_base64_as_wav
 
@@ -929,58 +788,9 @@ TTS 음성의 감정 표현 강도를 조절합니다. Typecast API의 `emotion_
 
 ---
 
-## 7. 스트리밍 응답 처리
+## 7. 호출 흐름도
 
-### 언리얼에서 SSE 처리 예시 (C++)
-
-```cpp
-// HTTP 요청 설정
-TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
-Request->SetURL(TEXT("http://localhost:8090/api/npc/heroine/chat"));
-Request->SetVerb(TEXT("POST"));
-Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
-Request->SetContentAsString(JsonBody);
-
-// 스트리밍 응답 처리
-Request->OnRequestProgress().BindLambda([](FHttpRequestPtr Request, int32 BytesSent, int32 BytesReceived)
-{
-    // 수신된 데이터 파싱
-    FString ResponseContent = Request->GetResponse()->GetContentAsString();
-    
-    // "data: " 접두사 제거 후 처리
-    TArray<FString> Lines;
-    ResponseContent.ParseIntoArray(Lines, TEXT("\n"));
-    
-    for (const FString& Line : Lines)
-    {
-        if (Line.StartsWith(TEXT("data: ")))
-        {
-            FString Data = Line.Mid(6);  // "data: " 제거
-            
-            if (Data == TEXT("[DONE]"))
-            {
-                // 스트리밍 완료
-            }
-            else if (Data.StartsWith(TEXT("{")))
-            {
-                // JSON 파싱 (최종 상태)
-            }
-            else
-            {
-                // 텍스트 토큰 추가
-            }
-        }
-    }
-});
-
-Request->ProcessRequest();
-```
-
----
-
-## 8. 호출 흐름도
-
-### 8-1. 기본 흐름
+### 7-1. 기본 흐름
 
 ```
 [게임 시작]
@@ -1000,7 +810,7 @@ POST /api/npc/guild/enter
 [히로인과 대화]
     |
     v
-POST /api/npc/heroine/chat  또는  /chat/sync
+POST /api/npc/heroine/chat/sync
     |
     +---> 해당 히로인이 NPC 대화 중이면 자동 인터럽트
     |
@@ -1008,7 +818,7 @@ POST /api/npc/heroine/chat  또는  /chat/sync
 [대현자와 대화]
     |
     v
-POST /api/npc/sage/chat  또는  /chat/sync
+POST /api/npc/sage/chat/sync
     |
     v
 [길드 퇴장]
@@ -1019,7 +829,7 @@ POST /api/npc/guild/leave
     +---> 백그라운드 NPC 대화 중단
 ```
 
-### 8-2. NPC-NPC 대화 인터럽트 흐름
+### 7-2. NPC-NPC 대화 인터럽트 흐름
 
 유저가 NPC-NPC 대화 중간에 끊고 들어왔을 때의 흐름입니다.
 
@@ -1054,7 +864,10 @@ POST /api/npc/heroine-conversation/interrupt
     }
     |
     v
-[서버] DB에서 4턴 이후 대화 삭제
+[서버] 3단계 무효화 처리
+    1. npc_npc_checkpoints에서 4턴 이후 대화 삭제
+    2. npc_npc_memories에서 4턴 이후 기억 invalid_at 설정
+    3. Redis 세션에서 4턴 이후 대화 버퍼 삭제
     |
     v
 [결과] NPC는 1,2,3턴 대화만 기억함
@@ -1063,7 +876,7 @@ POST /api/npc/heroine-conversation/interrupt
 
 ---
 
-## 9. 세션/디버그 API
+## 8. 세션/디버그 API
 
 ### GET /api/npc/session/{player_id}/{npc_id}
 
@@ -1223,7 +1036,7 @@ NPC별 세션 정보를 조회합니다. (디버그용)
 
 ---
 
-## 10. 에러 응답
+## 9. 에러 응답
 
 ### 404 Not Found
 
@@ -1243,20 +1056,17 @@ NPC별 세션 정보를 조회합니다. (디버그용)
 
 ---
 
-## 11. 프로토콜 요약표
+## 10. 프로토콜 요약표
 
 | 기능 | Method | Endpoint | Request Body | Response |
 |------|--------|----------|--------------|----------|
 | 로그인 | POST | /api/npc/login | playerId, scenarioLevel, heroines[] | success, message |
-| 히로인 대화 (스트리밍) | POST | /api/npc/heroine/chat | playerId, heroineId, text | SSE 스트림 |
-| 히로인 대화 (비스트리밍) | POST | /api/npc/heroine/chat/sync | playerId, heroineId, text | text, emotion(int), affection, sanity, memoryProgress |
+| 히로인 대화 | POST | /api/npc/heroine/chat/sync | playerId, heroineId, text | text, emotion(int), affection, sanity, memoryProgress |
 | **히로인 대화 + 음성** | POST | /api/npc/heroine/chat/sync/voice | playerId, heroineId, text | text, emotion, emotion_intensity, audio_base64, ... |
-| 대현자 대화 (스트리밍) | POST | /api/npc/sage/chat | playerId, text | SSE 스트림 |
-| 대현자 대화 (비스트리밍) | POST | /api/npc/sage/chat/sync | playerId, text | text, emotion(int), scenarioLevel, infoRevealed |
+| 대현자 대화 | POST | /api/npc/sage/chat/sync | playerId, text | text, emotion(int), scenarioLevel, infoRevealed |
 | **대현자 대화 + 음성** | POST | /api/npc/sage/chat/sync/voice | playerId, text | text, emotion, emotion_intensity, audio_base64, ... |
 | 히로인간 대화 생성 | POST | /api/npc/heroine-conversation/generate | playerId, heroine1Id, heroine2Id, situation?, turnCount? | id, content, conversation[] |
 | **히로인간 대화 + 음성** | POST | /api/npc/heroine-conversation/generate/voice | playerId, heroine1Id, heroine2Id, situation?, turnCount? | conversation[] (각 턴에 audio_base64 포함) |
-| 히로인간 대화 스트리밍 | POST | /api/npc/heroine-conversation/stream | playerId, heroine1Id, heroine2Id, situation?, turnCount? | SSE 스트림 |
 | 히로인간 대화 조회 | GET | /api/npc/heroine-conversation | player_id, heroine1_id?, heroine2_id?, limit? | conversations[] |
 | 히로인간 대화 인터럽트 | POST | /api/npc/heroine-conversation/interrupt | playerId, conversationId, interruptedTurn, heroine1Id, heroine2Id | success, message, interrupted_turn |
 | 길드 진입 | POST | /api/npc/guild/enter | playerId | success, message |
@@ -1264,4 +1074,3 @@ NPC별 세션 정보를 조회합니다. (디버그용)
 | 길드 상태 조회 | GET | /api/npc/guild/status/{player_id} | - | in_guild, active_conversation |
 | 세션 조회 | GET | /api/npc/session/{player_id}/{npc_id} | - | 세션 정보 (상태, 대화 버퍼 등) |
 | NPC 대화 활성화 조회 | GET | /api/npc/npc-conversation/active/{player_id} | - | active, conversation |
-
