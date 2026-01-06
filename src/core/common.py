@@ -99,8 +99,8 @@ def _calculate_final_damage_score(
 
     return stat_contribution * weapon.attackPower * effective_multiplier
 
-def get_inventory_items(inventory_ids:list) -> List[ItemData]:
-    return [item for item in cache_items if item.itemId in inventory_ids]
+# def get_inventory_items(inventory_ids:list) -> List[ItemData]:
+#     return [item for item in cache_items if item.itemId in inventory_ids]
 
 from typing import List
 
@@ -117,10 +117,13 @@ def get_inventory_items(
         if item.weapon is not None:
             weapon = item.weapon
             final_damage = _calculate_final_damage_score(stat, weapon)
-            weapon.finalDemage = final_damage
+            weapon.finalDamage = final_damage
 
         result.append(item)
-
+    result.sort(
+        key=lambda item: item.weapon.finalDamage if item.weapon else -1.0,
+        reverse=True
+    )
     return result
 
 def get_inventory_item(item_id: int, stat: StatData):
@@ -131,7 +134,7 @@ def get_inventory_item(item_id: int, stat: StatData):
         # weapon 이 있는 경우에만 계산
         if item.weapon is not None:
             final_damage = _calculate_final_damage_score(stat, item.weapon)
-            item.weapon.finalDemage = final_damage
+            item.weapon.finalDamage = final_damage
 
         return item
 

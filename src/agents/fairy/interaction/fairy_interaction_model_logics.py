@@ -159,7 +159,12 @@ class IsItemUseEmbeddingLogic:
         vec = emb_model.encode([sentence])["dense_vecs"][0]
         sim_true = self._cosine(vec, self.TRUE_VEC)
         sim_false = self._cosine(vec, self.FALSE_VEC)
-        return sim_true > sim_false
+        diff = sim_true - sim_false
+
+        if abs(diff) < 0.05: 
+            return False  # 또는 "UNKNOWN"으로 보내기
+        
+        return diff > 0
 
 
 

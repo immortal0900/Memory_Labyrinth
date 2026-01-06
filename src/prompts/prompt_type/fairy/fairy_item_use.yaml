@@ -21,11 +21,10 @@ FAIRY_ITEM_USE:
     - If no valid item can be used, you must output **None**.
     - If the inventory is empty, output **None**.
     - If the player attempts to use the currently equipped weapon, output **None**.
-    - If the user requests a weapon swap or item swap **without specifying a particular item name**
-      (e.g., "swap my weapon", "use another weapon", "change my item"),
-      select one weapon from the inventory **excluding the currently equipped weapon** and equip it.
-
-    - In this case, choose the weapon with the **highest FinalDamage** among the available weapons.
+    - If the user makes a switch/use request without specifying a concrete item name
+      (e.g., “무기 교체해줘”, “무기 사용해줘”, “아이템 교체해줘”),
+      exclude the currently equipped weapon and select the inventory weapon with the highest FinalDamage.
+      
     - **Accessory items cannot be used**, so output **None**.
     - "the weakest weapon" refers to the weapon with the **lowest FinalDamage** among all weapon items,
       excluding the currently equipped weapon.

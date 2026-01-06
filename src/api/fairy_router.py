@@ -157,7 +157,7 @@ async def talk_dungeon(request: TalkDungeonRequest):
 
 
 @router.post("/dungeon/interaction", response_model=InteractionResponse)
-def interaction(request: InteractionRequest):
+async def interaction(request: InteractionRequest):
     """정령 - 던전 인터렉션 요청"""
     question = request.question
     player = request.dungeonPlayer
@@ -181,7 +181,7 @@ def interaction(request: InteractionRequest):
 
 
 @router.post("/guild/talk", response_model=TalkResponse)
-async def talk_guild(request: TalkGuildRequest):
+def talk_guild(request: TalkGuildRequest):
     """정령 - 길드 대화"""
     playerId = request.playerId
     question = request.question
@@ -191,7 +191,7 @@ async def talk_guild(request: TalkGuildRequest):
     sanity = request.sanity
     affection = request.affection
 
-    result_text = await fairy_guild_talk(
+    result_text = fairy_guild_talk(
         playerId, question, heroine_id, affection, memory_progress, sanity
     )
     return TalkResponse(responseText=result_text)
@@ -219,3 +219,33 @@ async def upload_wav(file: UploadFile = File(...)):
         "size_bytes": len(contents),
         "server_elapsed_ms": round(elapsed_ms, 2),
     }
+
+
+# @router.post("/test")
+# async def talk_guild(request: TalkGuildRequest):
+#     inventory_ids = [22, 40, 46, 67, 110]
+#     stats = StatData(
+#         strength=10,
+#         dexterity=10,
+#         intelligence=10
+#     )
+#     skill_ids = [0, 1]
+
+#     player_dto = DungeonPlayerDto(
+#         playerId="BOOK-UF399PPBM3-BA9F71BC44D7ACD5707415AB64E2197E",
+#         heroineId=1,
+#         currRoomId=1,
+#         difficulty=0,
+#         stats=stats,
+#         skillIds=skill_ids,
+#         weaponId=20,
+#         inventory=inventory_ids,
+#     )
+#     dungeon_request = TalkDungeonRequest(
+#         dungeonPlayer=player_dto,
+#         question="무기 교체해줘",
+#         targetMonsterIds=[],
+#         nextRoomIds=[]
+#     )
+#     talk_dungeon(dungeon_request)
+#     interaction()

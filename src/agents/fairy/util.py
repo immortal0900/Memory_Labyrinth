@@ -2,6 +2,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from agents.fairy.fairy_state import FairyDungeonIntentType
 from datetime import datetime
 from typing import List, Optional, Dict, Any
+from core.game_dto.ItemData import ItemData
 
 
 def add_ai_message(content: str, intent_types: List[FairyDungeonIntentType]):
@@ -124,7 +125,8 @@ def get_groq_gpt(messeages:List[BaseMessage]):
     client = Groq()
     completion = client.chat.completions.create(
         model="openai/gpt-oss-20b",
-        messages=groq_messages
+        messages=groq_messages,
+        max_tokens=1
     )
     return completion.choices[0].message.content
 
@@ -343,6 +345,49 @@ def describe_dungeon_row(
 
 
 import time
+
+import json
+from typing import List, Any
+
+def format_interaction_inventory(items: List[ItemData]) -> str:
+    """
+    get_inventory_items의 결과 리스트를 입력받아
+    LLM이 판단하기 쉬운 핵심 정보(ID, 이름, 최종데미지)만 추출하여
+    JSON 문자열로 반환합니다.
+    """
+    llm_inventory_list = []
+
+    for item in items:
+        # 1. 기본 정보 추출
+        simple_item = {
+            "id": item.itemId,
+            "name": item.itemName,
+        }
+
+        # 2. 무기인 경우: 불필요한 스탯 제거하고 'finalDamage'만 강조
+        if item.weapon:
+            simple_item["type"] = "Weapon"
+            # 소수점 1자리까지만 표시하여 토큰 절약 및 가독성 확보
+            simple_item["finalDamage"] = round(item.weapon.finalDamage, 1)
+            simple_item["rarity"] = item.weapon.rarity
+            
+        # 3. 악세서리인 경우: 설명 포함
+        elif item.accessory:
+            simple_item["type"] = "Accessory"
+            simple_item["description"] = item.accessory.description
+            
+        # 4. 기타 소비 아이템 등
+        else:
+            simple_item["type"] = "Item" # 혹은 Consumable 등
+
+        llm_inventory_list.append(simple_item)
+    llm_inventory_list.sort(
+            key=lambda x: x.get("finalDamage", -1), 
+            reverse=True
+        )
+    # 3. JSON 변환 (한글 깨짐 방지: ensure_ascii=False)
+    return json.dumps(llm_inventory_list, ensure_ascii=False, indent=2)
+
 
 def measure_latency(func):
     def wrapper(*args, **kwargs):

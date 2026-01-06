@@ -60,7 +60,7 @@ async def fairy_dungeon_talk(
 
 
 
-async def fairy_guild_talk(
+def fairy_guild_talk(
     playerId: int,
     question: str,
     heroine_id: int,
@@ -79,7 +79,7 @@ async def fairy_guild_talk(
         }
     }
 
-    response = await guild_graph.ainvoke(
+    response = guild_graph.ainvoke(
         {"messages": [add_human_message(question)]},
         config=config,
     )
