@@ -25,7 +25,7 @@ class WeaponData(BaseModel):
     # 예: { "strength": 0.5, "dexterity": 0.5 }
     modifier: Dict[str, float] = Field(default_factory=dict)
 
-    finalDemage:Optional[float] = None
+    finalDamage:Optional[float] = None
 
     
 

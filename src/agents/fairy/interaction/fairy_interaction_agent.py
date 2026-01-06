@@ -57,7 +57,7 @@ from pprint import pformat
 def create_temp_use_item_id(state: FairyInteractionState):
     start = time.perf_counter()
     messages = state["messages"]
-    # last_message = messages[-1].content
+    last_messages = messages[-1]
     inventory = state["inventory"]
     weapon = state["weapon"]
     stats = state["stats"]
@@ -68,19 +68,16 @@ def create_temp_use_item_id(state: FairyInteractionState):
         width=120,
         sort_dicts=False
     )   
+    print(prettry_items)
     
-    # if is_deictic:
-    #    question = messages
-    # else:
-    #    question = last_message
-
     system_prompt = PromptManager(FairyPromptType.FAIRY_ITEM_USE).get_prompt(
         inventory_items=prettry_items, 
         weapon = weapon,
     )
     new_messages = [SystemMessage(content=system_prompt)] + messages
-    # ai_answer = item_use_llm.invoke(new_messages).content
-    ai_answer = get_groq_gpt(new_messages)
+    # ai_answer = get_groq_gpt(new_messages)
+    # ai_answer = get_groq_llm_lc(max_token=1).invoke([SystemMessage(content=system_prompt)] + new_messages).content
+    ai_answer = get_groq_llm_lc(max_token=1).invoke([SystemMessage(content=system_prompt)] + [last_messages]).content
     try: 
         item_id = int(ai_answer)
     except Exception as e:
