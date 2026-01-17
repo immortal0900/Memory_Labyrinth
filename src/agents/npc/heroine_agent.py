@@ -983,16 +983,13 @@ class HeroineAgent(BaseNPCAgent):
         }
 
     def _build_full_prompt(
-        self, state: HeroineState, context: Dict[str, Any], for_streaming: bool = False
+        self, state: HeroineState, context: Dict[str, Any]
     ) -> str:
-        """전체 프롬프트 생성 (스트리밍/비스트리밍 공통)
-
-        동일한 컨텍스트로 동일한 프롬프트를 생성합니다.
+        """전체 프롬프트 생성
 
         Args:
             state: 현재 상태
             context: 컨텍스트 (검색 결과 등)
-            for_streaming: 스트리밍용이면 JSON 형식 요청 안함
 
         Returns:
             프롬프트 문자열
@@ -1013,11 +1010,8 @@ class HeroineAgent(BaseNPCAgent):
         else:
             affection_hint = "특별한 호감도 변화 없음"
 
-        # 출력 형식 (스트리밍은 텍스트만, 비스트리밍은 JSON)
-        if for_streaming:
-            output_format = "캐릭터로서 자연스럽게 대답하세요. 대화만 출력하세요."
-        else:
-            output_format = """[출력 형식]
+        # 출력 형식
+        output_format = """[출력 형식]
 반드시 아래 JSON 형식으로 출력하세요:
 {
     "thought": "(내면의 생각 - 플레이어에게 보이지 않음)",
@@ -1612,7 +1606,7 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
 
         # 프롬프트 생성 및 LLM 호출
         t1 = time.time()
-        prompt = self._build_full_prompt(state, context, for_streaming=False)
+        prompt = self._build_full_prompt(state, context)
         print(f"[TIMING] 프롬프트 빌드: {time.time() - t1:.3f}s")
 
         print(f"[PROMPT]\n{prompt}\n{'='*50}")
@@ -1700,53 +1694,6 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
         result = await self.graph.ainvoke(state)
         print(f"[TIMING] graph.ainvoke 내부: {time.time() - t:.3f}s")
         return result
-
-    async def generate_response_stream(self, state: HeroineState) -> AsyncIterator[str]:
-        """스트리밍 응답 생성 (컨텍스트 포함)
-
-        비스트리밍과 동일한 컨텍스트를 사용합니다.
-        LLM은 1번만 호출됩니다.
-
-        Args:
-            state: 입력 상태
-
-        Yields:
-            응답 토큰
-        """
-        import time
-
-        total_start = time.time()
-
-        # 1. 컨텍스트 준비 (기억/시나리오 검색)
-        context = await self._prepare_context(state)
-
-        # 2. 전체 프롬프트 생성 (비스트리밍과 동일한 컨텍스트)
-        t1 = time.time()
-        prompt = self._build_full_prompt(state, context, for_streaming=True)
-        print(f"[TIMING] 프롬프트 빌드: {time.time() - t1:.3f}s")
-
-        # 3. 스트리밍으로 응답 생성 (LLM 1번만 호출)
-        t2 = time.time()
-        first_token = True
-        full_response = ""
-        async for chunk in self.streaming_llm.astream(prompt):
-            if chunk.content:
-                if first_token:
-                    print(f"[TIMING] LLM 첫 토큰: {time.time() - t2:.3f}s")
-                    first_token = False
-                full_response += chunk.content
-                yield chunk.content
-        print(f"[TIMING] LLM 전체 응답: {time.time() - t2:.3f}s")
-
-        # 4. 상태 업데이트 (LLM 재호출 없이)
-        # 스트리밍에서는 emotion 추출 불가, 기본값 사용
-        t3 = time.time()
-        await self._update_state_after_response(
-            state, context, full_response, 0  # neutral
-        )
-        print(f"[TIMING] 상태 업데이트: {time.time() - t3:.3f}s")
-        print(f"[TIMING] === 총 소요시간: {time.time() - total_start:.3f}s ===")
-
 
 # 싱글톤 인스턴스 (앱 전체에서 하나만 사용)
 heroine_agent = HeroineAgent()
