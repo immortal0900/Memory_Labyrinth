@@ -280,6 +280,10 @@ async def login(request: LoginRequest):
                 {"role": "assistant", "content": conv.get("npc", "")}
             )
 
+        # checkpoint의 state에서 player_known_name 복원
+        checkpoint_state = checkpoint.get("state", {})
+        player_known_name = checkpoint_state.get("player_known_name") if checkpoint_state else None
+
         session = {
             "player_id": player_id,
             "npc_id": heroine.heroineId,
@@ -298,6 +302,11 @@ async def login(request: LoginRequest):
             },
             "last_chat_at": checkpoint.get("last_chat_at"),
         }
+        
+        # player_known_name이 있으면 state에 포함
+        if player_known_name:
+            session["state"]["player_known_name"] = player_known_name
+        
         redis_manager.save_session(player_id, heroine.heroineId, session)
 
     sage_checkpoint = session_checkpoint_manager.load_checkpoints(player_id, 0)
@@ -311,6 +320,10 @@ async def login(request: LoginRequest):
             {"role": "assistant", "content": conv.get("npc", "")}
         )
 
+    # checkpoint의 state에서 player_known_name 복원
+    sage_checkpoint_state = sage_checkpoint.get("state", {})
+    sage_player_known_name = sage_checkpoint_state.get("player_known_name") if sage_checkpoint_state else None
+
     sage_session = {
         "player_id": player_id,
         "npc_id": 0,
@@ -323,6 +336,11 @@ async def login(request: LoginRequest):
         "state": {"scenarioLevel": scenario_level, "emotion": 0},
         "last_chat_at": sage_checkpoint.get("last_chat_at"),
     }
+    
+    # player_known_name이 있으면 state에 포함
+    if sage_player_known_name:
+        sage_session["state"]["player_known_name"] = sage_player_known_name
+    
     redis_manager.save_session(player_id, 0, sage_session)
 
     return LoginResponse(success=True, message="세션 초기화 완료")
@@ -457,12 +475,23 @@ async def heroine_chat_sync(request: ChatRequest, background_tasks: BackgroundTa
     print(f"[TIMING] LangGraph 파이프라인 총합: {time.time() - t_process:.3f}s")
 
     response_text = result.get("response_text", "")
+    
+    # Redis 세션에서 player_known_name 가져오기
+    session = redis_manager.load_session(player_id, heroine_id)
+    player_known_name = None
+    if session and "state" in session:
+        player_known_name = session["state"].get("player_known_name")
+    
     new_state = {
         "affection": result.get("affection", state["affection"]),
         "sanity": result.get("sanity", state["sanity"]),
         "memoryProgress": result.get("memoryProgress", state["memoryProgress"]),
         "emotion": result.get("emotion", 0),
     }
+    
+    # player_known_name이 있으면 state에 포함
+    if player_known_name:
+        new_state["player_known_name"] = player_known_name
 
     background_tasks.add_task(
         session_checkpoint_manager.save_checkpoint_background,
@@ -591,10 +620,21 @@ async def sage_chat_sync(request: SageChatRequest, background_tasks: BackgroundT
     print(f"[TIMING] LangGraph 파이프라인 총합: {time.time() - t_process:.3f}s")
 
     response_text = result.get("response_text", "")
+    
+    # Redis 세션에서 player_known_name 가져오기
+    session = redis_manager.load_session(player_id, npc_id)
+    player_known_name = None
+    if session and "state" in session:
+        player_known_name = session["state"].get("player_known_name")
+    
     new_state = {
         "scenarioLevel": scenario_level,
         "emotion": result.get("emotion", 0),
     }
+    
+    # player_known_name이 있으면 state에 포함
+    if player_known_name:
+        new_state["player_known_name"] = player_known_name
 
     background_tasks.add_task(
         session_checkpoint_manager.save_checkpoint_background,
@@ -847,12 +887,22 @@ async def heroine_chat_sync_voice(
     emotion = result.get("emotion", 0)
     emotion_intensity = result.get("emotion_intensity", 1.0)
 
+    # Redis 세션에서 player_known_name 가져오기
+    session = redis_manager.load_session(player_id, heroine_id)
+    player_known_name = None
+    if session and "state" in session:
+        player_known_name = session["state"].get("player_known_name")
+
     new_state = {
         "affection": result.get("affection", state["affection"]),
         "sanity": result.get("sanity", state["sanity"]),
         "memoryProgress": result.get("memoryProgress", state["memoryProgress"]),
         "emotion": emotion,
     }
+    
+    # player_known_name이 있으면 state에 포함
+    if player_known_name:
+        new_state["player_known_name"] = player_known_name
 
     # TTS 생성
     t_tts = time.time()
@@ -943,10 +993,20 @@ async def sage_chat_sync_voice(
     emotion = result.get("emotion", 0)
     emotion_intensity = result.get("emotion_intensity", 1.0)
 
+    # Redis 세션에서 player_known_name 가져오기
+    session = redis_manager.load_session(player_id, npc_id)
+    player_known_name = None
+    if session and "state" in session:
+        player_known_name = session["state"].get("player_known_name")
+
     new_state = {
         "scenarioLevel": scenario_level,
         "emotion": emotion,
     }
+    
+    # player_known_name이 있으면 state에 포함
+    if player_known_name:
+        new_state["player_known_name"] = player_known_name
 
     # TTS 생성
     t_tts = time.time()

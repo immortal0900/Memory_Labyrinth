@@ -1028,6 +1028,12 @@ class HeroineAgent(BaseNPCAgent):
 
         time_since_last_chat = self.get_time_since_last_chat(state["player_id"], npc_id)
 
+        # 플레이어 이름 가져오기
+        player_known_name = None
+        session = redis_manager.load_session(state["player_id"], npc_id)
+        if session and "state" in session:
+            player_known_name = session["state"].get("player_known_name")
+
         # 세계관 컨텍스트 가져오기
         world_context = PERSONA_DATA.get("world_context", {})
 
@@ -1067,7 +1073,7 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
 - 캐릭터 말투와 성격을 일관되게 유지합니다.
 - text는 반드시 30자 이내로 답합니다.
 - **순수하게 페르소나에 입각해서 캐릭터의 대사만 출력하세요**
-- `멘토`는 현재 당신에게 말을 거는 플레이어입니다.
+- [플레이어 정보]를 참고하여 플레이어를 호칭하세요. 이름을 알면 이름으로, 모르면 "멘토"로 부르세요.
 
 [페르소나 규칙]
 - [세계관 컨텍스트]는 당신이 현재 알고 있는 정보입니다. 이 정보를 통해 당신은 이곳에 왜 있는지 플레이어가 누군지 알 수 있습니다.
@@ -1085,6 +1091,10 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
 - 문맥과 대화 흐름으로 의도를 추론하세요.
 - 불분명하면 캐릭터 말투로 자연스럽게 되물으세요.
 - 기술 용어(음성인식, STT, 오류 등)는 절대 사용 금지.
+
+[플레이어 정보]
+- 이름: {player_known_name if player_known_name else '알 수 없음'}
+- 호칭: {player_known_name if player_known_name else '멘토'} (이름을 알면 이름으로, 모르면 "멘토"로 호칭)
 
 [세계관 컨텍스트 - 당신이 알고 있는 기본 정보]
 - 길드: {world_context.get('guild', '셀레파이스 길드')}
@@ -1197,12 +1207,17 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
 
         # Redis 세션 업데이트
         session = redis_manager.load_session(player_id, npc_id)
+        player_known_name = None
         if session:
             # 상태 업데이트
             session["state"]["affection"] = new_affection
             session["state"]["sanity"] = new_sanity
             session["state"]["memoryProgress"] = new_memory_progress
             session["state"]["emotion"] = emotion_int
+
+            # 기존 player_known_name 유지 (백그라운드에서 업데이트될 수 있음)
+            if "player_known_name" in session.get("state", {}):
+                player_known_name = session["state"]["player_known_name"]
 
             # 대화 버퍼에 추가
             session["conversation_buffer"].append(
@@ -1291,6 +1306,7 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
             "memoryProgress": new_memory_progress,
             "emotion": emotion_int,
             "response_text": response_text,
+            "player_known_name": player_known_name,
         }
 
     async def _save_to_user_memory_background(
@@ -1299,6 +1315,7 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
         """백그라운드로 User Memory에 대화 저장
 
         LLM으로 fact 추출 후 저장
+        이름이 추출되면 Redis 세션에 저장
 
         Args:
             player_id: 플레이어 ID
@@ -1311,12 +1328,23 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
 
             heroine_id = NPC_ID_TO_HEROINE.get(npc_id, "letia")
 
-            await user_memory_manager.save_conversation(
+            result = await user_memory_manager.save_conversation(
                 player_id=str(player_id),
                 heroine_id=heroine_id,
                 user_message=user_msg,
                 npc_response=npc_response,
             )
+
+            # 이름이 추출되었으면 Redis 세션에 저장
+            extracted_name = result.get("extracted_player_name")
+            if extracted_name:
+                session = redis_manager.load_session(player_id, npc_id)
+                if session:
+                    if "state" not in session:
+                        session["state"] = {}
+                    session["state"]["player_known_name"] = extracted_name
+                    redis_manager.save_session(player_id, npc_id, session)
+                    print(f"[DEBUG] 플레이어 이름 저장: {extracted_name}")
         except Exception as e:
             print(f"[ERROR] User Memory 저장 실패: {e}")
 

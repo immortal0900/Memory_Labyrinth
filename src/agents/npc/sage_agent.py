@@ -581,6 +581,12 @@ class SageAgent(BaseNPCAgent):
         npc_id = state["npc_id"]
         time_since_last_chat = self.get_time_since_last_chat(state["player_id"], npc_id)
 
+        # 플레이어 이름 가져오기
+        player_known_name = None
+        session = redis_manager.load_session(state["player_id"], npc_id)
+        if session and "state" in session:
+            player_known_name = session["state"].get("player_known_name")
+
         # 세계관 컨텍스트 가져오기
         world_context = PERSONA_DATA.get("world_context", {})
 
@@ -618,7 +624,11 @@ B) 세계관/정보 질문: "던전이 뭐야?", "히로인들은 누구야?, "�
 5) 출력/말투 규칙
 - 기품 있는 하대 어조를 유지합니다.
 - text는 반드시 50자 이내로 답합니다.
-- `멘토`는 현재 당신에게 말을 거는 플레이어입니다.
+- [플레이어 정보]를 참고하여 플레이어를 호칭하세요. 이름을 알면 이름으로, 모르면 "멘토"로 부르세요.
+
+[플레이어 정보]
+- 이름: {player_known_name if player_known_name else '알 수 없음'}
+- 호칭: {player_known_name if player_known_name else '멘토'} (이름을 알면 이름으로, 모르면 "멘토"로 호칭)
 
 [세계관 컨텍스트 - 당신이 알고 있는 기본 정보]
 - 길드: {world_context.get('guild', '셀레파이스 길드')}
@@ -705,9 +715,14 @@ B) 세계관/정보 질문: "던전이 뭐야?", "히로인들은 누구야?, "�
 
         # Redis 세션 업데이트
         session = redis_manager.load_session(player_id, npc_id)
+        player_known_name = None
         if session:
             # 상태 업데이트
             session["state"]["emotion"] = emotion_int
+
+            # 기존 player_known_name 유지 (백그라운드에서 업데이트될 수 있음)
+            if "player_known_name" in session.get("state", {}):
+                player_known_name = session["state"]["player_known_name"]
 
             # 대화 버퍼에 추가
             session["conversation_buffer"].append(
@@ -774,12 +789,15 @@ B) 세계관/정보 질문: "던전이 뭐야?", "히로인들은 누구야?, "�
             "response_text": response_text,
             "emotion": emotion_int,
             "info_revealed": info_revealed,
+            "player_known_name": player_known_name,
         }
 
     async def _save_to_user_memory_background(
         self, player_id: int, npc_id: int, user_msg: str, npc_response: str
     ) -> None:
         """백그라운드로 User Memory에 대화 저장
+
+        이름이 추출되면 Redis 세션에 저장
 
         Args:
             player_id: 플레이어 ID
@@ -789,12 +807,23 @@ B) 세계관/정보 질문: "던전이 뭐야?", "히로인들은 누구야?, "�
         """
         try:
             # sage NPC는 heroine_id를 "sage"로 설정
-            await user_memory_manager.save_conversation(
+            result = await user_memory_manager.save_conversation(
                 player_id=str(player_id),
                 heroine_id="sage",
                 user_message=user_msg,
                 npc_response=npc_response,
             )
+
+            # 이름이 추출되었으면 Redis 세션에 저장
+            extracted_name = result.get("extracted_player_name")
+            if extracted_name:
+                session = redis_manager.load_session(player_id, npc_id)
+                if session:
+                    if "state" not in session:
+                        session["state"] = {}
+                    session["state"]["player_known_name"] = extracted_name
+                    redis_manager.save_session(player_id, npc_id, session)
+                    print(f"[DEBUG] 플레이어 이름 저장: {extracted_name}")
         except Exception as e:
             print(f"[ERROR] User Memory 저장 실패: {e}")
 
