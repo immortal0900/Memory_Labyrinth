@@ -17,7 +17,7 @@ HeroineAgent와 SageAgent가 이 클래스를 상속받습니다.
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, AsyncIterator, List
+from typing import Optional, List
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, AIMessage
 
@@ -232,19 +232,6 @@ class BaseNPCAgent(ABC):
         """
         pass
 
-    @abstractmethod
-    async def generate_response_stream(self, state: NPCState) -> AsyncIterator[str]:
-        """스트리밍 응답 생성 (서브클래스에서 구현)
-
-        토큰 단위로 응답을 생성합니다.
-
-        Args:
-            state: NPC 상태 딕셔너리
-
-        Yields:
-            응답 토큰
-        """
-        pass
 
 
 # ============================================
