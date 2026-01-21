@@ -90,6 +90,34 @@ knowledge_boundary_metric = GEval(
 )
 
 
+
+# ============================================
+# 4. 대화 기억 (Conversation Memory)
+# ============================================
+
+conversation_memory_metric = GEval(
+    name="ConversationMemory",
+    criteria="""캐릭터가 대화 중 플레이어가 제공한 정보를 정확히 기억하고 활용하는지 평가합니다.
+    
+평가 항목:
+- 이름 기억: 플레이어가 알려준 이름을 정확히 기억하는가?
+- 정보 유지: 대화 중 언급된 정보(좋아하는 것, 싫어하는 것 등)를 기억하는가?
+- 맥락 연결: 이전 대화 내용과 현재 응답이 자연스럽게 연결되는가?
+- 일관성: 기억한 정보를 왜곡하거나 변형하지 않았는가?
+""",
+    evaluation_steps=[
+        "입력에서 플레이어가 제공한 정보(이름, 취향, 사실 등)를 파악",
+        "응답에서 해당 정보를 정확히 언급하거나 활용했는지 확인",
+        "정보를 왜곡하거나 다르게 기억한 부분이 있는지 확인",
+        "대화 맥락이 자연스럽게 이어지는지 확인",
+        "기억해야 할 정보를 무시하거나 잊어버린 것처럼 응답했는지 확인"
+    ],
+    evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT, LLMTestCaseParams.CONTEXT],
+    threshold=0.8,
+    model=evaluator_llm
+)
+
+
 # ============================================
 # 메트릭 리스트 (테스트에서 사용)
 # ============================================
@@ -97,5 +125,6 @@ knowledge_boundary_metric = GEval(
 ALL_METRICS = [
     persona_consistency_metric,
     role_adherence_metric,
-    knowledge_boundary_metric
+    knowledge_boundary_metric,
+    conversation_memory_metric
 ]

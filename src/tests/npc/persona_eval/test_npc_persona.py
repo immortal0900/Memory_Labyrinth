@@ -6,6 +6,7 @@ DeepEval을 사용하여 NPC의 페르소나 일관성, 역할 몰입도, 지식
 
 import pytest
 from deepeval import evaluate
+from deepeval.evaluate import DisplayConfig
 from deepeval.test_case import LLMTestCase
 from .custom_metrics import ALL_METRICS
 from .npc_client import NPCClient
@@ -58,7 +59,11 @@ async def test_letia_persona(npc_client, letia_questions, letia_persona):
             ))
     
     # 평가 실행
-    evaluate(test_cases, metrics=ALL_METRICS, print_results=True)
+    evaluate(
+        test_cases,
+        metrics=ALL_METRICS,
+        display_config=DisplayConfig(verbose_mode=True, print_results=True)
+    )
 
 
 # ============================================
@@ -108,7 +113,11 @@ async def test_lupames_persona(npc_client, lupames_questions, lupames_persona):
             ))
     
     # 평가 실행
-    evaluate(test_cases, metrics=ALL_METRICS, print_results=True)
+    evaluate(
+        test_cases,
+        metrics=ALL_METRICS,
+        display_config=DisplayConfig(verbose_mode=True, print_results=True)
+    )
 
 
 # ============================================
@@ -158,7 +167,11 @@ async def test_roco_persona(npc_client, roco_questions, roco_persona):
             ))
     
     # 평가 실행
-    evaluate(test_cases, metrics=ALL_METRICS, print_results=True)
+    evaluate(
+        test_cases,
+        metrics=ALL_METRICS,
+        display_config=DisplayConfig(verbose_mode=True, print_results=True)
+    )
 
 
 # ============================================
@@ -206,4 +219,8 @@ async def test_satra_persona(npc_client, satra_questions, satra_persona):
             ))
     
     # 평가 실행
-    evaluate(test_cases, metrics=ALL_METRICS, print_results=True)
+    evaluate(
+        test_cases,
+        metrics=ALL_METRICS,
+        display_config=DisplayConfig(verbose_mode=True, print_results=True)
+    )

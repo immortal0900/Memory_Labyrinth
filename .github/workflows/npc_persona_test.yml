@@ -6,12 +6,12 @@ on:
     paths:
       - 'src/prompts/**'
       - 'src/agents/npc/**'
-      - 'src/tests/persona_eval/**'
+      - 'src/tests/npc/persona_eval/**'
   pull_request:
     paths:
       - 'src/prompts/**'
       - 'src/agents/npc/**'
-      - 'src/tests/persona_eval/**'
+      - 'src/tests/npc/persona_eval/**'
   # ====CI 기능 비활성화 시 이 부분 주석 처리====
   workflow_dispatch:  # 수동 실행만 가능
 
@@ -93,7 +93,7 @@ jobs:
       
       - name: Run DeepEval persona tests
         run: |
-          uv run pytest src/tests/persona_eval/test_npc_persona.py -v --tb=short
+          uv run pytest src/tests/npc/persona_eval/test_npc_persona.py -v --tb=short
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       
