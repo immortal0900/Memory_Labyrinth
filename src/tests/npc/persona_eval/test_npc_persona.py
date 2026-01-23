@@ -8,219 +8,241 @@ import pytest
 from deepeval import evaluate
 from deepeval.evaluate import DisplayConfig
 from deepeval.test_case import LLMTestCase
-from .custom_metrics import ALL_METRICS
+from .custom_metrics import (
+    get_metrics_for_type, 
+    calculate_weighted_score,
+    get_primary_metric
+)
 from .npc_client import NPCClient
 
 
+def run_evaluation_by_type(test_cases_by_type, character_name):
+    """
+    유형별로 테스트를 실행하고 가중 점수를 계산하여 리포트를 출력합니다.
+    
+    [입력 데이터 구조 예시]
+    test_cases_by_type = {
+        "memory": [
+            (test_case1, question_info1), 
+            (test_case2, question_info2)
+        ]
+    }
+
+    1. test_case (LLMTestCase): 채점관(DeepEval)을 위한 '기술적 시험지'
+       - input: "아이폰 써봤어?" (질문 텍스트)
+       - actual_output: "아이폰? 그게 무엇인지 모르겠군요." (AI의 실제 답변)
+       - context: ["성격...", "지침..."] (채점 기준들)
+
+    2. question_info (dict): 개발자를 위한 '질문 상세 정보 주머니'
+       - id: "letia_005" (관리용 번호)
+       - type: "knowledge_boundary" (질문 유형)
+       - turns: [{"role": "user", "content": "..."}] (질문 원본)
+       - persona_context: "테스트 의도"
+       - expected_behavior: "채점 가이드라인"
+    """
+    all_weighted_scores = []
+    
+    for question_type, case_list in test_cases_by_type.items():
+        if not case_list:
+            continue
+        
+        # [1] 채점관에게 보낼 시험지만 따로 모으기
+        test_cases = []
+        for case_tuple in case_list:
+            test_cases.append(case_tuple[0]) # test_case 객체만 추출
+        
+        metrics = get_metrics_for_type(question_type)
+        primary_metric_name = get_primary_metric(question_type)
+        
+        print(f"\n[{character_name}] {question_type} 유형 평가 시작 ({len(case_list)}개)")
+        print(f"  적용 메트릭: {[m.name for m in metrics]}")
+        print(f"  주요 메트릭: {primary_metric_name} (60%)")
+        
+        # [2] 실제 채점 진행 (DeepEval 호출)
+        evaluate(
+            test_cases,
+            metrics=metrics,
+            display_config=DisplayConfig(verbose_mode=True, print_results=True)
+        )
+        
+        # [3] 결과 분석 및 가중치 적용 점수 계산
+        for case_index in range(len(test_cases)):
+            metric_scores = {}
+            for metric in metrics:
+                metric_scores[metric.name] = metric.score if metric.score else 0.0
+            
+            weighted_score = calculate_weighted_score(question_type, metric_scores)
+            all_weighted_scores.append(weighted_score)
+            
+            # 개발자가 보기 편하도록 질문 ID와 함께 출력
+            q_info = case_list[case_index][1]
+            print(f"  [{q_info['id']}] Weighted Score: {weighted_score:.2%}")
+    
+    if all_weighted_scores:
+        average_score = sum(all_weighted_scores) / len(all_weighted_scores)
+        print(f"\n[{character_name}] 전체 평균 가중 점수: {average_score:.2%}")
+
+
 # ============================================
-# 레티아 테스트
+# 캐릭터별 테스트 함수 (데이터 조립소)
 # ============================================
 
 @pytest.mark.asyncio
 async def test_letia_persona(npc_client, letia_questions, letia_persona):
-    """레티아 페르소나 일관성 테스트"""
-    
+    """레티아 페르소나 평가 테스트"""
     player_id = "test_letia_player"
     heroine_id = 1
-    
-    # 로그인
     await npc_client.login(player_id)
     
-    test_cases = []
+    test_cases_by_type = {}
     
-    for question in letia_questions:
-        if question["type"] == "multi_turn_memory":
-            # 멀티턴 테스트
-            turns = question["turns"]
-            
-            # 첫 번째 턴 (정보 제공)
+    for question_info in letia_questions:
+        q_type = question_info["type"]
+        if q_type not in test_cases_by_type:
+            test_cases_by_type[q_type] = []
+        
+        # AI에게 답변 받아오기 및 시험지(test_case) 만들기
+        if q_type == "multi_turn_memory":
+            turns = question_info["turns"]
             await npc_client.chat_heroine(player_id, heroine_id, turns[0]["content"])
-            
-            # 두 번째 턴 (기억 확인)
             response = await npc_client.chat_heroine(player_id, heroine_id, turns[1]["content"])
             
-            test_cases.append(LLMTestCase(
+            test_case = LLMTestCase(
                 input=f"{turns[0]['content']} -> {turns[1]['content']}",
                 actual_output=response["text"],
-                context=[letia_persona, question["expected_behavior"]]
-            ))
+                context=[letia_persona, question_info["expected_behavior"]]
+            )
         else:
-            # 단일 턴 테스트
             response = await npc_client.chat_heroine(
                 player_id,
                 heroine_id,
-                question["turns"][0]["content"]
+                question_info["turns"][0]["content"]
             )
-            
-            test_cases.append(LLMTestCase(
-                input=question["turns"][0]["content"],
+            test_case = LLMTestCase(
+                input=question_info["turns"][0]["content"],
                 actual_output=response["text"],
-                context=[letia_persona, question["expected_behavior"]]
-            ))
+                context=[letia_persona, question_info["expected_behavior"]]
+            )
+        
+        # (시험지, 상세정보) 세트로 상자에 담기
+        test_cases_by_type[q_type].append((test_case, question_info))
     
-    # 평가 실행
-    evaluate(
-        test_cases,
-        metrics=ALL_METRICS,
-        display_config=DisplayConfig(verbose_mode=True, print_results=True)
-    )
+    run_evaluation_by_type(test_cases_by_type, "레티아")
 
-
-# ============================================
-# 루파메스 테스트
-# ============================================
 
 @pytest.mark.asyncio
 async def test_lupames_persona(npc_client, lupames_questions, lupames_persona):
-    """루파메스 페르소나 일관성 테스트"""
-    
+    """루파메스 페르소나 평가 테스트"""
     player_id = "test_lupames_player"
     heroine_id = 2
-    
-    # 로그인
     await npc_client.login(player_id)
     
-    test_cases = []
+    test_cases_by_type = {}
     
-    for question in lupames_questions:
-        if question["type"] == "multi_turn_memory":
-            # 멀티턴 테스트
-            turns = question["turns"]
-            
-            # 첫 번째 턴 (정보 제공)
+    for question_info in lupames_questions:
+        q_type = question_info["type"]
+        if q_type not in test_cases_by_type:
+            test_cases_by_type[q_type] = []
+        
+        if q_type == "multi_turn_memory":
+            turns = question_info["turns"]
             await npc_client.chat_heroine(player_id, heroine_id, turns[0]["content"])
-            
-            # 두 번째 턴 (기억 확인)
             response = await npc_client.chat_heroine(player_id, heroine_id, turns[1]["content"])
-            
-            test_cases.append(LLMTestCase(
+            test_case = LLMTestCase(
                 input=f"{turns[0]['content']} -> {turns[1]['content']}",
                 actual_output=response["text"],
-                context=[lupames_persona, question["expected_behavior"]]
-            ))
+                context=[lupames_persona, question_info["expected_behavior"]]
+            )
         else:
-            # 단일 턴 테스트
             response = await npc_client.chat_heroine(
                 player_id,
                 heroine_id,
-                question["turns"][0]["content"]
+                question_info["turns"][0]["content"]
             )
-            
-            test_cases.append(LLMTestCase(
-                input=question["turns"][0]["content"],
+            test_case = LLMTestCase(
+                input=question_info["turns"][0]["content"],
                 actual_output=response["text"],
-                context=[lupames_persona, question["expected_behavior"]]
-            ))
+                context=[lupames_persona, question_info["expected_behavior"]]
+            )
+        
+        test_cases_by_type[q_type].append((test_case, question_info))
     
-    # 평가 실행
-    evaluate(
-        test_cases,
-        metrics=ALL_METRICS,
-        display_config=DisplayConfig(verbose_mode=True, print_results=True)
-    )
+    run_evaluation_by_type(test_cases_by_type, "루파메스")
 
-
-# ============================================
-# 로코 테스트
-# ============================================
 
 @pytest.mark.asyncio
 async def test_roco_persona(npc_client, roco_questions, roco_persona):
-    """로코 페르소나 일관성 테스트"""
-    
+    """로코 페르소나 평가 테스트"""
     player_id = "test_roco_player"
     heroine_id = 3
-    
-    # 로그인
     await npc_client.login(player_id)
     
-    test_cases = []
+    test_cases_by_type = {}
     
-    for question in roco_questions:
-        if question["type"] == "multi_turn_memory":
-            # 멀티턴 테스트
-            turns = question["turns"]
-            
-            # 첫 번째 턴 (정보 제공)
+    for question_info in roco_questions:
+        q_type = question_info["type"]
+        if q_type not in test_cases_by_type:
+            test_cases_by_type[q_type] = []
+        
+        if q_type == "multi_turn_memory":
+            turns = question_info["turns"]
             await npc_client.chat_heroine(player_id, heroine_id, turns[0]["content"])
-            
-            # 두 번째 턴 (기억 확인)
             response = await npc_client.chat_heroine(player_id, heroine_id, turns[1]["content"])
-            
-            test_cases.append(LLMTestCase(
+            test_case = LLMTestCase(
                 input=f"{turns[0]['content']} -> {turns[1]['content']}",
                 actual_output=response["text"],
-                context=[roco_persona, question["expected_behavior"]]
-            ))
+                context=[roco_persona, question_info["expected_behavior"]]
+            )
         else:
-            # 단일 턴 테스트
             response = await npc_client.chat_heroine(
                 player_id,
                 heroine_id,
-                question["turns"][0]["content"]
+                question_info["turns"][0]["content"]
             )
-            
-            test_cases.append(LLMTestCase(
-                input=question["turns"][0]["content"],
+            test_case = LLMTestCase(
+                input=question_info["turns"][0]["content"],
                 actual_output=response["text"],
-                context=[roco_persona, question["expected_behavior"]]
-            ))
+                context=[roco_persona, question_info["expected_behavior"]]
+            )
+        
+        test_cases_by_type[q_type].append((test_case, question_info))
     
-    # 평가 실행
-    evaluate(
-        test_cases,
-        metrics=ALL_METRICS,
-        display_config=DisplayConfig(verbose_mode=True, print_results=True)
-    )
+    run_evaluation_by_type(test_cases_by_type, "로코")
 
-
-# ============================================
-# 사트라 테스트
-# ============================================
 
 @pytest.mark.asyncio
 async def test_satra_persona(npc_client, satra_questions, satra_persona):
-    """사트라 페르소나 일관성 테스트"""
-    
+    """사트라 페르소나 평가 테스트"""
     player_id = "test_satra_player"
-    
-    # 로그인
     await npc_client.login(player_id, scenario_level=1)
     
-    test_cases = []
+    test_cases_by_type = {}
     
-    for question in satra_questions:
-        if question["type"] == "multi_turn_memory":
-            # 멀티턴 테스트
-            turns = question["turns"]
-            
-            # 첫 번째 턴 (정보 제공)
+    for question_info in satra_questions:
+        q_type = question_info["type"]
+        if q_type not in test_cases_by_type:
+            test_cases_by_type[q_type] = []
+        
+        if q_type == "multi_turn_memory":
+            turns = question_info["turns"]
             await npc_client.chat_sage(player_id, turns[0]["content"])
-            
-            # 두 번째 턴 (기억 확인)
             response = await npc_client.chat_sage(player_id, turns[1]["content"])
-            
-            test_cases.append(LLMTestCase(
+            test_case = LLMTestCase(
                 input=f"{turns[0]['content']} -> {turns[1]['content']}",
                 actual_output=response["text"],
-                context=[satra_persona, question["expected_behavior"]]
-            ))
+                context=[satra_persona, question_info["expected_behavior"]]
+            )
         else:
-            # 단일 턴 테스트
             response = await npc_client.chat_sage(
                 player_id,
-                question["turns"][0]["content"]
+                question_info["turns"][0]["content"]
             )
-            
-            test_cases.append(LLMTestCase(
-                input=question["turns"][0]["content"],
+            test_case = LLMTestCase(
+                input=question_info["turns"][0]["content"],
                 actual_output=response["text"],
-                context=[satra_persona, question["expected_behavior"]]
-            ))
+                context=[satra_persona, question_info["expected_behavior"]]
+            )
+        
+        test_cases_by_type[q_type].append((test_case, question_info))
     
-    # 평가 실행
-    evaluate(
-        test_cases,
-        metrics=ALL_METRICS,
-        display_config=DisplayConfig(verbose_mode=True, print_results=True)
-    )
+    run_evaluation_by_type(test_cases_by_type, "사트라")

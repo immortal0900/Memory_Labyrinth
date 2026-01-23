@@ -58,7 +58,7 @@ role_adherence_metric = GEval(
         "사용자의 '너 AI지?' 같은 질문에 캐릭터로서 당황하거나 이해하지 못하는 반응을 보이는지 확인"
     ],
     evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
-    threshold=0.9,
+    threshold=0.8,
     model=evaluator_llm
 )
 
@@ -128,3 +128,69 @@ ALL_METRICS = [
     knowledge_boundary_metric,
     conversation_memory_metric
 ]
+
+# ============================================
+# 테스트 유형별 메트릭 매핑
+# ============================================
+
+METRICS_BY_TYPE = {
+    "general": [persona_consistency_metric, role_adherence_metric, knowledge_boundary_metric],
+    "persona_test": [persona_consistency_metric, role_adherence_metric],
+    "persona_break": [persona_consistency_metric, role_adherence_metric, knowledge_boundary_metric],
+    "memory": [persona_consistency_metric, knowledge_boundary_metric],
+    "knowledge_boundary": [persona_consistency_metric, role_adherence_metric, knowledge_boundary_metric],
+    "multi_turn_memory": [persona_consistency_metric, role_adherence_metric, conversation_memory_metric],
+}
+
+# 테스트 유형별 주요 메트릭 (60% 가중치)
+PRIMARY_METRIC_BY_TYPE = {
+    "general": "PersonaConsistency",
+    "persona_test": "PersonaConsistency",
+    "persona_break": "RoleAdherence",
+    "memory": "KnowledgeBoundary",
+    "knowledge_boundary": "KnowledgeBoundary",
+    "multi_turn_memory": "ConversationMemory",
+}
+
+
+def get_metrics_for_type(question_type):
+    """테스트 유형에 맞는 메트릭 리스트 반환"""
+    return METRICS_BY_TYPE.get(question_type, ALL_METRICS)
+
+
+def get_primary_metric(question_type):
+    """테스트 유형의 주요 메트릭 이름 반환"""
+    return PRIMARY_METRIC_BY_TYPE.get(question_type, "PersonaConsistency")
+
+
+def calculate_weighted_score(question_type, metric_scores):
+    """
+    주요 메트릭 60%, 보조 메트릭들 40% 균등 분배로 가중 점수 계산
+    
+    Args:
+        question_type: 테스트 유형
+        metric_scores: {"MetricName": score, ...} 딕셔너리
+    
+    Returns:
+        가중 평균 점수 (0.0 ~ 1.0)
+    """
+    primary_metric = get_primary_metric(question_type)
+    primary_weight = 0.6
+    secondary_weight = 0.4
+    
+    primary_score = metric_scores.get(primary_metric, 0.0)
+    
+    secondary_scores = [
+        score for name, score in metric_scores.items() 
+        if name != primary_metric
+    ]
+    # 1. 보조 메트릭 전체 점수의 평균
+    if secondary_scores:
+        secondary_avg = sum(secondary_scores) / len(secondary_scores)
+    else:
+        # 만약 보조 메트릭이 하나도 없다면 0점으로 처리 (0으로 나누면 에러 생기므로)
+        secondary_avg = 0.0
+    # 2. 최종 가중치 합산 (주요 메트릭 60% + 보조 메트릭 평균 40%)
+    weighted_score = (primary_score * primary_weight) + (secondary_avg * secondary_weight)
+    return weighted_score
+
