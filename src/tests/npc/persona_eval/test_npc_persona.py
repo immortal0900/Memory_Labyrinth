@@ -25,6 +25,27 @@ def summary_report_fixture():
 def run_evaluation_by_type(test_cases_by_type, character_name):
     """
     유형별로 테스트를 실행하고 가중 점수를 계산하여 결과를 수집합니다.
+
+    [입력 데이터 구조 예시]
+    test_cases_by_type = {
+        "memory": [
+            (test_case1, question_info1), 
+            (test_case2, question_info2)
+        ]
+
+
+    1. test_case (LLMTestCase): 채점관(DeepEval)을 위한 '기술적 시험지'
+       - input: "아이폰 써봤어?" (질문 텍스트)
+       - actual_output: "아이폰? 그게 무엇인지 모르겠군요." (AI의 실제 답변)
+       - context: ["성격...", "지침..."] (채점 기준들)
+
+    2. question_info (dict): 개발자를 위한 '질문 상세 정보 주머니'
+       - id: "letia_005" (관리용 번호)
+       - type: "knowledge_boundary" (질문 유형)
+       - turns: [{"role": "user", "content": "..."}] (질문 원본)
+       - persona_context: "테스트 의도"
+       - expected_behavior: "채점 가이드라인"
+
     """
     character_summary = {
         "character": character_name,
@@ -54,6 +75,8 @@ def run_evaluation_by_type(test_cases_by_type, character_name):
             
             # 개별 질문 결과 즉시 출력
             print(f"  * [{q_info['id']}] {q_info['persona_context']}")
+            print(f"    - 질문: {test_case.input}")
+            print(f"    - 답변: {test_case.actual_output}")
             print(f"    - 가중 점수: {weighted_score:.2%}")
             # 주요 메트릭의 이유(Reason) 출력
             for metric in metrics:
