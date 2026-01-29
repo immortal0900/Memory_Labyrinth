@@ -38,6 +38,7 @@ from db.user_memory_manager import user_memory_manager
 from db.session_checkpoint_manager import session_checkpoint_manager
 from services.sage_scenario_service import sage_scenario_service
 from enums.LLM import LLM
+from utils.langfuse_tracker import tracker
 
 # ============================================
 # 시간 기반 기억 검색용 상수/헬퍼
@@ -374,7 +375,17 @@ class SageAgent(BaseNPCAgent):
 
 반드시 general, memory_recall, worldview_inquiry 중 하나만 출력하세요."""
 
-        response = await self.intent_llm.ainvoke(prompt)
+        # LangFuse 토큰 추적
+        handler = tracker.get_callback_handler(
+            trace_name="sage_intent_classification",
+            tags=["npc", "sage", "intent"],
+            session_id=state.get("session_id"),
+            user_id=state.get("user_id"),
+            metadata={"npc_name": "sage_satra"}
+        )
+        config = {"callbacks": [handler]} if handler else {}
+        
+        response = await self.intent_llm.ainvoke(prompt, config=config)
         intent = response.content.strip().lower()
 
         # 유효하지 않으면 기본값
@@ -963,7 +974,29 @@ B) 세계관/정보 질문: "던전이 뭐야?", "히로인들은 누구야?, "�
         print(f"[PROMPT]\n{prompt}\n{'='*50}")
 
         t2 = time.time()
-        response = await self.llm.ainvoke(prompt)
+        
+        # LangFuse 토큰 추적
+        handler = tracker.get_callback_handler(
+            trace_name="sage_response_generation",
+            tags=["npc", "sage", "response"],
+            session_id=state.get("session_id"),
+            user_id=state.get("user_id"),
+            metadata={
+                "npc_name": "sage_satra",
+                "intent": state.get("intent", "unknown"),
+                "scenario_level": state.get("scenarioLevel", 0),
+            }
+        )
+        config = {"callbacks": [handler]} if handler else {}
+        
+        response = await self.llm.ainvoke(prompt, config=config)
+        
+        # 로컬 디버깅용 토큰 로깅
+        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+            print(f"[TOKEN] sage_response - "
+                  f"input: {response.usage_metadata.get('input_tokens', 'N/A')}, "
+                  f"output: {response.usage_metadata.get('output_tokens', 'N/A')}")
+        
         print(f"[TIMING] LLM 호출: {time.time() - t2:.3f}s")
 
         # JSON 파싱

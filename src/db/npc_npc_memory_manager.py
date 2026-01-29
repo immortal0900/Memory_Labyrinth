@@ -20,6 +20,7 @@ from langchain.chat_models import init_chat_model
 
 from db.config import CONNECTION_URL
 from src.enums.LLM import LLM
+from utils.langfuse_tracker import tracker
 
 
 def _normalize_pair(a: int, b: int) -> Tuple[int, int]:
@@ -264,7 +265,19 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
     {{"speaker_id": {npc2_id}, "subject_id": 0, "content_type": "event", "content": "과거 전쟁에 대해 이야기함", "importance": 6}}
 ]"""
 
-        resp = await self.extract_llm.ainvoke(prompt)
+        # LangFuse 토큰 추적
+        handler = tracker.get_callback_handler(
+            trace_name="npc_npc_memory_fact_extraction",
+            tags=["memory", "npc_npc_fact_extraction"],
+            metadata={
+                "npc1_id": npc1_id,
+                "npc2_id": npc2_id,
+                "conversation_length": len(conversation)
+            }
+        )
+        config = {"callbacks": [handler]} if handler else {}
+        
+        resp = await self.extract_llm.ainvoke(prompt, config=config)
         content = resp.content
 
         try:

@@ -34,6 +34,7 @@ from enums.LLM import LLM
 load_dotenv()
 
 from db.config import CONNECTION_URL
+from utils.langfuse_tracker import tracker
 from db.user_memory_models import (
     Speaker,
     Subject,
@@ -182,7 +183,18 @@ Output:
 ]
 """
 
-        response = await self.extract_llm.ainvoke(prompt)
+        # LangFuse 토큰 추적
+        handler = tracker.get_callback_handler(
+            trace_name="user_memory_fact_extraction",
+            tags=["memory", "fact_extraction", f"heroine:{heroine_id}"],
+            metadata={
+                "heroine_id": heroine_id,
+                "conversation_length": len(conversation)
+            }
+        )
+        config = {"callbacks": [handler]} if handler else {}
+        
+        response = await self.extract_llm.ainvoke(prompt, config=config)
 
         # JSON 파싱
         try:
@@ -683,7 +695,15 @@ Output:
 
 충돌이면 "yes", 아니면 "no"만 응답하세요."""
 
-        response = await self.extract_llm.ainvoke(prompt)
+        # LangFuse 토큰 추적
+        handler = tracker.get_callback_handler(
+            trace_name="user_memory_conflict_check",
+            tags=["memory", "conflict_check"],
+            metadata={"action": "conflict_detection"}
+        )
+        config = {"callbacks": [handler]} if handler else {}
+        
+        response = await self.extract_llm.ainvoke(prompt, config=config)
         answer = response.content.strip().lower()
 
         return answer == "yes"

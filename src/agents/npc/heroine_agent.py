@@ -44,6 +44,7 @@ from db.npc_npc_memory_manager import npc_npc_memory_manager
 from db.session_checkpoint_manager import session_checkpoint_manager
 from services.heroine_scenario_service import heroine_scenario_service
 from enums.LLM import LLM
+from utils.langfuse_tracker import tracker
 
 # ============================================
 # 페르소나 데이터 로드
@@ -513,7 +514,17 @@ class HeroineAgent(BaseNPCAgent):
         # 의도 분류 프롬프트 로그 출력
         print(f"[INTENT_PROMPT]\n{prompt}\n{'='*50}")
 
-        response = await self.intent_llm.ainvoke(prompt)
+        # LangFuse 토큰 추적
+        handler = tracker.get_callback_handler(
+            trace_name="heroine_intent_classification",
+            tags=["npc", "heroine", "intent", state.get("heroine_name", "unknown")],
+            session_id=state.get("session_id"),
+            user_id=state.get("user_id"),
+            metadata={"heroine_name": state.get("heroine_name")}
+        )
+        config = {"callbacks": [handler]} if handler else {}
+        
+        response = await self.intent_llm.ainvoke(prompt, config=config)
         intent = response.content.strip().lower()
 
         # 유효하지 않으면 기본값
@@ -1612,7 +1623,29 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
         print(f"[PROMPT]\n{prompt}\n{'='*50}")
 
         t2 = time.time()
-        response = await self.llm.ainvoke(prompt)
+        
+        # LangFuse 토큰 추적
+        handler = tracker.get_callback_handler(
+            trace_name="heroine_response_generation",
+            tags=["npc", "heroine", "response", state.get("heroine_name", "unknown")],
+            session_id=state.get("session_id"),
+            user_id=state.get("user_id"),
+            metadata={
+                "heroine_name": state.get("heroine_name"),
+                "intent": state.get("intent", "unknown"),
+                "affection": state.get("affection", 0),
+            }
+        )
+        config = {"callbacks": [handler]} if handler else {}
+        
+        response = await self.llm.ainvoke(prompt, config=config)
+        
+        # 로컬 디버깅용 토큰 로깅
+        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+            print(f"[TOKEN] heroine_response - "
+                  f"input: {response.usage_metadata.get('input_tokens', 'N/A')}, "
+                  f"output: {response.usage_metadata.get('output_tokens', 'N/A')}")
+        
         print(f"[TIMING] LLM 호출: {time.time() - t2:.3f}s")
 
         # JSON 파싱

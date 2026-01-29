@@ -31,6 +31,7 @@ from db.redis_manager import redis_manager
 from db.npc_npc_memory_manager import npc_npc_memory_manager
 from services.sage_scenario_service import sage_scenario_service
 from services.heroine_scenario_service import heroine_scenario_service
+from utils.langfuse_tracker import tracker
 
 
 # ============================================
@@ -218,7 +219,15 @@ class HeroineHeroineAgent:
 출력 형식:
 선택한 상황과 함께 2-3문장으로 구체적인 상황을 설명하세요."""
 
-        response = await self.llm.ainvoke(prompt)
+        # LangFuse 토큰 추적
+        handler = tracker.get_callback_handler(
+            trace_name="heroine_heroine_situation_generation",
+            tags=["npc", "heroine_heroine", "situation"],
+            metadata={"action": "situation_generation"}
+        )
+        config = {"callbacks": [handler]} if handler else {}
+        
+        response = await self.llm.ainvoke(prompt, config=config)
         return response.content
 
     # ============================================
@@ -600,7 +609,27 @@ JSON 배열로 출력하세요:
         print(f"[PROMPT][NPC-NPC]\n{prompt}\n{'='*50}")
 
         t = time.time()
-        response = await self.llm.ainvoke(prompt)
+        
+        # LangFuse 토큰 추적
+        handler = tracker.get_callback_handler(
+            trace_name="heroine_heroine_conversation_generation",
+            tags=["npc", "heroine_heroine", "conversation"],
+            metadata={
+                "heroine1_id": heroine1_id,
+                "heroine2_id": heroine2_id,
+                "turn_count": turn_count,
+            }
+        )
+        config = {"callbacks": [handler]} if handler else {}
+        
+        response = await self.llm.ainvoke(prompt, config=config)
+        
+        # 로컬 디버깅용 토큰 로깅
+        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+            print(f"[TOKEN] heroine_heroine - "
+                  f"input: {response.usage_metadata.get('input_tokens', 'N/A')}, "
+                  f"output: {response.usage_metadata.get('output_tokens', 'N/A')}")
+        
         print(f"[TIMING] NPC-NPC LLM 호출: {time.time() - t:.3f}s")
 
         # JSON 파싱
