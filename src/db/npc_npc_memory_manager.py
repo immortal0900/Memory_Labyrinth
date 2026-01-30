@@ -19,8 +19,8 @@ from langchain_openai import OpenAIEmbeddings
 from langchain.chat_models import init_chat_model
 
 from db.config import CONNECTION_URL
-from src.enums.LLM import LLM
-from src.agents.npc.npc_constants import NPC_ID_TO_NAME_KR
+from enums.LLM import LLM
+from agents.npc.npc_constants import NPC_ID_TO_NAME_KR
 from utils.langfuse_tracker import tracker
 
 
@@ -424,44 +424,70 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
     ) -> int:
         """턴 단위로 장기기억을 저장합니다(가장 단순한 형태).
 
-        - speaker_id는 각 턴의 speaker_id를 사용
-        - subject_id는 반대 NPC로 저장
+        성능 최적화:
+        - 배치 임베딩 API 사용 (N번 호출 → 1번 호출)
+
+        Args:
+            player_id: 플레이어 ID
+            npc1_id: 첫 번째 NPC ID
+            npc2_id: 두 번째 NPC ID
+            checkpoint_id: 체크포인트 ID
+            situation: 대화 상황
+            conversation: 대화 리스트
+
+        Returns:
+            저장된 기억 개수
         """
         heroine_id_1, heroine_id_2 = _normalize_pair(npc1_id, npc2_id)
 
+        # 1. 유효한 메시지만 필터링 및 전처리
+        valid_messages = []
+        for idx, msg in enumerate(conversation):
+            speaker_id = msg.get("speaker_id")
+            text_content = msg.get("text")
+            
+            if speaker_id is None or not text_content:
+                continue
+            
+            try:
+                speaker_int = int(speaker_id)
+            except (TypeError, ValueError):
+                print(
+                    f"[WARN] npc_npc_memories 저장 스킵: speaker_id 변환 실패 "
+                    f"(speaker_id={speaker_id}, pair=({heroine_id_1},{heroine_id_2}), turn={idx + 1})"
+                )
+                continue
+
+            # subject_id 계산
+            if speaker_int == int(heroine_id_1):
+                subject_id = int(heroine_id_2)
+            elif speaker_int == int(heroine_id_2):
+                subject_id = int(heroine_id_1)
+            else:
+                print(
+                    f"[WARN] npc_npc_memories 저장 스킵: speaker_id가 pair에 없음 "
+                    f"(speaker_id={speaker_int}, pair=({heroine_id_1},{heroine_id_2}), turn={idx + 1})"
+                )
+                continue
+
+            valid_messages.append({
+                "idx": idx,
+                "speaker_id": speaker_int,
+                "subject_id": subject_id,
+                "text": str(text_content),
+            })
+
+        if not valid_messages:
+            return 0
+
+        # 2. 배치 임베딩 생성 (한 번의 API 호출)
+        texts = [msg["text"] for msg in valid_messages]
+        embeddings = self.embeddings.embed_documents(texts)
+
+        # 3. DB에 일괄 저장
         inserted = 0
         with self.engine.connect() as conn:
-            for idx, msg in enumerate(conversation):
-                speaker_id = msg.get("speaker_id")
-                text_content = msg.get("text")
-                if speaker_id is None or not text_content:
-                    continue
-                # subject_id는 "상대방"으로 저장해야 합니다.
-                # npc1_id/npc2_id가 어떤 순서로 들어와도 동일하게 동작하도록,
-                # 정규화된 pair(heroine_id_1, heroine_id_2)를 기준으로 계산합니다.
-                try:
-                    speaker_int = int(speaker_id)
-                except (TypeError, ValueError):
-                    print(
-                        f"[WARN] npc_npc_memories 저장 스킵: speaker_id 변환 실패 "
-                        f"(speaker_id={speaker_id}, pair=({heroine_id_1},{heroine_id_2}), turn={idx + 1})"
-                    )
-                    continue
-
-                if speaker_int == int(heroine_id_1):
-                    subject_id = int(heroine_id_2)
-                elif speaker_int == int(heroine_id_2):
-                    subject_id = int(heroine_id_1)
-                else:
-                    # 예상치 못한 speaker_id면 저장하지 않고 경고만 출력
-                    print(
-                        f"[WARN] npc_npc_memories 저장 스킵: speaker_id가 pair에 없음 "
-                        f"(speaker_id={speaker_int}, pair=({heroine_id_1},{heroine_id_2}), turn={idx + 1})"
-                    )
-                    continue
-
-                embed = self.embeddings.embed_query(str(text_content))
-
+            for msg, embed in zip(valid_messages, embeddings):
                 sql_insert = text(
                     """
                     INSERT INTO npc_npc_memories (
@@ -489,13 +515,13 @@ JSON 배열로 응답하세요. 저장할 사실이 없으면 빈 배열 []을 �
                     sql_insert,
                     {
                         "conversation_id": checkpoint_id,
-                        "turn_index": idx + 1,
+                        "turn_index": msg["idx"] + 1,
                         "player_id": str(player_id),
                         "heroine_id_1": heroine_id_1,
                         "heroine_id_2": heroine_id_2,
-                        "speaker_id": int(speaker_id),
-                        "subject_id": int(subject_id),
-                        "content": str(text_content),
+                        "speaker_id": msg["speaker_id"],
+                        "subject_id": msg["subject_id"],
+                        "content": msg["text"],
                         "content_type": "turn",
                         "embedding": str(embed),
                         "importance": 5,

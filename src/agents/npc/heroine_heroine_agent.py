@@ -21,6 +21,7 @@
 import asyncio
 import json
 import yaml
+import time
 from pathlib import Path
 from datetime import datetime
 from typing import List, AsyncIterator, Optional, Dict, Any, Tuple
@@ -487,8 +488,6 @@ JSON 배열로 출력하세요:
         Returns:
             대화 리스트 (각 항목: speaker_id, speaker_name, text, emotion)
         """
-        import time
-
         total_start = time.time()
 
         if not self._is_valid_situation(situation):
@@ -566,7 +565,6 @@ JSON 배열로 출력하세요:
             heroine2_id,
             situation,
             turn_count,
-            for_streaming=False,
             memory_progress_1=memory_progress_1,
             memory_progress_2=memory_progress_2,
             sanity_1=sanity_1,

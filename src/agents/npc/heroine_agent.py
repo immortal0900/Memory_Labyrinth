@@ -23,6 +23,7 @@ import json
 import yaml
 import asyncio
 import re
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import AsyncIterator, Dict, Any, Optional, Tuple, List
@@ -801,8 +802,6 @@ class HeroineAgent(BaseNPCAgent):
         Returns:
             컨텍스트 딕셔너리 (affection_delta, used_liked_keyword, intent, retrieved_facts, unlocked_scenarios)
         """
-        import time
-
         total_start = time.time()
 
         # 1. 키워드 분석
@@ -1380,8 +1379,6 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
 
         기억 해금 및 recently_unlocked_memory TTL 관리를 수행합니다.
         """
-        import time
-
         t = time.time()
         affection_delta, used_keyword = await self._analyze_keywords(state)
         print(f"[TIMING] 키워드 분석: {time.time() - t:.3f}s")
@@ -1456,8 +1453,6 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
 
     async def _router_node(self, state: HeroineState) -> dict:
         """의도 분류 노드"""
-        import time
-
         t = time.time()
         intent = await self._classify_intent(state)
         print(f"[TIMING] 의도 분류: {time.time() - t:.3f}s")
@@ -1472,8 +1467,6 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
 
     async def _memory_retrieve_node(self, state: HeroineState) -> dict:
         """기억 검색 노드"""
-        import time
-
         t = time.time()
         facts = await self._retrieve_memory(state)
         print(f"[TIMING] 기억 검색: {time.time() - t:.3f}s")
@@ -1481,8 +1474,6 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
 
     async def _scenario_retrieve_node(self, state: HeroineState) -> dict:
         """시나리오 DB 검색 노드"""
-        import time
-
         t = time.time()
         scenarios = await self._retrieve_scenario(state)
         print(f"[TIMING] 시나리오 검색: {time.time() - t:.3f}s")
@@ -1493,8 +1484,6 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
 
     async def _heroine_retrieve_node(self, state: HeroineState) -> dict:
         """다른 히로인과의 대화 검색 노드"""
-        import time
-
         t = time.time()
         conversation = await self._retrieve_heroine_conversation(state)
         print(f"[TIMING] 히로인 대화 검색: {time.time() - t:.3f}s")
@@ -1505,8 +1494,6 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
 
     async def _generate_node(self, state: HeroineState) -> dict:
         """응답 생성 노드"""
-        import time
-
         total_start = time.time()
 
         # 컨텍스트 구성
@@ -1578,8 +1565,6 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
 
     async def _post_process_node(self, state: HeroineState) -> dict:
         """후처리 노드 - 상태 업데이트"""
-        import time
-
         t = time.time()
 
         context = {
@@ -1623,8 +1608,6 @@ B) 자신의 과거/신상 질문: "고향이 어디야?", "어린시절 어땠�
         Returns:
             처리 후 상태
         """
-        import time
-
         t = time.time()
         result = await self.graph.ainvoke(state)
         print(f"[TIMING] graph.ainvoke 내부: {time.time() - t:.3f}s")

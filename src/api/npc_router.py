@@ -7,6 +7,7 @@ NPC API 라우터
 import asyncio
 import random
 import base64
+import time
 from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, BackgroundTasks
@@ -341,8 +342,6 @@ async def login(request: LoginRequest):
 @router.post("/heroine/chat/sync", response_model=ChatResponse)
 async def heroine_chat_sync(request: ChatRequest, background_tasks: BackgroundTasks):
     """히로인과 대화 (비스트리밍)"""
-    import time
-
     api_start = time.time()
 
     player_id = request.playerId
@@ -432,8 +431,6 @@ async def heroine_chat_sync(request: ChatRequest, background_tasks: BackgroundTa
 @router.post("/sage/chat/sync", response_model=SageChatResponse)
 async def sage_chat_sync(request: SageChatRequest, background_tasks: BackgroundTasks):
     """대현자와 대화 (비스트리밍)"""
-    import time
-
     api_start = time.time()
 
     player_id = request.playerId
@@ -511,8 +508,6 @@ async def sage_chat_sync(request: SageChatRequest, background_tasks: BackgroundT
 @router.post("/heroine-conversation/generate")
 async def generate_heroine_conversation(request: HeroineConversationRequest):
     """히로인간 대화 생성 (비스트리밍)"""
-    import time
-
     api_start = time.time()
 
     t = time.time()
@@ -663,8 +658,6 @@ async def heroine_chat_sync_voice(
 
     기존 /heroine/chat/sync와 동일하지만 TTS 음성이 포함됩니다.
     """
-    import time
-
     api_start = time.time()
 
     player_id = request.playerId
@@ -777,8 +770,6 @@ async def sage_chat_sync_voice(
 
     기존 /sage/chat/sync와 동일하지만 TTS 음성이 포함됩니다.
     """
-    import time
-
     api_start = time.time()
 
     player_id = request.playerId
@@ -882,8 +873,6 @@ async def generate_heroine_conversation_voice(
 
     기존 /heroine-conversation/generate와 동일하지만 TTS 음성이 포함됩니다.
     """
-    import time
-
     api_start = time.time()
 
     result = await heroine_heroine_agent.generate_and_save_conversation(

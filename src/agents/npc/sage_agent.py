@@ -23,6 +23,7 @@ import json
 import yaml
 import asyncio
 import re
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import AsyncIterator, Dict, Any, Tuple, List
@@ -451,8 +452,6 @@ class SageAgent(BaseNPCAgent):
         Returns:
             컨텍스트 딕셔너리 (intent, unlocked_scenarios)
         """
-        import time
-
         total_start = time.time()
 
         # 1. 의도 분류
@@ -852,8 +851,6 @@ B) 세계관/정보 질문: "던전이 뭐야?", "히로인들은 누구야?, "�
 
     async def _router_node(self, state: SageState) -> dict:
         """의도 분류 노드"""
-        import time
-
         t = time.time()
         intent = await self._classify_intent(state)
         print(f"[TIMING] 의도 분류: {time.time() - t:.3f}s")
@@ -865,8 +862,6 @@ B) 세계관/정보 질문: "던전이 뭐야?", "히로인들은 누구야?, "�
 
     async def _memory_retrieve_node(self, state: SageState) -> dict:
         """기억 검색 노드"""
-        import time
-
         t = time.time()
         facts = await self._retrieve_memory(state)
         print(f"[TIMING] 기억 검색: {time.time() - t:.3f}s")
@@ -874,8 +869,6 @@ B) 세계관/정보 질문: "던전이 뭐야?", "히로인들은 누구야?, "�
 
     async def _scenario_retrieve_node(self, state: SageState) -> dict:
         """시나리오 DB 검색 노드"""
-        import time
-
         t = time.time()
         scenarios = await self._retrieve_scenario(state)
         print(f"[TIMING] 시나리오 검색: {time.time() - t:.3f}s")
@@ -883,8 +876,6 @@ B) 세계관/정보 질문: "던전이 뭐야?", "히로인들은 누구야?, "�
 
     async def _generate_node(self, state: SageState) -> dict:
         """응답 생성 노드"""
-        import time
-
         total_start = time.time()
 
         # 컨텍스트 구성
@@ -948,8 +939,6 @@ B) 세계관/정보 질문: "던전이 뭐야?", "히로인들은 누구야?, "�
 
     async def _post_process_node(self, state: SageState) -> dict:
         """후처리 노드 - 상태 업데이트"""
-        import time
-
         t = time.time()
 
         context = {}
