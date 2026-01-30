@@ -45,6 +45,7 @@ from agents.npc.base_npc_agent import (
 )
 from agents.npc.emotion_mapper import heroine_emotion_to_int
 from agents.npc.npc_utils import parse_llm_json_response, load_persona_yaml
+from agents.npc.npc_constants import NPC_ID_TO_NAME_KR
 from db.redis_manager import redis_manager
 from db.user_memory_manager import user_memory_manager
 from db.npc_npc_memory_manager import npc_npc_memory_manager
@@ -777,12 +778,11 @@ class HeroineAgent(BaseNPCAgent):
             return "관련 대화 없음"
 
         # 대화 포맷팅
-        npc_names = {0: "사트라", 1: "레티아", 2: "루파메스", 3: "로코"}
         lines = ["[다른 히로인과의 최근 대화]"]
         for msg in conversation:
             speaker_id = msg.get("speaker_id")
             text = msg.get("text", "")
-            speaker_name = npc_names.get(speaker_id, f"NPC_{speaker_id}")
+            speaker_name = NPC_ID_TO_NAME_KR.get(speaker_id, f"NPC_{speaker_id}")
             lines.append(f"{speaker_name}: {text}")
 
         return "\n".join(lines)

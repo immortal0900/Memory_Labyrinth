@@ -13,6 +13,13 @@ from agents.npc.heroine_agent import HeroineAgent, heroine_agent
 from agents.npc.sage_agent import SageAgent, sage_agent
 from agents.npc.heroine_heroine_agent import HeroineHeroineAgent, heroine_heroine_agent
 from agents.npc.npc_utils import parse_llm_json_response, load_persona_yaml
+from agents.npc.npc_constants import (
+    NPC_ID_TO_NAME_EN,
+    NPC_ID_TO_NAME_KR,
+    NPC_NAME_KR_TO_ID,
+    is_sage,
+    is_heroine,
+)
 
 __all__ = [
     "NPCState",
@@ -36,5 +43,10 @@ __all__ = [
     "heroine_heroine_agent",
     "parse_llm_json_response",
     "load_persona_yaml",
+    "NPC_ID_TO_NAME_EN",
+    "NPC_ID_TO_NAME_KR",
+    "NPC_NAME_KR_TO_ID",
+    "is_sage",
+    "is_heroine",
 ]
 

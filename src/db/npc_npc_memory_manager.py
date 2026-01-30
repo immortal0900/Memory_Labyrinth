@@ -20,6 +20,7 @@ from langchain.chat_models import init_chat_model
 
 from db.config import CONNECTION_URL
 from src.enums.LLM import LLM
+from src.agents.npc.npc_constants import NPC_ID_TO_NAME_KR
 from utils.langfuse_tracker import tracker
 
 
@@ -218,15 +219,14 @@ class NpcNpcMemoryManager:
             추출된 fact 리스트
         """
         # 대화 텍스트로 변환
-        npc_names = {0: "사트라", 1: "레티아", 2: "루파메스", 3: "로코"}
-        name1 = npc_names.get(npc1_id, f"NPC_{npc1_id}")
-        name2 = npc_names.get(npc2_id, f"NPC_{npc2_id}")
+        name1 = NPC_ID_TO_NAME_KR.get(npc1_id, f"NPC_{npc1_id}")
+        name2 = NPC_ID_TO_NAME_KR.get(npc2_id, f"NPC_{npc2_id}")
 
         conversation_text = ""
         for msg in conversation:
             speaker_id = msg.get("speaker_id")
             text = msg.get("text", "")
-            speaker_name = npc_names.get(speaker_id, f"NPC_{speaker_id}")
+            speaker_name = NPC_ID_TO_NAME_KR.get(speaker_id, f"NPC_{speaker_id}")
             conversation_text += f"{speaker_name}: {text}\n"
 
         prompt = f"""다음은 NPC 두 명의 대화입니다.

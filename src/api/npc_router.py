@@ -20,6 +20,7 @@ from agents.npc.heroine_agent import heroine_agent
 from agents.npc.sage_agent import sage_agent
 from agents.npc.heroine_heroine_agent import heroine_heroine_agent
 from agents.npc.base_npc_agent import MAX_CONVERSATION_BUFFER_SIZE
+from agents.npc.npc_constants import NPC_ID_TO_NAME_EN
 from tools.audio.tts_typecast import typecast_tts_service
 
 # ============================================
@@ -28,14 +29,6 @@ from tools.audio.tts_typecast import typecast_tts_service
 
 # 음성 저장 디렉토리 (프로젝트 루트/audio_logs)
 AUDIO_LOG_DIR = Path(__file__).parent.parent.parent / "audio_logs"
-
-# NPC 이름 매핑
-NPC_NAMES = {
-    0: "sage_satra",
-    1: "heroine_retia",
-    2: "heroine_lupames",
-    3: "heroine_roco",
-}
 
 
 def save_audio_file_background(
@@ -53,7 +46,7 @@ def save_audio_file_background(
     try:
         # 날짜별 디렉토리 생성
         today = datetime.now().strftime("%Y-%m-%d")
-        npc_name = NPC_NAMES.get(npc_id, f"npc_{npc_id}")
+        npc_name = NPC_ID_TO_NAME_EN.get(npc_id, f"npc_{npc_id}")
 
         save_dir = AUDIO_LOG_DIR / today / endpoint_type / npc_name
         save_dir.mkdir(parents=True, exist_ok=True)
