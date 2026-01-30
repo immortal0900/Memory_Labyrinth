@@ -17,7 +17,8 @@ HeroineAgent와 SageAgent가 이 클래스를 상속받습니다.
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
+from datetime import datetime, timedelta
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, AIMessage
 
@@ -26,6 +27,45 @@ from db.user_memory_manager import user_memory_manager
 from db.session_checkpoint_manager import session_checkpoint_manager
 from agents.npc.npc_state import NPCState
 from enums.LLM import LLM
+
+# ============================================
+# 호감도 변화량 상수
+# ============================================
+AFFECTION_LIKED_KEYWORD_BONUS = 100  # 좋아하는 키워드 호감도 증가량
+AFFECTION_TRAUMA_KEYWORD_PENALTY = 100  # 트라우마 키워드 호감도 감소량
+AFFECTION_POSITIVE_ROMANCE_BONUS = 5  # 긍정적 연애 관련 보너스
+AFFECTION_NEGATIVE_ROMANCE_PENALTY = 5  # 부정적 연애 관련 페널티
+
+# ============================================
+# 시간 기반 기억 검색용 상수
+# ============================================
+WEEKDAY_MAP = {
+    "월요일": 0,
+    "화요일": 1,
+    "수요일": 2,
+    "목요일": 3,
+    "금요일": 4,
+    "토요일": 5,
+    "일요일": 6,
+}
+
+
+def get_last_weekday(weekday: int, weeks_ago: int = 1) -> datetime:
+    """지난주/지지난주 특정 요일의 날짜 계산
+    
+    Args:
+        weekday: 요일 (0=월요일, 6=일요일)
+        weeks_ago: 몇 주 전인지 (1=지난주, 2=지지난주)
+    
+    Returns:
+        해당 날짜의 datetime
+    """
+    today = datetime.now()
+    days_since = (today.weekday() - weekday) % 7
+    if days_since == 0:
+        days_since = 7
+    target = today - timedelta(days=days_since + (weeks_ago - 1) * 7)
+    return target
 
 
 class BaseNPCAgent(ABC):
@@ -192,6 +232,29 @@ class BaseNPCAgent(ABC):
 
         return "\n".join(formatted)
 
+    def format_summary_list(self, summary_list: List[Dict[str, Any]]) -> str:
+        """summary_list를 프롬프트용 텍스트로 포맷팅
+
+        Args:
+            summary_list: 요약 리스트
+
+        Returns:
+            포맷된 문자열
+        """
+        if not summary_list:
+            return "없음"
+
+        formatted = []
+        for item in summary_list:
+            summary = item.get("summary", "")
+            if summary:
+                formatted.append(f"- {summary}")
+
+        if not formatted:
+            return "없음"
+
+        return "\n".join(formatted)
+
     def get_time_since_last_chat(self, player_id: int, npc_id: int) -> str:
         """마지막 대화로부터 경과 시간 계산
 
@@ -306,8 +369,8 @@ def calculate_affection_change(
     사용자 메시지에서 키워드를 분석하여 호감도 변화량을 계산합니다.
 
     가중치:
-    - 좋아하는 키워드: +10
-    - 트라우마 키워드: -10
+    - 좋아하는 키워드: +100 (AFFECTION_LIKED_KEYWORD_BONUS)
+    - 트라우마 키워드: -100 (AFFECTION_TRAUMA_KEYWORD_PENALTY)
     - 긍정적 연애: +5 (호감도가 감소하지 않을 때만)
     - 부정적 연애: -5 (호감도가 증가하지 않을 때만)
 
@@ -334,29 +397,29 @@ def calculate_affection_change(
     used_liked_keyword = None
     message_lower = user_message.lower()
 
-    # 좋아하는 것 체크 (+10)
+    # 좋아하는 것 체크
     for keyword in liked_keywords:
         if keyword.lower() in message_lower:
             # 최근 5턴 내 같은 키워드 사용 여부 확인 (대소문자 무시)
             recent_lower = [k.lower() for k in recent_used_keywords]
 
             if keyword.lower() not in recent_lower:
-                delta += 100
+                delta += AFFECTION_LIKED_KEYWORD_BONUS
                 used_liked_keyword = keyword
             # 같은 키워드 반복시 호감도 상승 없음, 하지만 루프 종료
             break
 
-    # 트라우마 체크 (-10)
+    # 트라우마 체크
     for keyword in trauma_keywords:
         if keyword.lower() in message_lower:
-            delta -= 100
+            delta -= AFFECTION_TRAUMA_KEYWORD_PENALTY
             break
 
-    # 연애 관련 (+5 / -5)
+    # 연애 관련
     if is_positive_romance and delta >= 0:
-        delta += 5
+        delta += AFFECTION_POSITIVE_ROMANCE_BONUS
     if is_negative_romance and delta <= 0:
-        delta -= 5
+        delta -= AFFECTION_NEGATIVE_ROMANCE_PENALTY
 
     # 범위 제한 (0-100)
     new_affection = current_affection + delta

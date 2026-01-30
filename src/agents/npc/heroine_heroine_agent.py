@@ -27,6 +27,7 @@ from typing import List, AsyncIterator, Optional, Dict, Any, Tuple
 from langchain.chat_models import init_chat_model
 from enums.LLM import LLM
 from agents.npc.emotion_mapper import heroine_emotion_to_int
+from agents.npc.npc_utils import parse_llm_json_response, load_persona_yaml
 from db.redis_manager import redis_manager
 from db.npc_npc_memory_manager import npc_npc_memory_manager
 from services.sage_scenario_service import sage_scenario_service
@@ -38,36 +39,7 @@ from utils.langfuse_tracker import tracker
 # 페르소나 데이터 로드
 # ============================================
 
-# 페르소나 YAML 파일 경로
-PERSONA_PATH = (
-    Path(__file__).parent.parent.parent
-    / "prompts"
-    / "prompt_type"
-    / "npc"
-    / "heroine_persona.yaml"
-)
-
-
-def load_persona_data() -> Dict[str, Any]:
-    """페르소나 YAML 파일 로드
-
-    파일이 없거나 오류가 있으면 기본값 반환
-
-    Returns:
-        페르소나 데이터 딕셔너리
-    """
-    try:
-        with open(PERSONA_PATH, "r", encoding="utf-8") as f:
-            return yaml.safe_load(f)
-    except FileNotFoundError:
-        print(f"경고: 페르소나 파일을 찾을 수 없습니다: {PERSONA_PATH}")
-        return _get_default_persona()
-    except Exception as e:
-        print(f"경고: 페르소나 로드 실패: {e}")
-        return _get_default_persona()
-
-
-def _get_default_persona() -> Dict[str, Any]:
+def _get_default_heroine_heroine_persona() -> Dict[str, Any]:
     """기본 페르소나 데이터 (파일 없을 때 사용)"""
     return {
         "letia": {
@@ -94,7 +66,7 @@ def _get_default_persona() -> Dict[str, Any]:
 
 
 # 페르소나 데이터 로드 (모듈 로드시 1회)
-PERSONA_DATA = load_persona_data()
+PERSONA_DATA = load_persona_yaml("heroine_persona.yaml", _get_default_heroine_heroine_persona)
 
 # NPC ID -> 페르소나 키 매핑
 # - 0: 대현자(사트라)
@@ -630,17 +602,26 @@ JSON 배열로 출력하세요:
 
         # JSON 파싱
         t = time.time()
-        try:
-            content = response.content
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0]
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0]
-            conversation = json.loads(content.strip())
-
+        persona1 = self._get_persona(heroine1_id)
+        persona2 = self._get_persona(heroine2_id)
+        
+        # 기본값 (파싱 실패 시)
+        default_conversation = [
+            {
+                "speaker_id": heroine1_id,
+                "speaker_name": persona1.get("name", "히로인"),
+                "text": "...",
+                "emotion": 0,  # neutral
+            }
+        ]
+        
+        # JSON 파싱 (공통 함수 사용)
+        parsed = parse_llm_json_response(response.content, default=[])
+        
+        if isinstance(parsed, list) and parsed:
+            conversation = parsed
+            
             # speaker_name을 기준으로 올바른 speaker_id 할당
-            persona1 = self._get_persona(heroine1_id)
-            persona2 = self._get_persona(heroine2_id)
             name_to_id = {
                 persona1.get("name"): heroine1_id,
                 persona2.get("name"): heroine2_id,
@@ -657,16 +638,8 @@ JSON 배열로 출력하세요:
                     msg["emotion"] = heroine_emotion_to_int(msg["emotion"])
                 if "emotion_intensity" not in msg:
                     msg["emotion_intensity"] = 1.0
-        except (json.JSONDecodeError, IndexError):
-            persona1 = self._get_persona(heroine1_id)
-            conversation = [
-                {
-                    "speaker_id": heroine1_id,
-                    "speaker_name": persona1.get("name", "히로인"),
-                    "text": "...",
-                    "emotion": 0,  # neutral
-                }
-            ]
+        else:
+            conversation = default_conversation
         print(f"[TIMING] NPC-NPC JSON 파싱: {time.time() - t:.3f}s")
         print(
             f"[TIMING] NPC-NPC generate_conversation 총합: {time.time() - total_start:.3f}s"

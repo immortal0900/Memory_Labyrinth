@@ -7,7 +7,6 @@ NPC API 라우터
 import asyncio
 import random
 import base64
-import os
 from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, BackgroundTasks

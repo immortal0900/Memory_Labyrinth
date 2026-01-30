@@ -31,8 +31,9 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph import START, END, StateGraph
 
 from agents.npc.npc_state import SageState
-from agents.npc.base_npc_agent import BaseNPCAgent
+from agents.npc.base_npc_agent import BaseNPCAgent, WEEKDAY_MAP, get_last_weekday
 from agents.npc.emotion_mapper import sage_emotion_to_int
+from agents.npc.npc_utils import parse_llm_json_response, load_persona_yaml
 from db.redis_manager import redis_manager
 from db.user_memory_manager import user_memory_manager
 from db.session_checkpoint_manager import session_checkpoint_manager
@@ -41,65 +42,11 @@ from enums.LLM import LLM
 from utils.langfuse_tracker import tracker
 
 # ============================================
-# 시간 기반 기억 검색용 상수/헬퍼
-# ============================================
-
-WEEKDAY_MAP = {
-    "월요일": 0,
-    "화요일": 1,
-    "수요일": 2,
-    "목요일": 3,
-    "금요일": 4,
-    "토요일": 5,
-    "일요일": 6,
-}
-
-
-def _get_last_weekday(weekday: int, weeks_ago: int = 1) -> datetime:
-    """지난주/지지난주 특정 요일의 날짜 계산"""
-    today = datetime.now()
-    days_since = (today.weekday() - weekday) % 7
-    if days_since == 0:
-        days_since = 7
-    target = today - timedelta(days=days_since + (weeks_ago - 1) * 7)
-    return target
-
-
-# ============================================
 # 페르소나 데이터 로드
 # ============================================
 
-# 페르소나 YAML 파일 경로
-PERSONA_PATH = (
-    Path(__file__).parent.parent.parent
-    / "prompts"
-    / "prompt_type"
-    / "npc"
-    / "sage_persona.yaml"
-)
-
-
-def load_persona_data() -> Dict[str, Any]:
-    """페르소나 YAML 파일 로드
-
-    파일이 없거나 오류가 있으면 기본값 반환
-
-    Returns:
-        페르소나 데이터 딕셔너리
-    """
-    try:
-        with open(PERSONA_PATH, "r", encoding="utf-8") as f:
-            return yaml.safe_load(f)
-    except FileNotFoundError:
-        print(f"경고: 페르소나 파일을 찾을 수 없습니다: {PERSONA_PATH}")
-        return _get_default_persona()
-    except Exception as e:
-        print(f"경고: 페르소나 로드 실패: {e}")
-        return _get_default_persona()
-
-
-def _get_default_persona() -> Dict[str, Any]:
-    """기본 페르소나 데이터 (파일 없을 때 사용)"""
+def _get_default_sage_persona() -> Dict[str, Any]:
+    """기본 대현자 페르소나 데이터 (파일 없을 때 사용)"""
     return {
         "satra": {
             "name": "사트라",
@@ -136,7 +83,7 @@ def _get_default_persona() -> Dict[str, Any]:
 
 
 # 페르소나 데이터 로드 (모듈 로드시 1회)
-PERSONA_DATA = load_persona_data()
+PERSONA_DATA = load_persona_yaml("sage_persona.yaml", _get_default_sage_persona)
 
 
 class SageAgent(BaseNPCAgent):
@@ -316,29 +263,6 @@ class SageAgent(BaseNPCAgent):
         recent = user_messages[-5:]
         return ", ".join(recent)
 
-    def _format_summary_list(self, summary_list: List[Dict[str, Any]]) -> str:
-        """summary_list를 프롬프트용 텍스트로 포맷팅
-
-        Args:
-            summary_list: 요약 리스트
-
-        Returns:
-            포맷된 문자열
-        """
-        if not summary_list:
-            return "없음"
-
-        formatted = []
-        for item in summary_list:
-            summary = item.get("summary", "")
-            if summary:
-                formatted.append(f"- {summary}")
-
-        if not formatted:
-            return "없음"
-
-        return "\n".join(formatted)
-
     # ============================================
     # 컨텍스트 준비 메서드 (스트리밍/비스트리밍 공통)
     # ============================================
@@ -455,7 +379,7 @@ class SageAgent(BaseNPCAgent):
             r"지지난주\s*(월|화|수|목|금|토|일)요일", user_message
         ):
             weekday = WEEKDAY_MAP[week_match.group(1) + "요일"]
-            point_in_time = _get_last_weekday(weekday, weeks_ago=2)
+            point_in_time = get_last_weekday(weekday, weeks_ago=2)
             print(
                 f"[MEMORY_FUNC] get_memories_at_point_sync(지지난주 {week_match.group(1)}요일)"
             )
@@ -466,7 +390,7 @@ class SageAgent(BaseNPCAgent):
             r"지난주\s*(월|화|수|목|금|토|일)요일", user_message
         ):
             weekday = WEEKDAY_MAP[week_match.group(1) + "요일"]
-            point_in_time = _get_last_weekday(weekday, weeks_ago=1)
+            point_in_time = get_last_weekday(weekday, weeks_ago=1)
             print(
                 f"[MEMORY_FUNC] get_memories_at_point_sync(지난주 {week_match.group(1)}요일)"
             )
@@ -671,7 +595,7 @@ B) 세계관/정보 질문: "던전이 뭐야?", "히로인들은 누구야?, "�
 <recent_context_observations>
 - 목적: 최근 대화의 흐름(대화 주제) 파악용입니다.
 - 규칙: 아래 정보는 '참고용'이며 문장/구문을 그대로 인용하지 않습니다.
-- 최근 대화 요약: {self._format_summary_list(state.get('summary_list', []))}
+- 최근 대화 요약: {self.format_summary_list(state.get('summary_list', []))}
 </recent_context_observations>
 
 <raw_recent_dialogue_do_not_quote>
@@ -996,21 +920,16 @@ B) 세계관/정보 질문: "던전이 뭐야?", "히로인들은 누구야?, "�
         print(f"[TIMING] LLM 호출: {time.time() - t2:.3f}s")
 
         # JSON 파싱
-        try:
-            content = response.content
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0]
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0]
-            result = json.loads(content.strip())
-        except (json.JSONDecodeError, IndexError):
-            result = {
+        result = parse_llm_json_response(
+            response.content,
+            default={
                 "thought": "",
                 "text": response.content,
                 "emotion": "neutral",
                 "emotion_intensity": 1.0,
                 "info_revealed": False,
             }
+        )
 
         emotion_str = result.get("emotion", "neutral")
         emotion_intensity = result.get("emotion_intensity", 1.0)
