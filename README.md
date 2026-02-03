@@ -13,18 +13,16 @@
 
 - [1. 프로젝트 소개](#1-프로젝트-소개)
 - [2. 주요 기능](#2-주요-기능)
-- [3. 시스템 아키텍처](#3-시스템-아키텍처)
-- [4. 기술 스택](#4-기술-스택)
-- [5. 프로젝트 구조](#5-프로젝트-구조)
-- [6. 설치 및 실행](#6-설치-및-실행)
-- [7. 환경 변수 설정](#7-환경-변수-설정)
-- [8. NPC 대화 시스템](#8-npc-대화-시스템)
-- [9. Dungeon 생성 시스템](#9-dungeon-생성-시스템)
-- [10. API 엔드포인트](#10-api-엔드포인트)
-- [11. 개발 가이드](#11-개발-가이드)
-- [12. 코드 컨벤션](#12-코드-컨벤션)
-- [13. 관련 문서](#13-관련-문서)
-- [14. 문의](#14-문의)
+- [3. 기술 스택](#3-기술-스택)
+- [4. 빠른 시작](#4-빠른-시작)
+- [5. 환경 변수 설정](#5-환경-변수-설정)
+- [6. 프로젝트 구조](#6-프로젝트-구조)
+- [7. 아키텍처](#7-아키텍처)
+- [8. API 엔드포인트](#8-api-엔드포인트)
+- [9. 개발 가이드](#9-개발-가이드)
+- [10. 코드 컨벤션](#10-코드-컨벤션)
+- [11. 관련 문서](#11-관련-문서)
+- [12. 문의](#12-문의)
 
 ---
 
@@ -197,7 +195,7 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
 | `DATABASE_URL` | PostgreSQL 연결 문자열<br/>- 로컬: `postgresql://postgres:password@localhost:5435/game_db`<br/>- Supabase: `postgresql://user:pass@host:6543/postgres` | `postgresql://postgres:password@localhost:5435/game_db` |
 | `REDIS_URL` | Redis 연결 문자열<br/>- 단기 메모리, 세션 관리 | `redis://localhost:6379/0` |
 
-## 6. 선택 변수 (기능별)
+## 선택 변수 (기능별)
 
 ### TTS 음성 합성
 
@@ -221,7 +219,7 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
 
 ---
 
-# 7. 프로젝트 구조
+# 6. 프로젝트 구조
 
 ```
 Memory_Labyrinth/
@@ -289,7 +287,7 @@ Memory_Labyrinth/
 
 
 ---
-# 8. 아키텍처
+# 7. 아키텍처
 
 ## NPC AI Agent 아키텍처
 
@@ -353,7 +351,7 @@ flowchart TB
     style INTERRUPT fill:#ffebee
 ```
 
-## 9. NPC Memory 아키텍처
+## NPC Memory 아키텍처
 
 ```mermaid
 flowchart TB
@@ -607,7 +605,7 @@ flowchart LR
 
 ---
 
-# 10. API 엔드포인트
+# 8. API 엔드포인트
 
 ## NPC API (`/api/npc/...`)
 
@@ -651,7 +649,7 @@ flowchart LR
 
 ---
 
-# 11. 개발 가이드
+# 9. 개발 가이드
 
 ## 테스트 실행
 
@@ -729,7 +727,7 @@ uv run python src/scripts/analyze_langfuse_tokens.py
 
 ---
 
-# 12. 코드 컨벤션
+# 10. 코드 컨벤션
 
 - **[CONVENTION.md](CONVENTION.md)** 참조
 - **SOLID 원칙** 준수
@@ -766,7 +764,7 @@ def calculate_affection_change(
 
 ---
 
-# 13. 관련 문서
+# 11. 관련 문서
 
 ## API 프로토콜
 - [API_FLOW.md](docs/NPC_API_PROTOCOL.md): NPC 대화 API 상세 (Request/Response 예시, 호출 흐름도)
@@ -790,5 +788,5 @@ def calculate_affection_change(
 - [deepeval 공식 문서](https://deepeval.com/docs/getting-started)
 ---
 
-## 14. 문의
+## 12. 문의
 - **Email**: immortal0900@gmail.com
