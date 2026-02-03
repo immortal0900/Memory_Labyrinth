@@ -1,13 +1,8 @@
 .env
-main.py
 pyproject.toml
 uv.lock
 __pycache__/
 *.pyc
-.cursor/
-.cursorignore
-NPC_SYSTEM_MASTER.md
-NPC_SYSTEM_IMPLEMENTATION.md  
 src/db/mem0_manager.py 
 .bin
 logs
@@ -23,6 +18,7 @@ sage_system.yaml
 DOCS_COMMANDS_EXAMPLE/
 refactor_report.md
 
+NPC_SYSTEM_MASTER.md
 docs/README.md
 SESSION_CHECKPOINT_SUMMARY_SYSTEM.md
 NPC_SYSTEM_IMPLEMENTATION.md  
@@ -33,3 +29,5 @@ STUDY_DB_SETUP.md
 SUPABASE_SETUP.md
 memory_implementation_guide.md
 docs/명령어_사용_가이드.md
+README_2.md
+README_3.md
