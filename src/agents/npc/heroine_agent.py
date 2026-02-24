@@ -1,5 +1,5 @@
 """
-히로인 NPC Agent (리팩토링 버전)
+히로인 NPC Agent
 
 기억을 잃은 3명의 히로인(레티아, 루파메스, 로코)과의 대화를 처리합니다.
 
@@ -9,7 +9,6 @@
 3. 의도 분류에 따른 컨텍스트 검색 (기억/시나리오)
 4. 캐릭터 페르소나 기반 응답 생성
 
-리팩토링:
 - MemoryRetriever: 시간 키워드 기반 기억 검색, NPC-NPC 대화 검색
 - NPCConversationManager: 대화 저장, 요약 생성
 - HeroineIntentClassifier: 의도 분류

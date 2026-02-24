@@ -89,9 +89,6 @@ class FactExtractionResult(BaseModel):
 @dataclass
 class SearchWeights:
     """검색 가중치 설정
-
-    기본값은 NEW_LONGMEMORY_SYSTEM.MD 권장값 사용
-    합이 1.0일 필요 없음 (실험으로 튜닝)
     """
 
     recency: float = 0.15  # 최신도 가중치

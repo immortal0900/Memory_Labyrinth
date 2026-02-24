@@ -111,7 +111,7 @@ class SageIntentClassifier:
 
 [분류 기준]
 - general: 일상 대화, 안부, 농담, 사트라 본인에 대한 질문
-- memory_recall: "우리 전에 뭐 얘기했지?", "어제 뭐 했어?", "기억나?" 등 플레이어와 대현자가 함께 나눈 과거 대화/경험 질문
+- memory_recall: "우리 전에 뭐 얘기했지?", "어제 뭐 했어?", "내 이름 뭐였지?", "기억나?" 등 플레이어와 대현자가 나눈 과거 대화나 플레이어가 제공한 정보에 대한 기억 확인 질문
 - worldview_inquiry: 세계관, 국가, 종족, 던전, 디멘시움, 플레이어(멘토)의 과거/능력 등에 대한 질문
 
 반드시 general, memory_recall, worldview_inquiry 중 하나만 출력하세요."""

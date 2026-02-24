@@ -1,0 +1,9 @@
+{
+  "recommendations": [
+    "ms-ossdata.vscode-postgresql",
+    "supabase.vscode-supabase-extension"
+  ],
+  "unwantedRecommendations": [
+    "ms-mssql.mssql"
+  ]
+}
