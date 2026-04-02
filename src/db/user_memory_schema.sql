@@ -72,6 +72,9 @@ CREATE INDEX idx_user_memory_created ON user_memories (created_at DESC);
 -- Score = (w_recency * Recency) + (w_importance * Importance) 
 --       + (w_relevance * Relevance) + (w_keyword * Keyword)
 
+-- 2-Stage Retrieve-then-Rerank 하이브리드 검색
+-- Stage 1: HNSW 벡터 인덱스 + PGroonga 키워드 인덱스로 후보 추출
+-- Stage 2: 후보에 대해서만 4요소 가중합 (recency, importance, relevance, keyword)
 CREATE OR REPLACE FUNCTION search_user_memories_hybrid(
     p_player_id TEXT,
     p_heroine_id TEXT,
@@ -101,69 +104,103 @@ CREATE OR REPLACE FUNCTION search_user_memories_hybrid(
 )
 LANGUAGE plpgsql AS $$
 DECLARE
-    max_keyword_score FLOAT;
+    v_candidate_limit INTEGER;
 BEGIN
-    -- 키워드 검색 최대 점수 계산 (정규화용)
-    SELECT MAX(pgroonga_score(tableoid, ctid))
-    INTO max_keyword_score
-    FROM user_memories m
-    WHERE m.player_id = p_player_id
-      AND m.heroine_id = p_heroine_id
-      AND m.invalid_at IS NULL
-      AND (m.content &@~ p_query_text OR m.keywords &@ p_query_text);
-    
-    -- 최대값이 없으면 1로 설정 (0 나누기 방지)
-    IF max_keyword_score IS NULL OR max_keyword_score = 0 THEN
-        max_keyword_score := 1.0;
-    END IF;
+    -- 각 채널(벡터/키워드)에서 가져올 후보 수
+    -- GREATEST: 둘 중 큰 값 선택 (최소 20개는 가져옴)
+    v_candidate_limit := GREATEST(p_top_k * 3, 20);
+
+    -- ef_search: HNSW 인덱스가 탐색할 이웃 노드 수
+    -- WHERE 필터로 일부가 걸러지므로 기본값(40)보다 높게 설정
+    -- true: 이 트랜잭션에서만 적용 (다른 쿼리에 영향 없음)
+    PERFORM set_config('hnsw.ef_search', '100', true);
 
     RETURN QUERY
-    WITH combined AS (
-        SELECT 
-            m.id,
-            m.player_id,
-            m.heroine_id,
-            m.speaker,
-            m.subject,
-            m.content,
-            m.content_type,
-            m.importance,
-            m.created_at,
-            -- Recency: 지수 감쇠 (30일 기준)
-            EXP(-EXTRACT(EPOCH FROM (NOW() - m.created_at)) / (p_decay_days * 86400)) AS recency,
-            -- Importance: 1~10 -> 0~1 정규화
-            m.importance::FLOAT / 10.0 AS importance_norm,
-            -- Relevance: 코사인 유사도 (1 - 거리)
-            -- importance_norm = "normalized importance"의 약자로, 정규화된 중요도를 의미
-            1 - (m.embedding <=> p_query_embedding) AS relevance,
-            -- Keyword: PGroonga BM25 정규화
-            COALESCE(pgroonga_score(m.tableoid, m.ctid) / max_keyword_score, 0) AS keyword
-            -- tableoid: 해당 행이 속한 테이블의 OID (Object Identifier)상속 테이블 구조에서 어느 테이블에서 왔는지 식별할 때 사용
-            -- ctid: 행의 물리적 위치를 나타내는 tuple identifier (페이지 번호, 페이지 내 오프셋). 각 행의 고유한 물리적 주소
+
+    -- =============================================
+    -- Stage 1: 후보 추출 (인덱스 활용)
+    -- =============================================
+    WITH
+
+    -- 1a. 벡터 검색 후보 (HNSW 인덱스 활용)
+    -- ORDER BY <=> LIMIT 패턴이어야 HNSW 인덱스를 탄다
+    vector_candidates AS (
+        SELECT m.id,
+               1 - (m.embedding <=> p_query_embedding) AS vec_score
         FROM user_memories m
         WHERE m.player_id = p_player_id
           AND m.heroine_id = p_heroine_id
           AND m.invalid_at IS NULL
+        ORDER BY m.embedding <=> p_query_embedding
+        LIMIT v_candidate_limit
+    ),
+
+    -- 1b. 키워드 검색 후보 (PGroonga BM25 인덱스 활용)
+    -- &@~ : PGroonga 쿼리 매칭 (형태소 분석 포함)
+    -- &@  : PGroonga 배열 요소 매칭
+    keyword_candidates AS (
+        SELECT m.id,
+               pgroonga_score(m.tableoid, m.ctid) AS kw_raw_score
+        FROM user_memories m
+        WHERE m.player_id = p_player_id
+          AND m.heroine_id = p_heroine_id
+          AND m.invalid_at IS NULL
+          AND (m.content &@~ p_query_text OR m.keywords &@ p_query_text)
+        ORDER BY pgroonga_score(m.tableoid, m.ctid) DESC
+        LIMIT v_candidate_limit
+    ),
+
+    -- 1c. 두 결과 합치기 (UNION: 중복 자동 제거)
+    all_candidate_ids AS (
+        SELECT vc.id FROM vector_candidates vc
+        UNION
+        SELECT kc.id FROM keyword_candidates kc
+    ),
+
+    -- 키워드 점수 정규화를 위한 최대값 (후보 내에서만 계산)
+    -- COALESCE: NULL이면 1.0 사용 (키워드 매칭 0건일 때 0 나누기 방지)
+    kw_max AS (
+        SELECT COALESCE(MAX(kc.kw_raw_score), 1.0) AS val
+        FROM keyword_candidates kc
+    ),
+
+    -- =============================================
+    -- Stage 2: 후보만 대상으로 점수 매기기 (Rerank)
+    -- =============================================
+    scored AS (
+        SELECT
+            m.id, m.player_id, m.heroine_id, m.speaker, m.subject,
+            m.content, m.content_type, m.importance, m.created_at,
+            -- Recency: 지수 감쇠 (오늘=1.0, 30일전=0.37, 60일전=0.14)
+            EXP(-EXTRACT(EPOCH FROM (NOW() - m.created_at))
+                / (p_decay_days * 86400)) AS recency,
+            -- Importance: 1~10 -> 0~1 정규화
+            m.importance::FLOAT / 10.0 AS importance_norm,
+            -- Relevance: 벡터 후보는 Stage 1 캐시값, 키워드 전용 후보만 재계산
+            COALESCE(vc.vec_score,
+                     1 - (m.embedding <=> p_query_embedding)) AS relevance,
+            -- Keyword: 키워드 후보는 정규화, 벡터 전용 후보는 0점
+            COALESCE(kc.kw_raw_score / km.val, 0) AS keyword
+        FROM all_candidate_ids ac
+        JOIN user_memories m ON m.id = ac.id
+        LEFT JOIN vector_candidates vc ON vc.id = ac.id
+        LEFT JOIN keyword_candidates kc ON kc.id = ac.id
+        CROSS JOIN kw_max km
     )
-    SELECT 
-        c.id,
-        c.player_id,
-        c.heroine_id,
-        c.speaker,
-        c.subject,
-        c.content,
-        c.content_type,
-        c.importance,
-        c.created_at,
-        c.recency AS recency_score,
-        c.importance_norm AS importance_score,
-        c.relevance AS relevance_score,
-        c.keyword AS keyword_score,
-        (p_w_recency * c.recency + 
-         p_w_importance * c.importance_norm + 
-         p_w_relevance * c.relevance + 
-         p_w_keyword * c.keyword) AS final_score
-    FROM combined c
+
+    -- 최종 가중합 (기존과 동일한 공식)
+    SELECT
+        s.id, s.player_id, s.heroine_id, s.speaker, s.subject,
+        s.content, s.content_type, s.importance, s.created_at,
+        s.recency AS recency_score,
+        s.importance_norm AS importance_score,
+        s.relevance AS relevance_score,
+        s.keyword AS keyword_score,
+        (p_w_recency * s.recency +
+         p_w_importance * s.importance_norm +
+         p_w_relevance * s.relevance +
+         p_w_keyword * s.keyword) AS final_score
+    FROM scored s
     ORDER BY final_score DESC
     LIMIT p_top_k;
 END;

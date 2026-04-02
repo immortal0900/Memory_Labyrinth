@@ -126,6 +126,9 @@ CREATE TRIGGER trigger_npc_npc_memories_updated_at
 -- Score = (w_recency * Recency) + (w_importance * Importance)
 --       + (w_relevance * Relevance) + (w_keyword * Keyword)
 -- ============================================
+-- 2-Stage Retrieve-then-Rerank 하이브리드 검색
+-- Stage 1: HNSW 벡터 인덱스 + PGroonga 키워드 인덱스로 후보 추출
+-- Stage 2: 후보에 대해서만 4요소 가중합 (recency, importance, relevance, keyword)
 CREATE OR REPLACE FUNCTION search_npc_npc_memories_hybrid(
     p_player_id TEXT,
     p_heroine_id_1 INT,
@@ -159,68 +162,102 @@ CREATE OR REPLACE FUNCTION search_npc_npc_memories_hybrid(
 )
 LANGUAGE plpgsql AS $$
 DECLARE
-    max_keyword_score FLOAT;
+    v_candidate_limit INTEGER;
 BEGIN
-    SELECT MAX(pgroonga_score(tableoid, ctid))
-    INTO max_keyword_score
-    FROM npc_npc_memories m
-    WHERE m.player_id = p_player_id
-      AND m.heroine_id_1 = p_heroine_id_1
-      AND m.heroine_id_2 = p_heroine_id_2
-      AND m.invalid_at IS NULL
-      AND m.content &@~ p_query_text;
+    -- 각 채널(벡터/키워드)에서 가져올 후보 수
+    v_candidate_limit := GREATEST(p_top_k * 3, 20);
 
-    IF max_keyword_score IS NULL OR max_keyword_score = 0 THEN
-        max_keyword_score := 1.0;
-    END IF;
+    -- HNSW 인덱스 탐색 범위 확대 (post-filter 후 충분한 후보 보장)
+    PERFORM set_config('hnsw.ef_search', '100', true);
 
     RETURN QUERY
-    WITH combined AS (
-        SELECT
-            m.id,
-            m.conversation_id,
-            m.turn_index,
-            m.player_id,
-            m.heroine_id_1,
-            m.heroine_id_2,
-            m.speaker_id,
-            m.subject_id,
-            m.content,
-            m.content_type,
-            m.importance,
-            m.created_at,
-            EXP(-EXTRACT(EPOCH FROM (NOW() - m.created_at)) / (p_decay_days * 86400)) AS recency,
-            m.importance::FLOAT / 10.0 AS importance_norm,
-            1 - (m.embedding <=> p_query_embedding) AS relevance,
-            COALESCE(pgroonga_score(m.tableoid, m.ctid) / max_keyword_score, 0) AS keyword
+
+    -- =============================================
+    -- Stage 1: 후보 추출 (인덱스 활용)
+    -- =============================================
+    WITH
+
+    -- 1a. 벡터 검색 후보 (HNSW 인덱스 활용)
+    vector_candidates AS (
+        SELECT m.id,
+               1 - (m.embedding <=> p_query_embedding) AS vec_score
         FROM npc_npc_memories m
         WHERE m.player_id = p_player_id
           AND m.heroine_id_1 = p_heroine_id_1
           AND m.heroine_id_2 = p_heroine_id_2
           AND m.invalid_at IS NULL
+        ORDER BY m.embedding <=> p_query_embedding
+        LIMIT v_candidate_limit
+    ),
+
+    -- 1b. 키워드 검색 후보 (PGroonga BM25 인덱스 활용)
+    keyword_candidates AS (
+        SELECT m.id,
+               pgroonga_score(m.tableoid, m.ctid) AS kw_raw_score
+        FROM npc_npc_memories m
+        WHERE m.player_id = p_player_id
+          AND m.heroine_id_1 = p_heroine_id_1
+          AND m.heroine_id_2 = p_heroine_id_2
+          AND m.invalid_at IS NULL
+          AND m.content &@~ p_query_text
+        ORDER BY pgroonga_score(m.tableoid, m.ctid) DESC
+        LIMIT v_candidate_limit
+    ),
+
+    -- 1c. 두 결과 합치기 (중복 자동 제거)
+    all_candidate_ids AS (
+        SELECT vc.id FROM vector_candidates vc
+        UNION
+        SELECT kc.id FROM keyword_candidates kc
+    ),
+
+    -- 키워드 점수 정규화 기준값
+    kw_max AS (
+        SELECT COALESCE(MAX(kc.kw_raw_score), 1.0) AS val
+        FROM keyword_candidates kc
+    ),
+
+    -- =============================================
+    -- Stage 2: 후보만 대상으로 점수 매기기 (Rerank)
+    -- =============================================
+    scored AS (
+        SELECT
+            m.id, m.conversation_id, m.turn_index,
+            m.player_id, m.heroine_id_1, m.heroine_id_2,
+            m.speaker_id, m.subject_id,
+            m.content, m.content_type, m.importance, m.created_at,
+            -- Recency: 지수 감쇠
+            EXP(-EXTRACT(EPOCH FROM (NOW() - m.created_at))
+                / (p_decay_days * 86400)) AS recency,
+            -- Importance: 1~10 -> 0~1 정규화
+            m.importance::FLOAT / 10.0 AS importance_norm,
+            -- Relevance: 벡터 후보는 캐시값, 키워드 전용 후보만 재계산
+            COALESCE(vc.vec_score,
+                     1 - (m.embedding <=> p_query_embedding)) AS relevance,
+            -- Keyword: 키워드 후보는 정규화, 벡터 전용 후보는 0점
+            COALESCE(kc.kw_raw_score / km.val, 0) AS keyword
+        FROM all_candidate_ids ac
+        JOIN npc_npc_memories m ON m.id = ac.id
+        LEFT JOIN vector_candidates vc ON vc.id = ac.id
+        LEFT JOIN keyword_candidates kc ON kc.id = ac.id
+        CROSS JOIN kw_max km
     )
+
+    -- 최종 가중합 (기존과 동일한 공식)
     SELECT
-        c.id,
-        c.conversation_id,
-        c.turn_index,
-        c.player_id,
-        c.heroine_id_1,
-        c.heroine_id_2,
-        c.speaker_id,
-        c.subject_id,
-        c.content,
-        c.content_type,
-        c.importance,
-        c.created_at,
-        c.recency AS recency_score,
-        c.importance_norm AS importance_score,
-        c.relevance AS relevance_score,
-        c.keyword AS keyword_score,
-        (p_w_recency * c.recency +
-         p_w_importance * c.importance_norm +
-         p_w_relevance * c.relevance +
-         p_w_keyword * c.keyword) AS final_score
-    FROM combined c
+        s.id, s.conversation_id, s.turn_index,
+        s.player_id, s.heroine_id_1, s.heroine_id_2,
+        s.speaker_id, s.subject_id,
+        s.content, s.content_type, s.importance, s.created_at,
+        s.recency AS recency_score,
+        s.importance_norm AS importance_score,
+        s.relevance AS relevance_score,
+        s.keyword AS keyword_score,
+        (p_w_recency * s.recency +
+         p_w_importance * s.importance_norm +
+         p_w_relevance * s.relevance +
+         p_w_keyword * s.keyword) AS final_score
+    FROM scored s
     ORDER BY final_score DESC
     LIMIT p_top_k;
 END;
