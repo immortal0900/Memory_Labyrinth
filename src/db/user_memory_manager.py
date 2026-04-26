@@ -171,7 +171,7 @@ Output:
     "content_type": "preference",
     "content": "멘토는 요즘 포도를 매우 좋아한다.",
     "importance": 6,
-    "keywords": ["나", "멘토", "포도", "좋아함", "선호", "과일", "음식", "식성"],
+    "keywords": ["포도", "선호", "과일", "음식", "식성"],
     "player_name": null
   }}
 ]
@@ -186,7 +186,7 @@ Output:
     "content_type": "opinion",
     "content": "히로인은 멘토가 따뜻한 마음을 가졌다고 생각한다.",
     "importance": 7,
-    "keywords": ["히로인", "멘토", "따뜻함", "다정함", "성격", "평가", "인성"],
+    "keywords": ["따뜻함", "다정함", "성격", "평가", "인성"],
     "player_name": null
   }}
 ]
